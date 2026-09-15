@@ -12,35 +12,38 @@ class AppTheme {
     Color(0xFF2E7D32), // Emerald Green
   ];
 
-  static ThemeData light(Color seedColor) {
-    final colorScheme = ColorScheme.fromSeed(
-      seedColor: seedColor,
-      brightness: Brightness.light,
-    );
+  static ThemeData light(
+    Color seedColor, {
+    ColorScheme? dynamicScheme,
+    bool useDynamicColor = true,
+  }) {
+    final colorScheme = (useDynamicColor && dynamicScheme != null)
+        ? dynamicScheme
+        : ColorScheme.fromSeed(
+            seedColor: seedColor,
+            brightness: Brightness.light,
+          );
 
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: colorScheme.surface,
-      textTheme: GoogleFonts.interTextTheme(ThemeData.light().textTheme).copyWith(
-        headlineMedium: GoogleFonts.inter(
-          fontWeight: FontWeight.w600,
-          letterSpacing: -0.5,
-        ),
-        titleLarge: GoogleFonts.inter(
-          fontWeight: FontWeight.w600,
-          letterSpacing: -0.2,
-        ),
-        titleMedium: GoogleFonts.inter(
-          fontWeight: FontWeight.w500,
-        ),
-      ),
+      textTheme: GoogleFonts.interTextTheme(ThemeData.light().textTheme)
+          .copyWith(
+            headlineMedium: GoogleFonts.inter(
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.5,
+            ),
+            titleLarge: GoogleFonts.inter(
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.2,
+            ),
+            titleMedium: GoogleFonts.inter(fontWeight: FontWeight.w500),
+          ),
       cardTheme: CardThemeData(
         elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         color: colorScheme.surfaceContainerLow,
       ),
       appBarTheme: AppBarTheme(
@@ -57,35 +60,38 @@ class AppTheme {
     );
   }
 
-  static ThemeData dark(Color seedColor) {
-    final colorScheme = ColorScheme.fromSeed(
-      seedColor: seedColor,
-      brightness: Brightness.dark,
-    );
+  static ThemeData dark(
+    Color seedColor, {
+    ColorScheme? dynamicScheme,
+    bool useDynamicColor = true,
+  }) {
+    final colorScheme = (useDynamicColor && dynamicScheme != null)
+        ? dynamicScheme
+        : ColorScheme.fromSeed(
+            seedColor: seedColor,
+            brightness: Brightness.dark,
+          );
 
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: colorScheme.surface,
-      textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme).copyWith(
-        headlineMedium: GoogleFonts.inter(
-          fontWeight: FontWeight.w600,
-          letterSpacing: -0.5,
-        ),
-        titleLarge: GoogleFonts.inter(
-          fontWeight: FontWeight.w600,
-          letterSpacing: -0.2,
-        ),
-        titleMedium: GoogleFonts.inter(
-          fontWeight: FontWeight.w500,
-        ),
-      ),
+      textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme)
+          .copyWith(
+            headlineMedium: GoogleFonts.inter(
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.5,
+            ),
+            titleLarge: GoogleFonts.inter(
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.2,
+            ),
+            titleMedium: GoogleFonts.inter(fontWeight: FontWeight.w500),
+          ),
       cardTheme: CardThemeData(
         elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         color: colorScheme.surfaceContainerLow,
       ),
       appBarTheme: AppBarTheme(

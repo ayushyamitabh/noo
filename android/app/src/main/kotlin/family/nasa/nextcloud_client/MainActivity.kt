@@ -1,4 +1,4 @@
-package com.example.nextcloud_client
+package family.nasa.nextcloud_client
 
 import io.flutter.embedding.android.FlutterActivity
 

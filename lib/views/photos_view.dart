@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/nextcloud_item.dart';
 import '../providers/server_provider.dart';
+import '../widgets/profile_avatar_button.dart';
+import 'file_viewer_screen.dart';
 
 class PhotosView extends StatelessWidget {
   final ScrollController scrollController;
@@ -20,29 +21,16 @@ class PhotosView extends StatelessWidget {
       controller: scrollController,
       physics: const BouncingScrollPhysics(),
       slivers: [
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Photos & Media',
-                  style: theme.textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${photos.length} cloud photos & video streams',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
+        SliverAppBar(
+          pinned: true,
+          expandedHeight: kToolbarHeight,
+          collapsedHeight: kToolbarHeight,
+          backgroundColor: colorScheme.surface,
+          surfaceTintColor: colorScheme.surface,
+          scrolledUnderElevation: 0,
+          actions: const [ProfileAvatarButton()],
         ),
+        const SliverToBoxAdapter(child: SizedBox(height: 8)),
 
         if (photos.isEmpty)
           SliverFillRemaining(
@@ -76,24 +64,23 @@ class PhotosView extends StatelessWidget {
                 mainAxisSpacing: 8,
                 childAspectRatio: 1.0,
               ),
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final photo = photos[index];
-                  return _buildPhotoTile(context, photo, provider);
-                },
-                childCount: photos.length,
-              ),
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final photo = photos[index];
+                return _buildPhotoTile(context, photo, provider);
+              }, childCount: photos.length),
             ),
           ),
 
-        const SliverToBoxAdapter(
-          child: SizedBox(height: 100),
-        ),
+        const SliverToBoxAdapter(child: SizedBox(height: 100)),
       ],
     );
   }
 
-  Widget _buildPhotoTile(BuildContext context, NextcloudItem photo, ServerProvider provider) {
+  Widget _buildPhotoTile(
+    BuildContext context,
+    NextcloudItem photo,
+    ServerProvider provider,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -109,10 +96,27 @@ class PhotosView extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             photo.previewUrl != null
-                ? Image.network(
-                    photo.previewUrl!,
-                    fit: BoxFit.cover,
-                    errorBuilder: (ctx, err, stack) => _buildFallbackTile(context, photo),
+                ? LayoutBuilder(
+                    builder: (context, constraints) {
+                      // Decode at the tile's actual rendered size rather
+                      // than the full 500x500 preview the server returns —
+                      // cheaper to decode/cache while scrolling a grid.
+                      final cachePixels =
+                          (constraints.maxWidth *
+                                  MediaQuery.of(context).devicePixelRatio)
+                              .round();
+                      return Image.network(
+                        photo.previewUrl!,
+                        headers: provider.service?.authHeaders,
+                        fit: BoxFit.cover,
+                        cacheWidth: cachePixels,
+                        cacheHeight: cachePixels,
+                        filterQuality: FilterQuality.low,
+                        gaplessPlayback: true,
+                        errorBuilder: (ctx, err, stack) =>
+                            _buildFallbackTile(context, photo),
+                      );
+                    },
                   )
                 : _buildFallbackTile(context, photo),
             if (photo.type == NextcloudItemType.video)
@@ -136,11 +140,7 @@ class PhotosView extends StatelessWidget {
               const Positioned(
                 top: 8,
                 right: 8,
-                child: Icon(
-                  Icons.star_rounded,
-                  color: Colors.amber,
-                  size: 18,
-                ),
+                child: Icon(Icons.star_rounded, color: Colors.amber, size: 18),
               ),
           ],
         ),
@@ -164,123 +164,14 @@ class PhotosView extends StatelessWidget {
     );
   }
 
-  void _openLightbox(BuildContext context, NextcloudItem photo, ServerProvider provider) {
-    showDialog(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.92),
-      builder: (context) {
-        return Dialog.fullscreen(
-          backgroundColor: Colors.transparent,
-          child: Stack(
-            children: [
-              InteractiveViewer(
-                minScale: 0.8,
-                maxScale: 4.0,
-                child: Center(
-                  child: photo.previewUrl != null
-                      ? Image.network(
-                          photo.previewUrl!,
-                          fit: BoxFit.contain,
-                        )
-                      : Icon(
-                          photo.type == NextcloudItemType.video
-                              ? Icons.movie_rounded
-                              : Icons.image_rounded,
-                          size: 120,
-                          color: Colors.white70,
-                        ),
-                ),
-              ),
-              Positioned(
-                top: 24,
-                left: 16,
-                right: 16,
-                child: SafeArea(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      IconButton.filledTonal(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.close_rounded, color: Colors.white),
-                        style: IconButton.styleFrom(
-                          backgroundColor: Colors.black.withValues(alpha: 0.5),
-                        ),
-                      ),
-                      Row(
-                        children: [
-                          IconButton.filledTonal(
-                            onPressed: () {
-                              provider.toggleItemFavorite(photo);
-                            },
-                            icon: Icon(
-                              photo.isFavorite ? Icons.star_rounded : Icons.star_outline_rounded,
-                              color: photo.isFavorite ? Colors.amber : Colors.white,
-                            ),
-                            style: IconButton.styleFrom(
-                              backgroundColor: Colors.black.withValues(alpha: 0.5),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          IconButton.filledTonal(
-                            onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Downloading full resolution ${photo.name}...'),
-                                  behavior: SnackBarBehavior.floating,
-                                ),
-                              );
-                            },
-                            icon: const Icon(Icons.download_rounded, color: Colors.white),
-                            style: IconButton.styleFrom(
-                              backgroundColor: Colors.black.withValues(alpha: 0.5),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              Positioned(
-                bottom: 32,
-                left: 24,
-                right: 24,
-                child: SafeArea(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.65),
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          photo.name,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 15,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${DateFormat.yMMMMd().format(photo.lastModified)} • Nextcloud Photos',
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+  void _openLightbox(
+    BuildContext context,
+    NextcloudItem photo,
+    ServerProvider provider,
+  ) {
+    Navigator.push(
+      context,
+      FileViewerScreen.route(item: photo, siblings: provider.photoItems),
     );
   }
 }

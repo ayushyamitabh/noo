@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  This is a self-hosted Nextcloud client. Home-lab / self-hosted servers are
+  frequently reached over plain HTTP (LAN-only, behind a VPN, etc.), so we
+  allow cleartext traffic app-wide rather than assuming every server has TLS.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system"/>
+        </trust-anchors>
+    </base-config>
+</network-security-config>

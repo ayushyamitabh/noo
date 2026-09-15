@@ -1,13 +1,13 @@
+import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import 'providers/server_provider.dart';
 import 'theme/app_theme.dart';
-import 'views/account_view.dart';
 import 'views/activity_view.dart';
 import 'views/files_view.dart';
 import 'views/login_view.dart';
 import 'views/photos_view.dart';
+import 'views/search_view.dart';
 import 'widgets/floating_bottom_bar.dart';
 
 void main() {
@@ -27,13 +27,50 @@ class NextcloudApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = context.watch<ServerProvider>();
 
-    return MaterialApp(
-      title: 'Nextcloud Material',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(provider.seedColor),
-      darkTheme: AppTheme.dark(provider.seedColor),
-      themeMode: provider.themeMode,
-      home: provider.isLoggedIn ? const MainShellView() : const LoginView(),
+    return DynamicColorBuilder(
+      builder: (lightDynamic, darkDynamic) {
+        return MaterialApp(
+          title: 'Noo',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.light(
+            provider.seedColor,
+            dynamicScheme: lightDynamic,
+            useDynamicColor: provider.useDynamicColor,
+          ),
+          darkTheme: AppTheme.dark(
+            provider.seedColor,
+            dynamicScheme: darkDynamic,
+            useDynamicColor: provider.useDynamicColor,
+          ),
+          themeMode: provider.themeMode,
+          home: provider.isRestoringSession
+              ? const _SplashView()
+              : (provider.isLoggedIn
+                    ? const MainShellView()
+                    : const LoginView()),
+        );
+      },
+    );
+  }
+}
+
+class _SplashView extends StatelessWidget {
+  const _SplashView();
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.cloud_outlined, size: 48, color: colorScheme.primary),
+            const SizedBox(height: 20),
+            CircularProgressIndicator(color: colorScheme.primary),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -47,32 +84,13 @@ class MainShellView extends StatefulWidget {
 
 class _MainShellViewState extends State<MainShellView> {
   int _currentIndex = 0;
-  bool _isNavVisible = true;
 
   late final List<ScrollController> _scrollControllers;
 
   @override
   void initState() {
     super.initState();
-    _scrollControllers = List.generate(4, (index) {
-      final controller = ScrollController();
-      controller.addListener(() {
-        if (controller.position.userScrollDirection == ScrollDirection.reverse) {
-          if (_isNavVisible) {
-            setState(() {
-              _isNavVisible = false;
-            });
-          }
-        } else if (controller.position.userScrollDirection == ScrollDirection.forward) {
-          if (!_isNavVisible) {
-            setState(() {
-              _isNavVisible = true;
-            });
-          }
-        }
-      });
-      return controller;
-    });
+    _scrollControllers = List.generate(3, (index) => ScrollController());
   }
 
   @override
@@ -85,27 +103,11 @@ class _MainShellViewState extends State<MainShellView> {
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<ServerProvider>();
     final navItems = const [
-      FloatingNavItem(
-        label: 'Files',
-        icon: Icons.folder_outlined,
-        selectedIcon: Icons.folder_rounded,
-      ),
-      FloatingNavItem(
-        label: 'Photos',
-        icon: Icons.photo_library_outlined,
-        selectedIcon: Icons.photo_library_rounded,
-      ),
-      FloatingNavItem(
-        label: 'Activity',
-        icon: Icons.history_rounded,
-        selectedIcon: Icons.history_toggle_off_rounded,
-      ),
-      FloatingNavItem(
-        label: 'Account',
-        icon: Icons.account_circle_outlined,
-        selectedIcon: Icons.account_circle_rounded,
-      ),
+      FloatingNavItem(label: 'Files', icon: Icons.folder_rounded),
+      FloatingNavItem(label: 'Photos', icon: Icons.photo_library_rounded),
+      FloatingNavItem(label: 'Activity', icon: Icons.history_rounded),
     ];
 
     return Scaffold(
@@ -117,18 +119,22 @@ class _MainShellViewState extends State<MainShellView> {
               FilesView(scrollController: _scrollControllers[0]),
               PhotosView(scrollController: _scrollControllers[1]),
               ActivityView(scrollController: _scrollControllers[2]),
-              AccountView(scrollController: _scrollControllers[3]),
             ],
           ),
           FloatingBottomNavBar(
             selectedIndex: _currentIndex,
             items: navItems,
-            isVisible: _isNavVisible,
+            opacity: provider.bottomBarOpacity,
+            blurSigma: provider.bottomBarBlur,
             onDestinationSelected: (index) {
               setState(() {
                 _currentIndex = index;
-                _isNavVisible = true;
               });
+            },
+            onSearchTap: () {
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const SearchView()));
             },
           ),
         ],
