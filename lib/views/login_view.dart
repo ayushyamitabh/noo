@@ -3,7 +3,13 @@ import 'package:provider/provider.dart';
 import '../providers/server_provider.dart';
 
 class LoginView extends StatefulWidget {
-  const LoginView({super.key});
+  /// True when this is pushed from Settings ("Add account") on top of an
+  /// already-logged-in session, rather than shown as the app's root screen
+  /// with no account yet. Adds an AppBar/back affordance and auto-pops once
+  /// the new account becomes active.
+  final bool isAddingAccount;
+
+  const LoginView({super.key, this.isAddingAccount = false});
 
   @override
   State<LoginView> createState() => _LoginViewState();
@@ -12,6 +18,16 @@ class LoginView extends StatefulWidget {
 class _LoginViewState extends State<LoginView> {
   final _formKey = GlobalKey<FormState>();
   final _urlController = TextEditingController();
+  String? _originalActiveAccountId;
+  bool _popped = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isAddingAccount) {
+      _originalActiveAccountId = context.read<ServerProvider>().activeAccountId;
+    }
+  }
 
   @override
   void dispose() {
@@ -22,7 +38,10 @@ class _LoginViewState extends State<LoginView> {
   void _handleContinue() {
     if (!_formKey.currentState!.validate()) return;
     FocusScope.of(context).unfocus();
-    context.read<ServerProvider>().startLoginFlow(_urlController.text.trim());
+    context.read<ServerProvider>().startLoginFlow(
+      _urlController.text.trim(),
+      addAccount: widget.isAddingAccount,
+    );
   }
 
   @override
@@ -35,7 +54,22 @@ class _LoginViewState extends State<LoginView> {
         provider.loginFlowStatus == LoginFlowStatus.awaitingBrowser;
     final isInitiating = provider.loginFlowStatus == LoginFlowStatus.initiating;
 
-    return Scaffold(
+    // A new/refreshed account has just become active - pop back to
+    // Settings rather than leaving this form sitting on top of it.
+    if (widget.isAddingAccount &&
+        !_popped &&
+        provider.loginFlowStatus == LoginFlowStatus.idle &&
+        provider.activeAccountId != _originalActiveAccountId) {
+      _popped = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) Navigator.of(context).pop();
+      });
+    }
+
+    final body = Scaffold(
+      appBar: widget.isAddingAccount
+          ? AppBar(title: const Text('Add Account'))
+          : null,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -64,6 +98,21 @@ class _LoginViewState extends State<LoginView> {
           ),
         ),
       ),
+    );
+
+    if (!widget.isAddingAccount) return body;
+
+    // Backing out mid-flow (system back/swipe-back, not just the explicit
+    // Cancel button in _WaitingForBrowser) should cancel the pending login
+    // flow rather than leaving its poll timer running after this screen is
+    // gone - this view could never be popped before "add account" existed,
+    // so that case wasn't reachable until now.
+    return PopScope(
+      canPop: provider.loginFlowStatus != LoginFlowStatus.awaitingBrowser,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) provider.cancelLoginFlow();
+      },
+      child: body,
     );
   }
 }

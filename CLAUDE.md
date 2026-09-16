@@ -22,3 +22,13 @@ relevant file(s) before working in that area rather than loading all of them:
 flutter test      # run tests
 flutter analyze   # static analysis / lints
 ```
+
+## Keeping docs current
+
+After making a change that affects architecture, server integration,
+styling conventions, or code standards, update the relevant file(s) in
+`.claude/context/` in the same session — don't leave documentation to drift
+from the code. This applies whether the change is a new feature, a
+refactor, or a convention shift (e.g. a new reusable widget, a changed
+state-management pattern, a new dependency). If a change doesn't fit any
+existing topic file, add a section rather than skipping the update.

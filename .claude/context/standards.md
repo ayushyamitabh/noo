@@ -33,6 +33,25 @@ class/method already makes obvious.
   and `context.read<ServerProvider>()` for one-off calls from callbacks
   (matches `LoginView._handleContinue`).
 
+## `ServerProvider` conventions
+
+- Any method that fetches data and writes it into a shared field
+  (`refreshData`, `fetchAllMedia`, `fetchTrash`, `fetchShares`,
+  `fetchRecent`, `_applyCredentialsForAccount`) must guard against a stale
+  write from an account the user has since switched away from: capture
+  `final gen = _sessionGeneration;` at entry, and check
+  `if (gen != _sessionGeneration) return;` immediately after each `await`
+  before touching any field or calling `notifyListeners()`. Follow this
+  pattern for any new fetch method added to the provider.
+- New persisted state on `ServerProvider` must be classified global vs.
+  per-account (see `architecture.md`/`server.md`) up front — global state
+  uses a plain `_prefsFuture.then((p) => p.setX(key, value))`; per-account
+  state goes through `_persistAccountPref(key, (p, namespacedKey) =>
+  p.setX(namespacedKey, value))` and must also be handled in
+  `_applyAccountPrefs` (both the "reset to default when no account" and the
+  "load for this account" branches) so it's correct immediately after a
+  switch, not just at startup.
+
 ## Testing
 
 - Widget tests must mock platform channels that the app touches on startup

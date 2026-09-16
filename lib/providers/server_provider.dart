@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -10,6 +9,8 @@ import '../models/nextcloud_file_version.dart';
 import '../models/nextcloud_item.dart';
 import '../models/nextcloud_share.dart';
 import '../models/nextcloud_sharee.dart';
+import '../models/saved_account.dart';
+import '../services/account_store.dart';
 import '../services/login_flow_service.dart';
 import '../services/nextcloud_service.dart';
 import '../theme/app_theme.dart';
@@ -58,11 +59,6 @@ class _CachedDirectory {
 enum MediaProgressBarStyle { classic, wavy, slim, squiggly }
 
 class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
-  static const _storage = FlutterSecureStorage();
-  static const _keyServerUrl = 'nc_server_url';
-  static const _keyLoginName = 'nc_login_name';
-  static const _keyAppPassword = 'nc_app_password';
-
   // Cached UI settings/toggles (SharedPreferences keys)
   static const _prefThemeMode = 'ui_theme_mode';
   static const _prefUseDynamicColor = 'ui_use_dynamic_color';
@@ -190,10 +186,33 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   NextcloudService? _service;
 
+  // Multi-account state
+  final AccountStore _accountStore = AccountStore();
+  List<SavedAccount> _accounts = [];
+  String? _activeAccountId;
+  // Bumped at the start of every account switch/removal/activation so an
+  // in-flight fetch from the account being left can recognize it's stale
+  // (by comparing against the generation it captured at its own start) and
+  // discard its result instead of writing it into the now-active account's
+  // state.
+  int _sessionGeneration = 0;
+  // UI-only signal for whether the in-progress login flow is "add another
+  // account" (started from Settings while already logged in) vs. the
+  // first/only login - ServerProvider itself doesn't branch persistence
+  // behavior on this, only the Add Account screen's own navigation does.
+  bool _addAccountFlowActive = false;
+
   ServerProvider() {
     WidgetsBinding.instance.addObserver(this);
-    _restoreSession();
-    _loadPreferences();
+    _init();
+  }
+
+  Future<void> _init() async {
+    final prefs = await _prefsFuture;
+    await _accountStore.migrateLegacyIfNeeded(prefs);
+    _accounts = _accountStore.loadAccounts(prefs);
+    _activeAccountId = _accountStore.loadActiveAccountId(prefs);
+    await Future.wait([_loadPreferences(), _restoreSession()]);
   }
 
   /// Starts/stops the periodic folder-listing refresh as the app leaves and
@@ -226,6 +245,12 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   LoginFlowStatus get loginFlowStatus => _loginFlowStatus;
   Uri? get pendingLoginUrl => _pendingLoginUrl;
+
+  List<SavedAccount> get accounts => List.unmodifiable(_accounts);
+  String? get activeAccountId => _activeAccountId;
+  SavedAccount? get activeAccount =>
+      _accounts.where((a) => a.id == _activeAccountId).firstOrNull;
+  bool get isAddAccountFlow => _addAccountFlowActive;
 
   Color get seedColor => _seedColor;
   ThemeMode get themeMode => _themeMode;
@@ -382,13 +407,13 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> _restoreSession() async {
     try {
-      final server = await _storage.read(key: _keyServerUrl);
-      final loginName = await _storage.read(key: _keyLoginName);
-      final appPassword = await _storage.read(key: _keyAppPassword);
-
-      if (server != null && loginName != null && appPassword != null) {
-        await _applyCredentials(server, loginName, appPassword, persist: false);
-      }
+      final id = _activeAccountId;
+      if (id == null) return;
+      final account = _accounts.where((a) => a.id == id).firstOrNull;
+      if (account == null) return;
+      final password = await _accountStore.readPassword(id);
+      if (password == null) return;
+      await _applyCredentialsForAccount(account, password);
     } catch (e) {
       debugPrint('[ServerProvider] Session restore failed: $e');
     } finally {
@@ -425,53 +450,7 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
       _bottomBarBlur = prefs.getDouble(_prefBottomBarBlur) ?? _bottomBarBlur;
       _tapTabToScrollTop =
           prefs.getBool(_prefTapTabToScrollTop) ?? _tapTabToScrollTop;
-      _isGridView = prefs.getBool(_prefGridView) ?? _isGridView;
-      _showFavoritesOnlyFiles =
-          prefs.getBool(_prefShowFavoritesOnlyFiles) ?? _showFavoritesOnlyFiles;
-      _showFavoritesOnlyPhotos =
-          prefs.getBool(_prefShowFavoritesOnlyPhotos) ??
-          _showFavoritesOnlyPhotos;
-      final storageScopeName = prefs.getString(_prefStorageScope);
-      if (storageScopeName != null) {
-        _storageScope = StorageScope.values.firstWhere(
-          (s) => s.name == storageScopeName,
-          orElse: () => StorageScope.cloud,
-        );
-      }
-      _showHiddenFiles =
-          prefs.getBool(_prefShowHiddenFiles) ?? _showHiddenFiles;
-      _showHiddenPhotos =
-          prefs.getBool(_prefShowHiddenPhotos) ?? _showHiddenPhotos;
-      final sortFieldName = prefs.getString(_prefSortField);
-      if (sortFieldName != null) {
-        _photosSortField = FileSortField.values.firstWhere(
-          (f) => f.name == sortFieldName,
-          orElse: () => FileSortField.name,
-        );
-      }
-      _photosSortAscending =
-          prefs.getBool(_prefSortAscending) ?? _photosSortAscending;
-
-      final folderSortJson = prefs.getString(_prefFolderSort);
-      if (folderSortJson != null) {
-        try {
-          final decoded = jsonDecode(folderSortJson) as Map<String, dynamic>;
-          for (final entry in decoded.entries) {
-            final value = entry.value as Map<String, dynamic>;
-            final fieldName = value['field'] as String?;
-            if (fieldName != null) {
-              _folderSortField[entry.key] = FileSortField.values.firstWhere(
-                (f) => f.name == fieldName,
-                orElse: () => FileSortField.name,
-              );
-            }
-            final ascending = value['ascending'] as bool?;
-            if (ascending != null) _folderSortAscending[entry.key] = ascending;
-          }
-        } catch (e) {
-          debugPrint('[ServerProvider] Folder sort restore failed: $e');
-        }
-      }
+      _applyAccountPrefs(prefs, _activeAccountId);
 
       final savedOrderNames = prefs.getStringList(_prefTabOrder);
       if (savedOrderNames != null) {
@@ -531,15 +510,6 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
           orElse: () => _swipeRightAction,
         );
       }
-      final cachePolicyName = prefs.getString(_prefCachePolicy);
-      if (cachePolicyName != null) {
-        _cachePolicy = CachePolicy.values.firstWhere(
-          (c) => c.name == cachePolicyName,
-          orElse: () => _cachePolicy,
-        );
-      }
-      _cacheIntervalMinutes =
-          prefs.getInt(_prefCacheIntervalMinutes) ?? _cacheIntervalMinutes;
       _startCacheRefreshTimerIfNeeded();
 
       notifyListeners();
@@ -548,34 +518,99 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _persistCredentials(
-    String server,
-    String loginName,
+  /// (Re)loads every per-account browsing pref (grid/list view,
+  /// favorites-only, storage scope, show-hidden, sort, folder sort, cache
+  /// policy) for [accountId] - called once at startup and again on every
+  /// account switch. Resets to defaults when [accountId] is null (no saved
+  /// account yet).
+  void _applyAccountPrefs(SharedPreferences prefs, String? accountId) {
+    _folderSortField.clear();
+    _folderSortAscending.clear();
+
+    if (accountId == null) {
+      _isGridView = false;
+      _showFavoritesOnlyFiles = false;
+      _showFavoritesOnlyPhotos = false;
+      _storageScope = StorageScope.cloud;
+      _showHiddenFiles = false;
+      _showHiddenPhotos = false;
+      _photosSortField = FileSortField.name;
+      _photosSortAscending = true;
+      _cachePolicy = CachePolicy.never;
+      _cacheIntervalMinutes = 5;
+      return;
+    }
+
+    String k(String base) => _accountStore.accountPrefKey(accountId, base);
+
+    _isGridView = prefs.getBool(k(_prefGridView)) ?? false;
+    _showFavoritesOnlyFiles =
+        prefs.getBool(k(_prefShowFavoritesOnlyFiles)) ?? false;
+    _showFavoritesOnlyPhotos =
+        prefs.getBool(k(_prefShowFavoritesOnlyPhotos)) ?? false;
+
+    final storageScopeName = prefs.getString(k(_prefStorageScope));
+    _storageScope = StorageScope.values.firstWhere(
+      (s) => s.name == storageScopeName,
+      orElse: () => StorageScope.cloud,
+    );
+
+    _showHiddenFiles = prefs.getBool(k(_prefShowHiddenFiles)) ?? false;
+    _showHiddenPhotos = prefs.getBool(k(_prefShowHiddenPhotos)) ?? false;
+
+    final sortFieldName = prefs.getString(k(_prefSortField));
+    _photosSortField = FileSortField.values.firstWhere(
+      (f) => f.name == sortFieldName,
+      orElse: () => FileSortField.name,
+    );
+    _photosSortAscending = prefs.getBool(k(_prefSortAscending)) ?? true;
+
+    final folderSortJson = prefs.getString(k(_prefFolderSort));
+    if (folderSortJson != null) {
+      try {
+        final decoded = jsonDecode(folderSortJson) as Map<String, dynamic>;
+        for (final entry in decoded.entries) {
+          final value = entry.value as Map<String, dynamic>;
+          final fieldName = value['field'] as String?;
+          if (fieldName != null) {
+            _folderSortField[entry.key] = FileSortField.values.firstWhere(
+              (f) => f.name == fieldName,
+              orElse: () => FileSortField.name,
+            );
+          }
+          final ascending = value['ascending'] as bool?;
+          if (ascending != null) _folderSortAscending[entry.key] = ascending;
+        }
+      } catch (e) {
+        debugPrint('[ServerProvider] Folder sort restore failed: $e');
+      }
+    }
+
+    final cachePolicyName = prefs.getString(k(_prefCachePolicy));
+    _cachePolicy = CachePolicy.values.firstWhere(
+      (c) => c.name == cachePolicyName,
+      orElse: () => CachePolicy.never,
+    );
+    _cacheIntervalMinutes = prefs.getInt(k(_prefCacheIntervalMinutes)) ?? 5;
+  }
+
+  /// Verifies [appPassword] for [account] and, on success, makes it the
+  /// live session. The password is expected to already be durably saved by
+  /// the caller (either freshly, via [_completeLoginFlow], or previously,
+  /// since this is also how a saved session is restored/switched to) -
+  /// this method only writes to [AccountStore] to drop a password that
+  /// turns out to no longer work.
+  Future<bool> _applyCredentialsForAccount(
+    SavedAccount account,
     String appPassword,
   ) async {
-    await _storage.write(key: _keyServerUrl, value: server);
-    await _storage.write(key: _keyLoginName, value: loginName);
-    await _storage.write(key: _keyAppPassword, value: appPassword);
-  }
-
-  Future<void> _clearPersistedCredentials() async {
-    await _storage.delete(key: _keyServerUrl);
-    await _storage.delete(key: _keyLoginName);
-    await _storage.delete(key: _keyAppPassword);
-  }
-
-  Future<bool> _applyCredentials(
-    String serverUrl,
-    String username,
-    String appPassword, {
-    bool persist = true,
-  }) async {
+    final gen = _sessionGeneration;
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
-    _serverUrl = serverUrl;
-    _username = username;
+    _serverUrl = account.serverUrl;
+    _username = account.username;
     _password = appPassword;
 
     _service = NextcloudService(
@@ -586,27 +621,27 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
 
     try {
       final success = await _service!.testConnection();
+      if (gen != _sessionGeneration) return false;
       if (success) {
         _isLoggedIn = true;
         _currentFolderPath = '/';
         _pathStack = ['/'];
-        if (persist) {
-          await _persistCredentials(_serverUrl, _username, _password);
-        }
         _startCacheRefreshTimerIfNeeded();
         await refreshData();
+        if (gen != _sessionGeneration) return false;
         _isLoading = false;
         notifyListeners();
         return true;
       }
     } catch (e) {
+      if (gen != _sessionGeneration) return false;
       _errorMessage = e.toString().replaceAll('Exception: ', '');
-      if (!persist) {
-        // A previously-saved app password no longer works; drop it.
-        await _clearPersistedCredentials();
-      }
+      // The stored app password for this account no longer works - drop it
+      // so it doesn't keep silently failing on every future restore/switch.
+      await _accountStore.deletePassword(account.id);
     }
 
+    if (gen != _sessionGeneration) return false;
     _isLoggedIn = false;
     _service = null;
     _isLoading = false;
@@ -617,8 +652,16 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// Starts Nextcloud Login Flow v2: asks the server for a one-time login
   /// URL, opens it in the system browser, then polls until the user
   /// authorizes and the server hands back a scoped app password. The app
-  /// never sees the user's real password.
-  Future<void> startLoginFlow(String serverUrl) async {
+  /// never sees the user's real password. [addAccount] only marks the
+  /// flow as "add another account" for [isAddAccountFlow] - the pushed Add
+  /// Account screen reads that to decide when to pop itself; this method's
+  /// own persistence behavior on success ([_completeLoginFlow]) is the same
+  /// either way (create-or-refresh the resulting account, then activate it).
+  Future<void> startLoginFlow(
+    String serverUrl, {
+    bool addAccount = false,
+  }) async {
+    _addAccountFlowActive = addAccount;
     _loginFlowStatus = LoginFlowStatus.initiating;
     _errorMessage = null;
     notifyListeners();
@@ -666,11 +709,8 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
             _pollTimeoutTimer?.cancel();
             _loginFlowStatus = LoginFlowStatus.idle;
             _pendingLoginUrl = null;
-            await _applyCredentials(
-              result.serverUrl,
-              result.loginName,
-              result.appPassword,
-            );
+            await _completeLoginFlow(result);
+            _addAccountFlowActive = false;
           }
         } on http.ClientException catch (e) {
           // A single dropped connection (e.g. the network briefly
@@ -705,6 +745,7 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _pollTimer?.cancel();
     _pollTimeoutTimer?.cancel();
     _pendingLoginUrl = null;
+    _addAccountFlowActive = false;
     _loginFlowStatus = errorMessage != null
         ? LoginFlowStatus.error
         : LoginFlowStatus.idle;
@@ -712,24 +753,191 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  Future<void> logout() async {
-    _isLoggedIn = false;
-    _serverUrl = '';
-    _username = '';
-    _password = '';
+  /// Turns a completed Login Flow v2 result into a saved account (creating
+  /// it, or refreshing its password if it already existed - e.g. an
+  /// expired app password re-authenticated) and makes it the active
+  /// session. Used for both the first/only login and "add account".
+  Future<void> _completeLoginFlow(LoginFlowResult result) async {
+    final serverUrl = LoginFlowService.normalizeServerUrl(result.serverUrl);
+    final id = SavedAccount.makeId(serverUrl, result.loginName);
+    final account = SavedAccount(
+      id: id,
+      serverUrl: serverUrl,
+      username: result.loginName,
+    );
+    _accounts = [
+      for (final a in _accounts)
+        if (a.id != id) a,
+      account,
+    ];
+
+    final prefs = await _prefsFuture;
+    await _accountStore.saveAccounts(prefs, _accounts);
+    await _accountStore.writePassword(id, result.appPassword);
+    await _activateAccount(id);
+  }
+
+  /// Clears every field that holds the *content* of whichever account is
+  /// currently active (files/photos/trash/shares/recent/service) - shared
+  /// by [_activateAccount] (about to load a different account's content)
+  /// and [removeAccount]'s "no accounts left" path (nothing left to load).
+  /// Deliberately does not touch [_isLoggedIn] - that's the caller's call.
+  void _clearActiveContent() {
     _items = [];
     _quota = null;
     _activities = [];
     _allMedia = [];
+    _isMediaLoading = false;
+    _mediaErrorMessage = null;
     _trashItems = [];
+    _isTrashLoading = false;
+    _trashErrorMessage = null;
     _shares = [];
+    _isSharesLoading = false;
+    _sharesErrorMessage = null;
+    _sharesWithMe = false;
     _recentItems = [];
+    _isRecentLoading = false;
+    _recentErrorMessage = null;
+    _currentFolderPath = '/';
+    _pathStack = ['/'];
     _service = null;
-    _directoryCache.clear();
-    _cacheRefreshTimer?.cancel();
-    await _clearPersistedCredentials();
-    notifyListeners();
   }
+
+  /// The shared engine behind switching accounts, falling back to another
+  /// account after removing the active one, and landing on the newly
+  /// created/refreshed account after a login flow completes: tears down
+  /// the outgoing account's live content (without ever setting
+  /// [isLoggedIn] false - see below), then loads the target account's own
+  /// prefs and credentials.
+  ///
+  /// Non-goal, by design: no simultaneous multi-account state. This is a
+  /// full teardown-and-reload of the active session every time, exactly
+  /// like today's single-account [logout] already did - just without
+  /// touching any *other* saved account's stored credentials/prefs.
+  Future<void> _activateAccount(String accountId) async {
+    // Invalidates any fetch still in flight for the account being left, so
+    // a slow response can't land in the new account's state - see the
+    // `gen != _sessionGeneration` checks in refreshData/fetchAllMedia/
+    // fetchTrash/fetchShares/fetchRecent/_applyCredentialsForAccount.
+    _sessionGeneration++;
+    // A pending "add account" flow can't stay pending through a manual
+    // switch/cycle - simplicity over blocking the gesture.
+    if (_loginFlowStatus != LoginFlowStatus.idle) cancelLoginFlow();
+
+    _cacheRefreshTimer?.cancel();
+    _directoryCache.clear();
+    _clearActiveContent();
+    // Not `_isLoggedIn = false` - that would bounce main.dart's root
+    // routing through LoginView mid-switch. Each tab already shows its own
+    // spinner from `_isLoading`/`_isXLoading`, so this alone is enough to
+    // avoid flashing the outgoing account's stale content.
+    _isLoading = true;
+    notifyListeners();
+
+    _activeAccountId = accountId;
+    final prefs = await _prefsFuture;
+    await _accountStore.saveActiveAccountId(prefs, accountId);
+    _applyAccountPrefs(prefs, accountId);
+    notifyListeners();
+
+    final account = _accounts.where((a) => a.id == accountId).firstOrNull;
+    final password = account == null
+        ? null
+        : await _accountStore.readPassword(accountId);
+    if (account == null || password == null) {
+      _isLoading = false;
+      _isLoggedIn = false;
+      notifyListeners();
+      return;
+    }
+
+    await _applyCredentialsForAccount(account, password);
+    // The active account's Files listing is loaded synchronously above
+    // (inside _applyCredentialsForAccount -> refreshData); the other tabs
+    // stay mounted across the switch (MainShellView's IndexedStack) so
+    // their one-shot initState fetches won't naturally re-run - kick them
+    // off here instead.
+    unawaited(fetchAllMedia());
+    unawaited(fetchTrash());
+    unawaited(fetchShares());
+    unawaited(fetchRecent());
+  }
+
+  /// Switches to an already-saved account. No-op if it's already active or
+  /// unknown.
+  Future<void> switchAccount(String accountId) async {
+    if (accountId == _activeAccountId) return;
+    if (!_accounts.any((a) => a.id == accountId)) return;
+    await _activateAccount(accountId);
+  }
+
+  SavedAccount? _cycleAccount(int direction) {
+    if (_accounts.length < 2) return null;
+    final currentIndex = _accounts.indexWhere((a) => a.id == _activeAccountId);
+    final targetIndex = currentIndex == -1
+        ? 0
+        : (currentIndex + direction) % _accounts.length;
+    final target =
+        _accounts[(targetIndex + _accounts.length) % _accounts.length];
+    unawaited(_activateAccount(target.id));
+    return target;
+  }
+
+  /// Cycles to the next/previous saved account (by the order they were
+  /// added) - used by the avatar's swipe-up/down quick-switch gesture.
+  /// Returns the account it's switching to (synchronously, before the
+  /// switch's own network verification completes) so the caller can show
+  /// immediate feedback, or null if there's fewer than 2 saved accounts.
+  SavedAccount? cycleToNextAccount() => _cycleAccount(1);
+  SavedAccount? cycleToPreviousAccount() => _cycleAccount(-1);
+
+  /// Removes a saved account entirely: its stored password, its
+  /// namespaced prefs, and its entry in the saved-accounts list. If it was
+  /// the active account, falls back to another saved account, or - if none
+  /// remain - performs a full logout (the only path that sets
+  /// [isLoggedIn] false).
+  Future<void> removeAccount(String accountId) async {
+    final index = _accounts.indexWhere((a) => a.id == accountId);
+    if (index == -1) return;
+    final wasActive = accountId == _activeAccountId;
+
+    _accounts = [..._accounts]..removeAt(index);
+    final prefs = await _prefsFuture;
+    await _accountStore.saveAccounts(prefs, _accounts);
+    await _accountStore.deletePassword(accountId);
+    for (final key in AccountStore.perAccountPrefKeys) {
+      await prefs.remove(_accountStore.accountPrefKey(accountId, key));
+    }
+
+    if (!wasActive) {
+      notifyListeners();
+      return;
+    }
+
+    if (_accounts.isEmpty) {
+      _sessionGeneration++;
+      _activeAccountId = null;
+      await _accountStore.saveActiveAccountId(prefs, null);
+      _cacheRefreshTimer?.cancel();
+      _directoryCache.clear();
+      _clearActiveContent();
+      _isLoggedIn = false;
+      _serverUrl = '';
+      _username = '';
+      _password = '';
+      _applyAccountPrefs(prefs, null);
+      notifyListeners();
+      return;
+    }
+
+    await _activateAccount(_accounts.first.id);
+  }
+
+  /// Removes the active account. Kept as the app's one "Log Out" action -
+  /// with multiple accounts saved this falls back to another one instead
+  /// of ending the session, exactly like removing any other account would.
+  Future<void> logout() => removeAccount(_activeAccountId ?? '');
 
   Future<void> refreshData() async {
     if (!_isLoggedIn || _service == null) {
@@ -738,6 +946,10 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
       );
       return;
     }
+    // Captured so a response landing after an account switch mid-flight
+    // can recognize it's for an account the user has already left and
+    // discard itself instead of overwriting the new account's content.
+    final gen = _sessionGeneration;
 
     _isLoading = true;
     _errorMessage = null;
@@ -748,7 +960,9 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     );
 
     try {
-      _items = await _service!.fetchDirectory(_currentFolderPath);
+      final items = await _service!.fetchDirectory(_currentFolderPath);
+      if (gen != _sessionGeneration) return;
+      _items = items;
       _directoryCache[_currentFolderPath] = _CachedDirectory(
         _items,
         DateTime.now(),
@@ -773,11 +987,14 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
         debugPrint('[ServerProvider] Activity fetch warning: $e');
       }
     } catch (e) {
+      if (gen != _sessionGeneration) return;
       debugPrint('[ServerProvider] Error fetching directory: $e');
       _errorMessage = e.toString().replaceAll('Exception: ', '');
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (gen == _sessionGeneration) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -789,20 +1006,26 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// Loads every image/video across the whole account for the Photos tab.
   Future<void> fetchAllMedia() async {
     if (!_isLoggedIn || _service == null) return;
+    final gen = _sessionGeneration;
 
     _isMediaLoading = true;
     _mediaErrorMessage = null;
     notifyListeners();
 
     try {
-      _allMedia = await _service!.fetchAllMedia();
+      final media = await _service!.fetchAllMedia();
+      if (gen != _sessionGeneration) return;
+      _allMedia = media;
       debugPrint('[ServerProvider] Loaded ${_allMedia.length} media items');
     } catch (e) {
+      if (gen != _sessionGeneration) return;
       debugPrint('[ServerProvider] Error fetching all media: $e');
       _mediaErrorMessage = e.toString().replaceAll('Exception: ', '');
     } finally {
-      _isMediaLoading = false;
-      notifyListeners();
+      if (gen == _sessionGeneration) {
+        _isMediaLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -873,26 +1096,42 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     await refreshData();
   }
 
+  /// Persists a per-account browsing pref under its `acct_<id>_`-namespaced
+  /// key. No-op if there's no active account (shouldn't normally happen -
+  /// these setters are only reachable from screens that require one).
+  void _persistAccountPref(
+    String baseKey,
+    void Function(SharedPreferences prefs, String key) write,
+  ) {
+    final id = _activeAccountId;
+    if (id == null) return;
+    _prefsFuture.then(
+      (p) => write(p, _accountStore.accountPrefKey(id, baseKey)),
+    );
+  }
+
   void setGridView(bool value) {
     if (_isGridView == value) return;
     _isGridView = value;
     notifyListeners();
-    _prefsFuture.then((p) => p.setBool(_prefGridView, value));
+    _persistAccountPref(_prefGridView, (p, key) => p.setBool(key, value));
   }
 
   void toggleFavoritesFilterFiles() {
     _showFavoritesOnlyFiles = !_showFavoritesOnlyFiles;
     notifyListeners();
-    _prefsFuture.then(
-      (p) => p.setBool(_prefShowFavoritesOnlyFiles, _showFavoritesOnlyFiles),
+    _persistAccountPref(
+      _prefShowFavoritesOnlyFiles,
+      (p, key) => p.setBool(key, _showFavoritesOnlyFiles),
     );
   }
 
   void toggleFavoritesFilterPhotos() {
     _showFavoritesOnlyPhotos = !_showFavoritesOnlyPhotos;
     notifyListeners();
-    _prefsFuture.then(
-      (p) => p.setBool(_prefShowFavoritesOnlyPhotos, _showFavoritesOnlyPhotos),
+    _persistAccountPref(
+      _prefShowFavoritesOnlyPhotos,
+      (p, key) => p.setBool(key, _showFavoritesOnlyPhotos),
     );
   }
 
@@ -900,20 +1139,27 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     if (_storageScope == scope) return;
     _storageScope = scope;
     notifyListeners();
-    _prefsFuture.then((p) => p.setString(_prefStorageScope, scope.name));
+    _persistAccountPref(
+      _prefStorageScope,
+      (p, key) => p.setString(key, scope.name),
+    );
   }
 
   void toggleShowHiddenFiles() {
     _showHiddenFiles = !_showHiddenFiles;
     notifyListeners();
-    _prefsFuture.then((p) => p.setBool(_prefShowHiddenFiles, _showHiddenFiles));
+    _persistAccountPref(
+      _prefShowHiddenFiles,
+      (p, key) => p.setBool(key, _showHiddenFiles),
+    );
   }
 
   void toggleShowHiddenPhotos() {
     _showHiddenPhotos = !_showHiddenPhotos;
     notifyListeners();
-    _prefsFuture.then(
-      (p) => p.setBool(_prefShowHiddenPhotos, _showHiddenPhotos),
+    _persistAccountPref(
+      _prefShowHiddenPhotos,
+      (p, key) => p.setBool(key, _showHiddenPhotos),
     );
   }
 
@@ -921,14 +1167,18 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     if (_photosSortField == field) return;
     _photosSortField = field;
     notifyListeners();
-    _prefsFuture.then((p) => p.setString(_prefSortField, field.name));
+    _persistAccountPref(
+      _prefSortField,
+      (p, key) => p.setString(key, field.name),
+    );
   }
 
   void togglePhotosSortOrder() {
     _photosSortAscending = !_photosSortAscending;
     notifyListeners();
-    _prefsFuture.then(
-      (p) => p.setBool(_prefSortAscending, _photosSortAscending),
+    _persistAccountPref(
+      _prefSortAscending,
+      (p, key) => p.setBool(key, _photosSortAscending),
     );
   }
 
@@ -943,8 +1193,9 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
         'ascending': _folderSortAscending[path],
       };
     }
-    _prefsFuture.then(
-      (p) => p.setString(_prefFolderSort, jsonEncode(combined)),
+    _persistAccountPref(
+      _prefFolderSort,
+      (p, key) => p.setString(key, jsonEncode(combined)),
     );
   }
 
@@ -1043,7 +1294,10 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     if (_cachePolicy == policy) return;
     _cachePolicy = policy;
     notifyListeners();
-    _prefsFuture.then((p) => p.setString(_prefCachePolicy, policy.name));
+    _persistAccountPref(
+      _prefCachePolicy,
+      (p, key) => p.setString(key, policy.name),
+    );
     _startCacheRefreshTimerIfNeeded();
   }
 
@@ -1052,7 +1306,10 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     if (_cacheIntervalMinutes == clamped) return;
     _cacheIntervalMinutes = clamped;
     notifyListeners();
-    _prefsFuture.then((p) => p.setInt(_prefCacheIntervalMinutes, clamped));
+    _persistAccountPref(
+      _prefCacheIntervalMinutes,
+      (p, key) => p.setInt(key, clamped),
+    );
     _startCacheRefreshTimerIfNeeded();
   }
 
@@ -1095,19 +1352,25 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> fetchTrash() async {
     if (!_isLoggedIn || _service == null) return;
+    final gen = _sessionGeneration;
 
     _isTrashLoading = true;
     _trashErrorMessage = null;
     notifyListeners();
 
     try {
-      _trashItems = await _service!.fetchTrash();
+      final trash = await _service!.fetchTrash();
+      if (gen != _sessionGeneration) return;
+      _trashItems = trash;
     } catch (e) {
+      if (gen != _sessionGeneration) return;
       debugPrint('[ServerProvider] Error fetching trash: $e');
       _trashErrorMessage = e.toString().replaceAll('Exception: ', '');
     } finally {
-      _isTrashLoading = false;
-      notifyListeners();
+      if (gen == _sessionGeneration) {
+        _isTrashLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -1136,19 +1399,25 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> fetchShares() async {
     if (!_isLoggedIn || _service == null) return;
+    final gen = _sessionGeneration;
 
     _isSharesLoading = true;
     _sharesErrorMessage = null;
     notifyListeners();
 
     try {
-      _shares = await _service!.fetchShares(sharedWithMe: _sharesWithMe);
+      final shares = await _service!.fetchShares(sharedWithMe: _sharesWithMe);
+      if (gen != _sessionGeneration) return;
+      _shares = shares;
     } catch (e) {
+      if (gen != _sessionGeneration) return;
       debugPrint('[ServerProvider] Error fetching shares: $e');
       _sharesErrorMessage = e.toString().replaceAll('Exception: ', '');
     } finally {
-      _isSharesLoading = false;
-      notifyListeners();
+      if (gen == _sessionGeneration) {
+        _isSharesLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -1172,19 +1441,25 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> fetchRecent() async {
     if (!_isLoggedIn || _service == null) return;
+    final gen = _sessionGeneration;
 
     _isRecentLoading = true;
     _recentErrorMessage = null;
     notifyListeners();
 
     try {
-      _recentItems = await _service!.fetchRecentFiles();
+      final recent = await _service!.fetchRecentFiles();
+      if (gen != _sessionGeneration) return;
+      _recentItems = recent;
     } catch (e) {
+      if (gen != _sessionGeneration) return;
       debugPrint('[ServerProvider] Error fetching recent files: $e');
       _recentErrorMessage = e.toString().replaceAll('Exception: ', '');
     } finally {
-      _isRecentLoading = false;
-      notifyListeners();
+      if (gen == _sessionGeneration) {
+        _isRecentLoading = false;
+        notifyListeners();
+      }
     }
   }
 

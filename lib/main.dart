@@ -68,16 +68,30 @@ class _SplashView extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(24),
+            // The monochrome adaptive-icon layer is a plain white silhouette
+            // on transparent, meant to be tinted rather than shown as-is -
+            // srcIn recolors it to the theme's foreground so it reads
+            // correctly in both light and dark mode.
+            ColorFiltered(
+              colorFilter: ColorFilter.mode(
+                colorScheme.onSurface,
+                BlendMode.srcIn,
+              ),
               child: Image.asset(
-                'assets/icon/app_icon.png',
+                'assets/icon/app_icon_monochrome.png',
                 width: 72,
                 height: 72,
               ),
             ),
             const SizedBox(height: 24),
-            CircularProgressIndicator(color: colorScheme.primary),
+            SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                color: colorScheme.primary,
+              ),
+            ),
           ],
         ),
       ),

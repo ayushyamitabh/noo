@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/app_tab.dart';
+import '../models/saved_account.dart';
 import '../providers/server_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/frosted_glass_container.dart';
 import '../widgets/seek_bar_painter.dart';
+import 'login_view.dart';
 
 class AccountView extends StatelessWidget {
   const AccountView({super.key});
@@ -175,6 +177,17 @@ class AccountView extends StatelessWidget {
                   ],
                 ),
               ),
+              const SizedBox(height: 24),
+
+              // Accounts Section
+              Text(
+                'Accounts',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 10),
+              const _AccountsCard(),
               const SizedBox(height: 24),
 
               // Server Credentials Section
@@ -461,6 +474,138 @@ class AccountView extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+/// Lists every saved account, letting the user switch to an inactive one,
+/// remove any of them, or add another via [LoginView] pushed in "add
+/// account" mode.
+class _AccountsCard extends StatelessWidget {
+  const _AccountsCard();
+
+  Future<void> _confirmRemove(
+    BuildContext context,
+    ServerProvider provider,
+    SavedAccount account,
+  ) async {
+    final isActive = account.id == provider.activeAccountId;
+    final host = Uri.tryParse(account.serverUrl)?.host ?? account.serverUrl;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Remove Account'),
+          content: Text(
+            isActive && provider.accounts.length > 1
+                ? 'Remove ${account.username} ($host)? Another saved account will become active.'
+                : 'Remove ${account.username} ($host)? You can add it again later.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(dialogContext).colorScheme.error,
+              ),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Remove'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed == true) {
+      await provider.removeAccount(account.id);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<ServerProvider>();
+    final accounts = provider.accounts;
+
+    return Card(
+      child: Column(
+        children: [
+          for (final account in accounts) ...[
+            _AccountRow(
+              account: account,
+              isActive: account.id == provider.activeAccountId,
+              onTap: account.id == provider.activeAccountId
+                  ? null
+                  : () => provider.switchAccount(account.id),
+              onRemove: () => _confirmRemove(context, provider, account),
+            ),
+            const Divider(height: 1, indent: 16, endIndent: 16),
+          ],
+          ListTile(
+            leading: const Icon(Icons.add_circle_outline_rounded),
+            title: const Text('Add account'),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const LoginView(isAddingAccount: true),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AccountRow extends StatelessWidget {
+  final SavedAccount account;
+  final bool isActive;
+  final VoidCallback? onTap;
+  final VoidCallback onRemove;
+
+  const _AccountRow({
+    required this.account,
+    required this.isActive,
+    required this.onTap,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final host = Uri.tryParse(account.serverUrl)?.host ?? account.serverUrl;
+    final initial = account.username.isNotEmpty
+        ? account.username[0].toUpperCase()
+        : '?';
+
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: colorScheme.primary,
+        child: Text(
+          initial,
+          style: TextStyle(
+            color: colorScheme.onPrimary,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+      title: Text(account.username),
+      subtitle: Text(host),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isActive)
+            Icon(Icons.check_circle_rounded, color: colorScheme.primary),
+          IconButton(
+            icon: const Icon(Icons.delete_outline_rounded),
+            tooltip: 'Remove account',
+            onPressed: onRemove,
+          ),
+        ],
+      ),
+      onTap: onTap,
     );
   }
 }

@@ -29,18 +29,49 @@ widgets. Key points:
 - Dark theme supports an `amoled` flag that flattens every surface tone to
   pure black — extend `colorScheme.copyWith(...)` there if a new surface
   role needs the same treatment, don't hardcode `Colors.black` at call sites.
+- **Scrollbars**: a project-wide `scrollbarTheme` (`AppTheme._scrollbarTheme`)
+  gives every `Scrollbar` in the app a thick, rounded, always-visible,
+  draggable thumb (Android fast-scroll style) derived from
+  `colorScheme.onSurfaceVariant` — don't pass per-instance `thickness`/
+  `radius`/`thumbVisibility`/`interactive`, just wrap scrollable content in a
+  plain `Scrollbar(child: ...)` (pass `controller:` matching the scrollable's
+  own when one exists) and it picks up the theme automatically.
 
 ## Reusable chrome
 
 - [`FrostedGlassContainer`](../../lib/widgets/frosted_glass_container.dart) —
   the blurred/translucent pill background shared by all floating chrome
-  (bottom nav bar, media-viewer action bar). Reuse this for any new floating
-  overlay instead of building a new blur/shadow combo.
+  (bottom nav bar, media-viewer top/bottom bars and video transport
+  controls). Reuse this for any new floating overlay instead of building a
+  new blur/shadow combo.
 - [`FloatingBottomNavBar`](../../lib/widgets/floating_bottom_bar.dart) — the
   main tab bar; opacity/blur are user-adjustable settings
   (`ServerProvider.bottomBarOpacity`/`bottomBarBlur`), not constants — pull
   new adjustable visual knobs from the provider the same way rather than
   hardcoding them.
+- [`SyncedHeaderScaffold`](../../lib/widgets/synced_header_scaffold.dart) —
+  the pull-to-sync `CustomScrollView` header shared by 5 of the 6 tabs (see
+  `architecture.md`); also where the pull-to-refresh gesture thresholds and
+  the classic Material refresh spinner live.
+- [`SeekBarPainter`/`SeekBarPreview`](../../lib/widgets/seek_bar_painter.dart)
+  — the four `MediaProgressBarStyle` presets (Default/Wavy/Slim/Squiggly)
+  for the video player's seek bar, plus a perpetually-animated
+  `SeekBarPreview` wrapper used by the Settings style picker so every
+  preview always matches the real widget exactly (same painter, just fed
+  demo `progress`/`phase` values). Add new seek-bar presets here, not by
+  forking the painter.
+- Chrome inside the media viewer (`file_viewer_screen.dart` — the top bar's
+  back button + filename, the bottom action bar, the video transport
+  controls) all share one small hand-rolled icon-button pattern
+  (`_ActionIconButton`: `InkWell` + `Icon` at a fixed 22px, colored from
+  `colorScheme.onSurface` unless overridden) rather than plain `IconButton`s
+  — match this instead of adding a bare `IconButton` in that screen, since a
+  default-styled one visibly stands out against the rest (this was a real
+  bug: an unstyled back button read as "too large" next to everything else).
+- A title/label that might overflow a fixed-width chrome bar (e.g. the media
+  viewer's filename) should use `_MarqueeTitle`-style logic — measure with
+  `TextPainter` first and only switch to a scrolling `Marquee` when the text
+  actually doesn't fit, rather than marqueeing unconditionally.
 - Icons: prefer `Icons.*_rounded` (matches the rest of the app) or
   `material_symbols_icons` where Material Symbols are already in use; avoid
   mixing in the sharp/outlined default set.

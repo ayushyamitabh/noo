@@ -21,7 +21,12 @@ class ActivityView extends StatelessWidget {
     final List<Widget> contentSlivers = [
       const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
-      if (activities.isEmpty)
+      if (provider.isLoading && activities.isEmpty)
+        const SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(child: CircularProgressIndicator()),
+        )
+      else if (activities.isEmpty)
         SliverFillRemaining(
           hasScrollBody: false,
           child: Center(
