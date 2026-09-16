@@ -142,25 +142,21 @@ class _ShareUploadViewState extends State<ShareUploadView> {
                             ),
                           ),
                         )
-                      : Scrollbar(
-                          child: ListView.builder(
-                            itemCount: folders.length,
-                            itemBuilder: (context, index) {
-                              final folder = folders[index];
-                              return ListTile(
-                                leading: Icon(
-                                  Icons.folder_rounded,
-                                  color: colorScheme.primary,
-                                ),
-                                title: Text(folder.name),
-                                trailing: const Icon(
-                                  Icons.chevron_right_rounded,
-                                ),
-                                onTap: () =>
-                                    provider.navigateToFolder(folder.path),
-                              );
-                            },
-                          ),
+                      : ListView.builder(
+                          itemCount: folders.length,
+                          itemBuilder: (context, index) {
+                            final folder = folders[index];
+                            return ListTile(
+                              leading: Icon(
+                                Icons.folder_rounded,
+                                color: colorScheme.primary,
+                              ),
+                              title: Text(folder.name),
+                              trailing: const Icon(Icons.chevron_right_rounded),
+                              onTap: () =>
+                                  provider.navigateToFolder(folder.path),
+                            );
+                          },
                         ),
                 ),
               ],

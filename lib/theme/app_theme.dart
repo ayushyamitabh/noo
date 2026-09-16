@@ -30,37 +30,6 @@ class AppTheme {
     Color(0xFF2E7D32), // Emerald Green
   ];
 
-  // Flutter's default Scrollbar renders a ~6px hairline that's easy to miss
-  // and hard to grab. This tunes it to read like Android's standard
-  // draggable fast-scroll thumb: thicker, pill-shaped, and always at least
-  // faintly visible (not just flashing in on scroll), while still getting
-  // a touch more visible/opaque while actively hovered or dragged.
-  static ScrollbarThemeData _scrollbarTheme(ColorScheme colorScheme) {
-    final thumbColor = colorScheme.onSurfaceVariant;
-    return ScrollbarThemeData(
-      thickness: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.dragged) ||
-            states.contains(WidgetState.hovered)) {
-          return 10.0;
-        }
-        return 8.0;
-      }),
-      radius: const Radius.circular(8),
-      thumbColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.dragged)) {
-          return thumbColor.withValues(alpha: 0.9);
-        }
-        if (states.contains(WidgetState.hovered)) {
-          return thumbColor.withValues(alpha: 0.8);
-        }
-        return thumbColor.withValues(alpha: 0.6);
-      }),
-      thumbVisibility: const WidgetStatePropertyAll(true),
-      trackVisibility: const WidgetStatePropertyAll(false),
-      interactive: true,
-    );
-  }
-
   static ThemeData light(
     Color seedColor, {
     ColorScheme? dynamicScheme,
@@ -80,7 +49,6 @@ class AppTheme {
       scaffoldBackgroundColor: colorScheme.surface,
       pageTransitionsTheme: _pageTransitionsTheme,
       sliderTheme: _sliderTheme,
-      scrollbarTheme: _scrollbarTheme(colorScheme),
       textTheme: GoogleFonts.interTextTheme(ThemeData.light().textTheme)
           .copyWith(
             headlineMedium: GoogleFonts.inter(
@@ -147,7 +115,6 @@ class AppTheme {
       scaffoldBackgroundColor: colorScheme.surface,
       pageTransitionsTheme: _pageTransitionsTheme,
       sliderTheme: _sliderTheme,
-      scrollbarTheme: _scrollbarTheme(colorScheme),
       textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme)
           .copyWith(
             headlineMedium: GoogleFonts.inter(

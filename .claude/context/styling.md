@@ -29,13 +29,10 @@ widgets. Key points:
 - Dark theme supports an `amoled` flag that flattens every surface tone to
   pure black — extend `colorScheme.copyWith(...)` there if a new surface
   role needs the same treatment, don't hardcode `Colors.black` at call sites.
-- **Scrollbars**: a project-wide `scrollbarTheme` (`AppTheme._scrollbarTheme`)
-  gives every `Scrollbar` in the app a thick, rounded, always-visible,
-  draggable thumb (Android fast-scroll style) derived from
-  `colorScheme.onSurfaceVariant` — don't pass per-instance `thickness`/
-  `radius`/`thumbVisibility`/`interactive`, just wrap scrollable content in a
-  plain `Scrollbar(child: ...)` (pass `controller:` matching the scrollable's
-  own when one exists) and it picks up the theme automatically.
+- **Scrollbars are deliberately not shown** — every scrollable list in the
+  app is a plain `ListView`/`CustomScrollView` with no `Scrollbar` wrapper
+  and no `scrollbarTheme` override (tried once, explicitly reverted). Don't
+  reintroduce one without being asked.
 
 ## Reusable chrome
 

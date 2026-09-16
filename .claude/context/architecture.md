@@ -101,8 +101,8 @@ owns the app's share-intent listener (`receive_sharing_intent`): both
 Five of the six tabs (all but Files) plus each tab's own controls share
 [`SyncedHeaderScaffold`](../../lib/widgets/synced_header_scaffold.dart) — a
 `CustomScrollView` with a pull-down "sync status" header (Google
-Photos-style), a `Scrollbar`, and a classic Material refresh spinner shown
-during a pull-triggered sync. `SearchView`, `AccountView` (Settings), the
+Photos-style) and a classic Material refresh spinner shown during a
+pull-triggered sync. `SearchView`, `AccountView` (Settings), the
 file-details sheet, the share sheet, and `ShareUploadView` (the
 share-to-upload destination picker) are pushed on top via
 `Navigator`/`showModalBottomSheet`/`showGradualBottomSheet` rather than
