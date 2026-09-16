@@ -978,6 +978,30 @@ class NextcloudService {
     return response.statusCode == 204 || response.statusCode == 200;
   }
 
+  /// Renames (or moves within the same folder) an item via WebDAV MOVE.
+  Future<bool> renameItem(String itemPath, String newName) async {
+    var cleanPath = itemPath.trim();
+    if (!cleanPath.startsWith('/')) cleanPath = '/$cleanPath';
+
+    final segments = cleanPath.split('/')..removeLast();
+    final destPath = '${segments.join('/')}/$newName';
+
+    final sourceUrl =
+        '$_cleanServerUrl/remote.php/dav/files/$username$cleanPath';
+    final destUrl = '$_cleanServerUrl/remote.php/dav/files/$username$destPath';
+    debugPrint('[Nextcloud DAV] Renaming $sourceUrl -> $destUrl');
+
+    final request = http.Request('MOVE', Uri.parse(sourceUrl))
+      ..headers.addAll({
+        ..._headers,
+        'Destination': Uri.encodeFull(destUrl),
+        'Overwrite': 'F',
+      });
+    final response = await http.Client().send(request);
+    debugPrint('[Nextcloud DAV] Rename status: ${response.statusCode}');
+    return response.statusCode == 201 || response.statusCode == 204;
+  }
+
   Future<bool> createFolder(String parentPath, String folderName) async {
     var cleanPath = parentPath.trim();
     if (!cleanPath.startsWith('/')) cleanPath = '/$cleanPath';
@@ -1441,8 +1465,27 @@ class NextcloudService {
   /// Per-file activity feed (Details sheet's Activity tab), unlike
   /// [fetchActivities] which is the whole-account feed.
   Future<List<NextcloudActivity>> fetchFileActivity(String fileId) async {
-    List<NextcloudActivity> parse(String body) {
-      final data = jsonDecode(body);
+    // The server-side `object_type`/`object_id` filter params on the
+    // activity endpoints turned out to be silently ignored (still
+    // returning the whole account feed) - instead, fetch the same
+    // proven-working global feed `fetchActivities` uses (with a larger
+    // page so older file-specific entries aren't cut off) and filter to
+    // this file ourselves using each entry's own `object_id`, which the
+    // server always includes for rich-subject substitution regardless of
+    // whether the query-param filter works.
+    final url =
+        '$_cleanServerUrl/ocs/v2.php/apps/activity/api/v2/activity'
+        '?format=json&limit=200';
+    debugPrint('[Nextcloud OCS] Fetching activity feed to filter for $fileId');
+
+    try {
+      final response = await http.get(Uri.parse(url), headers: _headers);
+      debugPrint(
+        '[Nextcloud OCS] File activity response status: ${response.statusCode}',
+      );
+      if (response.statusCode != 200) return [];
+
+      final data = jsonDecode(response.body);
       final rawData = data['ocs']?['data'];
       List<dynamic> list = [];
       if (rawData is List) {
@@ -1450,47 +1493,25 @@ class NextcloudService {
       } else if (rawData is Map && rawData['activity'] is List) {
         list = rawData['activity'];
       }
-      return list.map((a) {
-        return NextcloudActivity(
-          id: (a['activity_id'] ?? '').toString(),
-          title: a['subject'] ?? 'Activity',
-          subject: a['message'] ?? (a['subject'] ?? ''),
-          timestamp: DateTime.fromMillisecondsSinceEpoch(
-            (a['timestamp'] as int? ?? 0) * 1000,
-          ),
-          icon: Icons.cloud_outlined,
-          author: a['user'] ?? username,
-        );
-      }).toList();
-    }
 
-    // The activity app doesn't have one single documented way to scope the
-    // feed to a specific file across server versions - try the same base
-    // endpoint `fetchActivities` uses (proven to work) with object filter
-    // params first, then fall back to the `filter/files` route some
-    // versions expose, rather than betting on just one.
-    final candidates = [
-      '$_cleanServerUrl/ocs/v2.php/apps/activity/api/v2/activity'
-          '?format=json&object_type=files&object_id=${Uri.encodeQueryComponent(fileId)}',
-      '$_cleanServerUrl/ocs/v2.php/apps/activity/api/v2/activity/filter/files'
-          '?format=json&object_type=files&object_id=${Uri.encodeQueryComponent(fileId)}',
-    ];
-
-    for (final url in candidates) {
-      try {
-        debugPrint('[Nextcloud OCS] Fetching activity for file $fileId: $url');
-        final response = await http.get(Uri.parse(url), headers: _headers);
-        debugPrint(
-          '[Nextcloud OCS] File activity response status: ${response.statusCode}',
-        );
-        if (response.statusCode != 200) continue;
-        final items = parse(response.body);
-        if (items.isNotEmpty) return items;
-      } catch (e) {
-        debugPrint('[Nextcloud OCS] File activity attempt failed: $e');
-      }
+      return list.where((a) => (a['object_id'] ?? '').toString() == fileId).map(
+        (a) {
+          return NextcloudActivity(
+            id: (a['activity_id'] ?? '').toString(),
+            title: a['subject'] ?? 'Activity',
+            subject: a['message'] ?? (a['subject'] ?? ''),
+            timestamp: DateTime.fromMillisecondsSinceEpoch(
+              (a['timestamp'] as int? ?? 0) * 1000,
+            ),
+            icon: Icons.cloud_outlined,
+            author: a['user'] ?? username,
+          );
+        },
+      ).toList();
+    } catch (e) {
+      debugPrint('[Nextcloud OCS] File activity unavailable: $e');
+      return [];
     }
-    return [];
   }
 
   /// Lists a file's version history via the DAV versions endpoint.

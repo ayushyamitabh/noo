@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
+import '../models/app_tab.dart';
 import '../models/nextcloud_item.dart';
 import '../providers/server_provider.dart';
 import 'file_viewer_screen.dart';
@@ -90,6 +92,25 @@ class _SearchViewState extends State<SearchView> {
     }
   }
 
+  /// Navigates the Files tab to [item] (its own folder if it's a folder,
+  /// its parent folder otherwise - rebuilding the whole breadcrumb trail
+  /// from root rather than assuming it's under wherever the user was
+  /// browsing before), switches the shell to the Files tab, and closes
+  /// search. For a file, also opens it once back on Files.
+  Future<void> _openResult(NextcloudItem item) async {
+    final provider = context.read<ServerProvider>();
+    final navigator = Navigator.of(context);
+
+    final folderPath = item.isFolder ? item.path : p.dirname(item.path);
+    await provider.navigateToAbsoluteFolder(folderPath);
+    provider.requestTab(AppTab.files);
+    navigator.popUntil((route) => route.isFirst);
+
+    if (!item.isFolder) {
+      navigator.push(FileViewerScreen.route(item: item));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -106,6 +127,7 @@ class _SearchViewState extends State<SearchView> {
                 focusNode: _focusNode,
                 autoFocus: true,
                 hintText: 'Search your files...',
+                elevation: const WidgetStatePropertyAll(0),
                 onChanged: _onChanged,
                 leading: IconButton(
                   icon: const Icon(Icons.arrow_back_rounded),
@@ -151,14 +173,7 @@ class _SearchViewState extends State<SearchView> {
       );
     }
     if (!_hasSearched) {
-      return Center(
-        child: Text(
-          'Search across your whole Nextcloud',
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: colorScheme.onSurfaceVariant,
-          ),
-        ),
-      );
+      return const SizedBox.shrink();
     }
     if (_results.isEmpty) {
       return Center(
@@ -185,14 +200,7 @@ class _SearchViewState extends State<SearchView> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          onTap: () {
-            if (item.isFolder) {
-              context.read<ServerProvider>().navigateToFolder(item.path);
-              Navigator.pop(context);
-            } else {
-              Navigator.push(context, FileViewerScreen.route(item: item));
-            }
-          },
+          onTap: () => _openResult(item),
         );
       },
     );

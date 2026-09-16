@@ -49,10 +49,12 @@ class _CachedDirectory {
   const _CachedDirectory(this.items, this.fetchedAt);
 }
 
-/// The two linear progress indicator styles Material 3 offers for the video
-/// player's seek bar: an animated travelling-wave line (matching Android's
-/// current media player), or a plain flat classic bar.
-enum MediaProgressBarStyle { wavy, classic }
+/// Thumb/track presets for the video player's seek bar, matching the four
+/// combinations offered by other Material You media players: a Material 3
+/// slider-style thumb ([classic]), an animated travelling wave with a round
+/// thumb ([wavy]), a thin flat bar with no distinct thumb ([slim]), and an
+/// animated wave with a tick-mark thumb ([squiggly]).
+enum MediaProgressBarStyle { classic, wavy, slim, squiggly }
 
 class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _storage = FlutterSecureStorage();
@@ -83,6 +85,7 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _prefMediaProgressBarStyle = 'ui_media_progress_bar_style';
   static const _prefCachePolicy = 'ui_cache_policy';
   static const _prefCacheIntervalMinutes = 'ui_cache_interval_minutes';
+  static const _prefTapTabToScrollTop = 'ui_tap_tab_to_scroll_top';
 
   final Future<SharedPreferences> _prefsFuture =
       SharedPreferences.getInstance();
@@ -111,9 +114,15 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
   // UI settings
   double _bottomBarOpacity = 0.55;
   double _bottomBarBlur = 28;
+  bool _tapTabToScrollTop = true;
 
   // Navigation state
   String _currentFolderPath = '/';
+
+  // A one-shot request for the shell to switch its active bottom-nav tab
+  // (e.g. a search result landing on Files) - consumed and cleared by
+  // MainShellView the next time it builds, not a persisted preference.
+  AppTab? _requestedTab;
   List<String> _pathStack = ['/'];
   bool _isGridView = false;
   bool _showFavoritesOnlyFiles = false;
@@ -214,8 +223,24 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
   MediaProgressBarStyle get mediaProgressBarStyle => _mediaProgressBarStyle;
   double get bottomBarOpacity => _bottomBarOpacity;
   double get bottomBarBlur => _bottomBarBlur;
+  bool get tapTabToScrollTop => _tapTabToScrollTop;
 
   String get currentFolderPath => _currentFolderPath;
+  AppTab? get requestedTab => _requestedTab;
+
+  /// Asks the shell to switch its active bottom-nav tab to [tab] - e.g. so
+  /// tapping a search result lands the user on the Files tab even if they
+  /// opened search from somewhere else.
+  void requestTab(AppTab tab) {
+    _requestedTab = tab;
+    notifyListeners();
+  }
+
+  /// Called by the shell once it's consumed [requestedTab].
+  void consumeRequestedTab() {
+    _requestedTab = null;
+  }
+
   List<String> get pathStack => _pathStack;
   bool get isGridView => _isGridView;
   bool get showFavoritesOnlyFiles => _showFavoritesOnlyFiles;
@@ -382,6 +407,8 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
       _bottomBarOpacity =
           prefs.getDouble(_prefBottomBarOpacity) ?? _bottomBarOpacity;
       _bottomBarBlur = prefs.getDouble(_prefBottomBarBlur) ?? _bottomBarBlur;
+      _tapTabToScrollTop =
+          prefs.getBool(_prefTapTabToScrollTop) ?? _tapTabToScrollTop;
       _isGridView = prefs.getBool(_prefGridView) ?? _isGridView;
       _showFavoritesOnlyFiles =
           prefs.getBool(_prefShowFavoritesOnlyFiles) ?? _showFavoritesOnlyFiles;
@@ -761,6 +788,24 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     await _navigateTo(_pathStack.last);
   }
 
+  /// Navigates directly to an arbitrary absolute folder path (e.g. from a
+  /// search result) - unlike [navigateToFolder], which assumes [path] is a
+  /// child of wherever the user is currently browsing and just appends it,
+  /// this rebuilds the whole breadcrumb trail from root so it's correct
+  /// regardless of where the user was before.
+  Future<void> navigateToAbsoluteFolder(String path) async {
+    final normalized = path.trim().replaceAll(RegExp(r'/+$'), '');
+    final segments = normalized.split('/').where((s) => s.isNotEmpty).toList();
+    final stack = <String>['/'];
+    var current = '';
+    for (final segment in segments) {
+      current = '$current/$segment';
+      stack.add(current);
+    }
+    _pathStack = stack;
+    await _navigateTo(stack.last);
+  }
+
   /// True if [path]'s cached listing (if any) is still usable under the
   /// current [CachePolicy] - never for [CachePolicy.never], indefinitely
   /// for [CachePolicy.manual], and until it's older than
@@ -965,6 +1010,15 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     final success = await _service!.deleteItem(itemPath);
     if (success) {
       _allMedia = _allMedia.where((i) => i.path != itemPath).toList();
+      await refreshData();
+    }
+    return success;
+  }
+
+  Future<bool> renameItem(NextcloudItem item, String newName) async {
+    if (_service == null) return false;
+    final success = await _service!.renameItem(item.path, newName);
+    if (success) {
       await refreshData();
     }
     return success;
@@ -1237,6 +1291,12 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _bottomBarBlur = value;
     notifyListeners();
     _prefsFuture.then((p) => p.setDouble(_prefBottomBarBlur, value));
+  }
+
+  void setTapTabToScrollTop(bool value) {
+    _tapTabToScrollTop = value;
+    notifyListeners();
+    _prefsFuture.then((p) => p.setBool(_prefTapTabToScrollTop, value));
   }
 
   void setThemeMode(ThemeMode mode) {

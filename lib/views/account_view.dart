@@ -4,6 +4,7 @@ import '../models/app_tab.dart';
 import '../providers/server_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/frosted_glass_container.dart';
+import '../widgets/seek_bar_painter.dart';
 
 class AccountView extends StatelessWidget {
   const AccountView({super.key});
@@ -342,6 +343,17 @@ class AccountView extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             const _BottomBarAppearanceCard(),
+            const SizedBox(height: 12),
+            Card(
+              child: SwitchListTile(
+                title: const Text('Tap Tab to Scroll to Top'),
+                subtitle: const Text(
+                  'Tapping the current bottom bar tab scrolls its list back to the top',
+                ),
+                value: provider.tapTabToScrollTop,
+                onChanged: provider.setTapTabToScrollTop,
+              ),
+            ),
             const SizedBox(height: 24),
 
             // Bottom Nav Tabs
@@ -742,50 +754,186 @@ class _SwipeActionsCard extends StatelessWidget {
   }
 }
 
+String _seekBarStyleLabel(MediaProgressBarStyle style) {
+  switch (style) {
+    case MediaProgressBarStyle.classic:
+      return 'Default';
+    case MediaProgressBarStyle.wavy:
+      return 'Wavy';
+    case MediaProgressBarStyle.slim:
+      return 'Slim';
+    case MediaProgressBarStyle.squiggly:
+      return 'Squiggly';
+  }
+}
+
 class _MediaPlayerCard extends StatelessWidget {
   const _MediaPlayerCard();
 
-  String _label(MediaProgressBarStyle style) {
-    switch (style) {
-      case MediaProgressBarStyle.wavy:
-        return 'Wavy';
-      case MediaProgressBarStyle.classic:
-        return 'Classic';
-    }
+  Future<void> _openPicker(
+    BuildContext context,
+    ServerProvider provider,
+  ) async {
+    final selected = await showDialog<MediaProgressBarStyle>(
+      context: context,
+      builder: (_) =>
+          _SeekBarStyleDialog(current: provider.mediaProgressBarStyle),
+    );
+    if (selected != null) provider.setMediaProgressBarStyle(selected);
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final provider = context.watch<ServerProvider>();
 
     return Card(
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        title: Text(
+          'Seek bar style',
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        subtitle: Text(_seekBarStyleLabel(provider.mediaProgressBarStyle)),
+        trailing: SizedBox(
+          width: 64,
+          height: 24,
+          child: SeekBarPreview(
+            style: provider.mediaProgressBarStyle,
+            playedColor: colorScheme.primary,
+            trackColor: colorScheme.outlineVariant,
+          ),
+        ),
+        onTap: () => _openPicker(context, provider),
+      ),
+    );
+  }
+}
+
+/// A grid of the four [MediaProgressBarStyle] presets, each shown as a live
+/// preview of the real seek bar painter, matching the preset-picker pattern
+/// other Material You media players use for this same setting.
+class _SeekBarStyleDialog extends StatelessWidget {
+  final MediaProgressBarStyle current;
+
+  const _SeekBarStyleDialog({required this.current});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        child: Row(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Text(
-                'Seek bar style',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+            Text(
+              'Seek Bar Style',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
               ),
             ),
-            DropdownButton<MediaProgressBarStyle>(
-              value: provider.mediaProgressBarStyle,
-              underline: const SizedBox.shrink(),
-              borderRadius: BorderRadius.circular(12),
-              items: MediaProgressBarStyle.values
-                  .map(
-                    (s) => DropdownMenuItem(value: s, child: Text(_label(s))),
-                  )
-                  .toList(),
-              onChanged: (s) {
-                if (s != null) provider.setMediaProgressBarStyle(s);
-              },
+            const SizedBox(height: 16),
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childAspectRatio: 1.35,
+              children: [
+                for (final style in MediaProgressBarStyle.values)
+                  _SeekBarStyleOption(
+                    style: style,
+                    isSelected: style == current,
+                    onTap: () => Navigator.pop(context, style),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SeekBarStyleOption extends StatelessWidget {
+  final MediaProgressBarStyle style;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _SeekBarStyleOption({
+    required this.style,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Material(
+      color: isSelected
+          ? colorScheme.primaryContainer.withValues(alpha: 0.4)
+          : colorScheme.surfaceContainerHigh,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isSelected
+                  ? colorScheme.primary
+                  : colorScheme.outlineVariant,
+              width: isSelected ? 2 : 1,
+            ),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Center(
+                  child: SizedBox(
+                    width: 100,
+                    height: 28,
+                    child: SeekBarPreview(
+                      style: style,
+                      playedColor: colorScheme.primary,
+                      trackColor: colorScheme.outlineVariant,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _seekBarStyleLabel(style),
+                style: theme.textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: isSelected
+                      ? colorScheme.primary
+                      : colorScheme.onSurface,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -809,7 +957,7 @@ class _CacheSettingsCard extends StatelessWidget {
   String _description(CachePolicy policy) {
     switch (policy) {
       case CachePolicy.never:
-        return 'Every visit to a folder fetches it fresh (current behavior)';
+        return 'Every visit to a folder fetches it fresh';
       case CachePolicy.interval:
         return 'Reuse a folder\'s listing until it\'s a few minutes old';
       case CachePolicy.manual:

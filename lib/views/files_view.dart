@@ -216,11 +216,66 @@ class _FilesViewState extends State<FilesView> {
       ),
       if (selected.length == 1)
         SelectionAction(
+          icon: Icons.drive_file_rename_outline_rounded,
+          label: 'Rename',
+          onTap: () => _renameItem(provider, selected.single),
+        ),
+      if (selected.length == 1)
+        SelectionAction(
           icon: Icons.info_outline_rounded,
           label: 'Details',
           onTap: () => DetailsSheet.show(context, selected.single),
         ),
     ];
+  }
+
+  Future<void> _renameItem(ServerProvider provider, NextcloudItem item) async {
+    final controller = TextEditingController(text: item.name);
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Rename'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(labelText: 'Name'),
+            onSubmitted: (value) => Navigator.pop(dialogContext, value.trim()),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.pop(dialogContext, controller.text.trim()),
+              child: const Text('Rename'),
+            ),
+          ],
+        );
+      },
+    );
+    // Not disposed here: `showDialog`'s Future resolves as soon as the pop
+    // is initiated, while the dialog (and this controller's TextField)
+    // is still mounted and mid-exit-transition - disposing immediately
+    // crashes with a "still has listeners" assertion. It's a plain,
+    // short-lived controller with no ticker/stream to leak, so letting it
+    // get garbage-collected once the transition finishes is the safe call.
+    if (newName == null || newName.isEmpty || newName == item.name) return;
+    if (!mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    final success = await provider.renameItem(item, newName);
+    _clearSelection();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          success ? 'Renamed to $newName' : 'Failed to rename ${item.name}',
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   Future<void> _shareSelected(
@@ -282,7 +337,10 @@ class _FilesViewState extends State<FilesView> {
         .toList();
 
     final controlsRow = Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+      // 16, not 20 - matches the SliverAppBar toolbar's own default
+      // horizontal content inset when it's selecting, so the two rows'
+      // content lines up instead of the controls row looking shifted in.
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -390,25 +448,51 @@ class _FilesViewState extends State<FilesView> {
       if (_isSelecting)
         SliverAppBar(
           pinned: true,
+          // This isn't the scroll view's topmost sliver - the Synced
+          // header above it already reserves status-bar space, so leaving
+          // this at its default `primary: true` double-reserves it too,
+          // showing up as a big empty gap above the toolbar.
+          primary: false,
           automaticallyImplyLeading: false,
-          leading: IconButton(
-            icon: const Icon(Icons.close_rounded),
-            tooltip: 'Cancel selection',
-            onPressed: _clearSelection,
+          toolbarHeight: 48,
+          // No leading/actions slots - everything lives in `title`, wrapped
+          // in the exact same 16px horizontal Padding as the controls row
+          // above it, so the two rows' content lines up edge-to-edge
+          // instead of relying on SliverAppBar's own leadingWidth/actions
+          // insets (which don't match the controls row's).
+          titleSpacing: 0,
+          title: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.close_rounded, size: 20),
+                  tooltip: 'Cancel selection',
+                  onPressed: _clearSelection,
+                  visualDensity: VisualDensity.compact,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${selectedItems.length} selected',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                for (final action in _buildSelectionActions(
+                  provider,
+                  selectedItems,
+                ))
+                  IconButton(
+                    icon: Icon(action.icon, size: 20, color: action.color),
+                    tooltip: action.label,
+                    onPressed: action.onTap,
+                    visualDensity: VisualDensity.compact,
+                  ),
+              ],
+            ),
           ),
-          title: Text('${selectedItems.length} selected'),
-          actions: [
-            for (final action in _buildSelectionActions(
-              provider,
-              selectedItems,
-            ))
-              IconButton(
-                icon: Icon(action.icon, color: action.color),
-                tooltip: action.label,
-                onPressed: action.onTap,
-              ),
-            const SizedBox(width: 4),
-          ],
         ),
 
       // Files List / Grid
@@ -727,6 +811,7 @@ class _FilesViewState extends State<FilesView> {
         ? card
         : SwipeableItem(
             itemKey: ValueKey('file-${item.id}'),
+            itemName: item.name,
             provider: provider,
             onFavorite: () => provider.toggleItemFavorite(item),
             onShare: () => ShareSheet.show(context, item),

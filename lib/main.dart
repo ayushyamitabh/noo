@@ -65,8 +65,15 @@ class _SplashView extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.cloud_outlined, size: 48, color: colorScheme.primary),
-            const SizedBox(height: 20),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: Image.asset(
+                'assets/icon/app_icon.png',
+                width: 72,
+                height: 72,
+              ),
+            ),
+            const SizedBox(height: 24),
             CircularProgressIndicator(color: colorScheme.primary),
           ],
         ),
@@ -109,6 +116,18 @@ class _MainShellViewState extends State<MainShellView> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ServerProvider>();
+
+    // A one-shot request (e.g. tapping a search result) to switch tabs -
+    // consumed here so it only fires once, then cleared after this frame
+    // (clearing it synchronously would call notifyListeners mid-build).
+    final requestedTab = provider.requestedTab;
+    if (requestedTab != null) {
+      _currentTab = requestedTab;
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => provider.consumeRequestedTab(),
+      );
+    }
+
     final visible = provider.visibleTabs;
     final selectedTab = visible.contains(_currentTab)
         ? _currentTab
@@ -140,8 +159,22 @@ class _MainShellViewState extends State<MainShellView> {
             opacity: provider.bottomBarOpacity,
             blurSigma: provider.bottomBarBlur,
             onDestinationSelected: (index) {
+              final tappedTab = visible[index];
+              if (tappedTab == _currentTab) {
+                if (provider.tapTabToScrollTop) {
+                  final controller = _scrollControllers[tappedTab];
+                  if (controller != null && controller.hasClients) {
+                    controller.animateTo(
+                      0,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOutCubic,
+                    );
+                  }
+                }
+                return;
+              }
               setState(() {
-                _currentTab = visible[index];
+                _currentTab = tappedTab;
               });
             },
             onSearchTap: () {

@@ -55,13 +55,26 @@ class SyncedHeaderScaffold extends StatefulWidget {
 }
 
 class _SyncedHeaderScaffoldState extends State<SyncedHeaderScaffold> {
-  static const double _lockThreshold = 100;
-  static const double _syncThreshold = 14;
+  static const double _lockThreshold = 200;
+  static const double _syncThreshold = 120;
   static const double _pullingEpsilon = 8;
 
   bool _headerLocked = false;
   bool _isPulling = false;
+  bool _isRefreshing = false;
   double _pullDistance = 0;
+
+  // Sync and lock are tracked separately (not one shared flag) so both can
+  // still fire within a single continuous pull that passes both
+  // thresholds - sync at the lower one, lock at the higher one - instead
+  // of the first one reached blocking the other for the rest of the
+  // gesture. Firing during the drag itself - rather than waiting for it to
+  // end - is what actually matters here: waiting for ScrollEndNotification
+  // meant a single deliberate pull often wasn't registering, and only a
+  // fast second pull (still carrying velocity from the first one's
+  // spring-back) reliably crossed the threshold before release.
+  bool _syncedThisGesture = false;
+  bool _lockedThisGesture = false;
 
   void _revealPanel() {
     if (widget.scrollController.hasClients) {
@@ -78,6 +91,14 @@ class _SyncedHeaderScaffoldState extends State<SyncedHeaderScaffold> {
     _revealPanel();
   }
 
+  void _startRefresh() {
+    final refresh = widget.onRefresh ?? widget.provider.refreshData;
+    setState(() => _isRefreshing = true);
+    refresh().whenComplete(() {
+      if (mounted) setState(() => _isRefreshing = false);
+    });
+  }
+
   bool _handleScrollNotification(ScrollNotification notification) {
     final metrics = notification.metrics;
     if (metrics.pixels < metrics.minScrollExtent) {
@@ -86,22 +107,29 @@ class _SyncedHeaderScaffoldState extends State<SyncedHeaderScaffold> {
       if (pulling != _isPulling && !_headerLocked) {
         setState(() => _isPulling = pulling);
       }
+
+      if (!_lockedThisGesture && _pullDistance >= _lockThreshold) {
+        _lockedThisGesture = true;
+        _lockOpen();
+        // Only refresh again if this pull hasn't already triggered one at
+        // the lower sync threshold on its way past it.
+        if (!_syncedThisGesture) {
+          _syncedThisGesture = true;
+          _startRefresh();
+        }
+      } else if (!_syncedThisGesture && _pullDistance >= _syncThreshold) {
+        _syncedThisGesture = true;
+        _startRefresh();
+      }
     } else if (_isPulling) {
       setState(() => _isPulling = false);
     }
 
     if (notification is ScrollEndNotification) {
-      final pulled = _pullDistance;
       _pullDistance = 0;
+      _syncedThisGesture = false;
+      _lockedThisGesture = false;
       if (_isPulling) setState(() => _isPulling = false);
-
-      final refresh = widget.onRefresh ?? widget.provider.refreshData;
-      if (pulled >= _lockThreshold) {
-        _lockOpen();
-        refresh();
-      } else if (pulled >= _syncThreshold) {
-        refresh();
-      }
     }
     return false;
   }
@@ -124,52 +152,94 @@ class _SyncedHeaderScaffoldState extends State<SyncedHeaderScaffold> {
       leadingWidget = _SyncStatusChip(provider: provider, onTap: _lockOpen);
     }
 
+    final topInset = MediaQuery.of(context).padding.top;
+
     return ColoredBox(
       color: colorScheme.surfaceContainer,
-      child: NotificationListener<ScrollNotification>(
-        onNotification: _handleScrollNotification,
-        child: CustomScrollView(
-          controller: widget.scrollController,
-          // Plain BouncingScrollPhysics only bounces/overscrolls reliably
-          // once content already fills the viewport — with too little
-          // content (e.g. a single item) the pull gesture can fail to
-          // register at all. AlwaysScrollableScrollPhysics keeps the pull
-          // (and therefore the sync header) working regardless of content
-          // length.
-          physics: const AlwaysScrollableScrollPhysics(
-            parent: BouncingScrollPhysics(),
+      child: Stack(
+        alignment: Alignment.topCenter,
+        children: [
+          NotificationListener<ScrollNotification>(
+            onNotification: _handleScrollNotification,
+            child: CustomScrollView(
+              controller: widget.scrollController,
+              // Plain BouncingScrollPhysics only bounces/overscrolls reliably
+              // once content already fills the viewport — with too little
+              // content (e.g. a single item) the pull gesture can fail to
+              // register at all. AlwaysScrollableScrollPhysics keeps the pull
+              // (and therefore the sync header) working regardless of content
+              // length.
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics(),
+              ),
+              slivers: [
+                SliverAppBar(
+                  pinned: true,
+                  stretch: true,
+                  expandedHeight: _headerLocked ? 190 : kToolbarHeight,
+                  collapsedHeight: kToolbarHeight,
+                  backgroundColor: colorScheme.surfaceContainer,
+                  surfaceTintColor: colorScheme.surfaceContainer,
+                  scrolledUnderElevation: 0,
+                  automaticallyImplyLeading: false,
+                  leadingWidth: _headerLocked ? 56 : 160,
+                  leading: leadingWidget,
+                  actions: widget.actions,
+                  flexibleSpace: FlexibleSpaceBar(
+                    background: _SyncedStretchPanel(
+                      provider: provider,
+                      forceVisible: _headerLocked,
+                    ),
+                  ),
+                ),
+                DecoratedSliver(
+                  decoration: BoxDecoration(
+                    color: colorScheme.surface,
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(28),
+                    ),
+                  ),
+                  sliver: SliverMainAxisGroup(slivers: widget.contentSlivers),
+                ),
+              ],
+            ),
           ),
-          slivers: [
-            SliverAppBar(
-              pinned: true,
-              stretch: true,
-              expandedHeight: _headerLocked ? 190 : kToolbarHeight,
-              collapsedHeight: kToolbarHeight,
-              backgroundColor: colorScheme.surfaceContainer,
-              surfaceTintColor: colorScheme.surfaceContainer,
-              scrolledUnderElevation: 0,
-              automaticallyImplyLeading: false,
-              leadingWidth: _headerLocked ? 56 : 160,
-              leading: leadingWidget,
-              actions: widget.actions,
-              flexibleSpace: FlexibleSpaceBar(
-                background: _SyncedStretchPanel(
-                  provider: provider,
-                  forceVisible: _headerLocked,
+          // The classic Material pull-to-refresh "bubble" — a floating
+          // circular spinner, shown while a pull-triggered sync is in
+          // flight. Positioned just under the status bar/toolbar area so it
+          // reads as attached to the header rather than floating over
+          // content.
+          Positioned(
+            top: topInset + 8,
+            child: IgnorePointer(
+              child: AnimatedScale(
+                scale: _isRefreshing ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutBack,
+                child: AnimatedOpacity(
+                  opacity: _isRefreshing ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 150),
+                  child: Material(
+                    elevation: 4,
+                    shape: const CircleBorder(),
+                    color: colorScheme.surfaceContainerHigh,
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
-            DecoratedSliver(
-              decoration: BoxDecoration(
-                color: colorScheme.surface,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(28),
-                ),
-              ),
-              sliver: SliverMainAxisGroup(slivers: widget.contentSlivers),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

@@ -9,6 +9,7 @@ import '../providers/server_provider.dart';
 /// which action a given swipe direction maps to and drives the gesture.
 class SwipeableItem extends StatelessWidget {
   final Key itemKey;
+  final String itemName;
   final ServerProvider provider;
   final Future<void> Function() onFavorite;
   final Future<void> Function() onShare;
@@ -18,6 +19,7 @@ class SwipeableItem extends StatelessWidget {
   const SwipeableItem({
     super.key,
     required this.itemKey,
+    required this.itemName,
     required this.provider,
     required this.onFavorite,
     required this.onShare,
@@ -95,6 +97,33 @@ class SwipeableItem extends StatelessWidget {
             await onShare();
             return false;
           case SwipeAction.delete:
+            final confirmed = await showDialog<bool>(
+              context: context,
+              builder: (dialogContext) {
+                return AlertDialog(
+                  title: const Text('Delete Item'),
+                  content: Text(
+                    'Delete "$itemName" from the server? This cannot be undone.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(dialogContext, false),
+                      child: const Text('Cancel'),
+                    ),
+                    FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Theme.of(
+                          dialogContext,
+                        ).colorScheme.error,
+                      ),
+                      onPressed: () => Navigator.pop(dialogContext, true),
+                      child: const Text('Delete'),
+                    ),
+                  ],
+                );
+              },
+            );
+            if (confirmed != true) return false;
             HapticFeedback.mediumImpact();
             return true; // Actual delete happens in onDismissed.
           case SwipeAction.none:

@@ -12,8 +12,8 @@ import 'package:video_player/video_player.dart';
 import '../models/nextcloud_item.dart';
 import '../providers/server_provider.dart';
 import '../widgets/details/details_sheet.dart';
-import '../widgets/details/peek_details_sheet.dart';
 import '../widgets/frosted_glass_container.dart';
+import '../widgets/seek_bar_painter.dart';
 import '../widgets/share_sheet.dart';
 
 const _textPreviewExtensions = {
@@ -337,45 +337,26 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                 ),
               ),
             ),
-            // The action bar floats just above the details peek below it,
-            // rather than overlapping it.
-            Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.sizeOf(context).height * 0.16,
-              ),
-              child: Align(
-                alignment: Alignment.bottomCenter,
-                child: AnimatedSlide(
-                  duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeInOutCubic,
-                  offset: _controlsVisible ? Offset.zero : const Offset(0, 1.4),
-                  child: IgnorePointer(
-                    ignoring: !_controlsVisible,
-                    child: _MediaActionBar(
-                      isFavorite: _currentItem.isFavorite,
-                      isBusy: _isBusy,
-                      opacity: provider.bottomBarOpacity,
-                      blurSigma: provider.bottomBarBlur,
-                      onShare: () => ShareSheet.show(context, _currentItem),
-                      onFavorite: () => _toggleFavorite(provider),
-                      onDelete: () => _deleteCurrentItem(provider),
-                      onOpenExternally: () => _openExternally(provider),
-                      onDownload: () => _downloadToDevice(provider),
-                      onDetails: () => DetailsSheet.show(context, _currentItem),
-                    ),
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: AnimatedSlide(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeInOutCubic,
+                offset: _controlsVisible ? Offset.zero : const Offset(0, 1.4),
+                child: IgnorePointer(
+                  ignoring: !_controlsVisible,
+                  child: _MediaActionBar(
+                    isFavorite: _currentItem.isFavorite,
+                    isBusy: _isBusy,
+                    opacity: provider.bottomBarOpacity,
+                    blurSigma: provider.bottomBarBlur,
+                    onShare: () => ShareSheet.show(context, _currentItem),
+                    onFavorite: () => _toggleFavorite(provider),
+                    onDelete: () => _deleteCurrentItem(provider),
+                    onOpenExternally: () => _openExternally(provider),
+                    onDownload: () => _downloadToDevice(provider),
+                    onDetails: () => DetailsSheet.show(context, _currentItem),
                   ),
-                ),
-              ),
-            ),
-            // Always-present peek of the current item's details, draggable
-            // up into the full Info/Versions/Activity sheet.
-            Positioned.fill(
-              child: IgnorePointer(
-                ignoring: !_controlsVisible,
-                child: AnimatedOpacity(
-                  opacity: _controlsVisible ? 1 : 0,
-                  duration: const Duration(milliseconds: 200),
-                  child: PeekDetailsSheet(item: _currentItem),
                 ),
               ),
             ),
@@ -903,8 +884,10 @@ class _WavySeekBarState extends State<_WavySeekBar>
   @override
   Widget build(BuildContext context) {
     final value = widget.controller.value;
-    final isWavy = widget.style == MediaProgressBarStyle.wavy;
-    final isPlaying = isWavy && value.isPlaying && _dragRatio == null;
+    final animatesWave =
+        widget.style == MediaProgressBarStyle.wavy ||
+        widget.style == MediaProgressBarStyle.squiggly;
+    final isPlaying = animatesWave && value.isPlaying && _dragRatio == null;
     if (isPlaying && !_waveController.isAnimating) {
       _waveController.repeat();
     } else if (!isPlaying && _waveController.isAnimating) {
@@ -944,7 +927,8 @@ class _WavySeekBarState extends State<_WavySeekBar>
               builder: (context, _) {
                 return CustomPaint(
                   size: Size(constraints.maxWidth, 28),
-                  painter: _WavySeekPainter(
+                  painter: SeekBarPainter(
+                    style: widget.style,
                     progress: ratio,
                     phase: _waveController.value * 2 * math.pi,
                     animate: isPlaying,
@@ -958,76 +942,6 @@ class _WavySeekBarState extends State<_WavySeekBar>
         },
       ),
     );
-  }
-}
-
-class _WavySeekPainter extends CustomPainter {
-  final double progress;
-  final double phase;
-  final bool animate;
-  final Color playedColor;
-  final Color trackColor;
-
-  static const _waveLength = 16.0;
-  static const _amplitude = 3.5;
-
-  _WavySeekPainter({
-    required this.progress,
-    required this.phase,
-    required this.animate,
-    required this.playedColor,
-    required this.trackColor,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final midY = size.height / 2;
-    final playedX = size.width * progress;
-
-    final trackPaint = Paint()
-      ..color = trackColor
-      ..strokeWidth = 3
-      ..strokeCap = StrokeCap.round;
-    if (playedX < size.width) {
-      canvas.drawLine(
-        Offset(playedX, midY),
-        Offset(size.width, midY),
-        trackPaint,
-      );
-    }
-
-    final playedPaint = Paint()
-      ..color = playedColor
-      ..strokeWidth = 3
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-
-    final path = Path();
-    var started = false;
-    for (var x = 0.0; x <= playedX; x += 2) {
-      final y = animate
-          ? midY +
-                _amplitude * math.sin((x / _waveLength) * 2 * math.pi + phase)
-          : midY;
-      if (!started) {
-        path.moveTo(x, y);
-        started = true;
-      } else {
-        path.lineTo(x, y);
-      }
-    }
-    canvas.drawPath(path, playedPaint);
-
-    canvas.drawCircle(Offset(playedX, midY), 6, Paint()..color = playedColor);
-  }
-
-  @override
-  bool shouldRepaint(covariant _WavySeekPainter oldDelegate) {
-    return oldDelegate.progress != progress ||
-        oldDelegate.phase != phase ||
-        oldDelegate.animate != animate ||
-        oldDelegate.playedColor != playedColor ||
-        oldDelegate.trackColor != trackColor;
   }
 }
 

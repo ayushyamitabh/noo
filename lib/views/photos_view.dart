@@ -180,25 +180,51 @@ class _PhotosViewState extends State<PhotosView> {
       if (_isSelecting)
         SliverAppBar(
           pinned: true,
+          // This isn't the scroll view's topmost sliver - the Synced
+          // header above it already reserves status-bar space, so leaving
+          // this at its default `primary: true` double-reserves it too,
+          // showing up as a big empty gap above the toolbar.
+          primary: false,
           automaticallyImplyLeading: false,
-          leading: IconButton(
-            icon: const Icon(Icons.close_rounded),
-            tooltip: 'Cancel selection',
-            onPressed: _clearSelection,
+          toolbarHeight: 48,
+          // No leading/actions slots - everything lives in `title`, wrapped
+          // in the exact same 16px horizontal Padding as the controls row
+          // above it, so the two rows' content lines up edge-to-edge
+          // instead of relying on SliverAppBar's own leadingWidth/actions
+          // insets (which don't match the controls row's).
+          titleSpacing: 0,
+          title: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.close_rounded, size: 20),
+                  tooltip: 'Cancel selection',
+                  onPressed: _clearSelection,
+                  visualDensity: VisualDensity.compact,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${selectedItems.length} selected',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                for (final action in _buildSelectionActions(
+                  provider,
+                  selectedItems,
+                ))
+                  IconButton(
+                    icon: Icon(action.icon, size: 20, color: action.color),
+                    tooltip: action.label,
+                    onPressed: action.onTap,
+                    visualDensity: VisualDensity.compact,
+                  ),
+              ],
+            ),
           ),
-          title: Text('${selectedItems.length} selected'),
-          actions: [
-            for (final action in _buildSelectionActions(
-              provider,
-              selectedItems,
-            ))
-              IconButton(
-                icon: Icon(action.icon, color: action.color),
-                tooltip: action.label,
-                onPressed: action.onTap,
-              ),
-            const SizedBox(width: 4),
-          ],
         ),
       const SliverToBoxAdapter(child: SizedBox(height: 8)),
 
