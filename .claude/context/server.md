@@ -121,9 +121,53 @@ account is *currently* live (see `architecture.md`).
   its credentials and refetch everything. This is a full teardown-and-reload
   every time — there is deliberately no simultaneous multi-account state or
   background sync; only one account's content is ever live.
-- `logout()` is just `removeAccount(activeAccountId)` — with other accounts
-  saved it falls back to one of them instead of ending the session;
-  `isLoggedIn` only ever becomes `false` when the *last* account is removed.
+- **`logout()` vs `removeAccount()`** are deliberately different actions,
+  both funneling into a shared `_deactivateSession()` helper for the
+  teardown/pointer-clearing part:
+  - `logout()` ends the active session but keeps the account itself fully
+    intact (password, prefs, its entry in `accounts` all untouched) —
+    always lands on `LoginView` even if other accounts are saved (it does
+    *not* fall back to one of them the way `removeAccount` does). This
+    exists so `LoginView` can offer a "Continue as ..." one-tap resume list
+    (`_SavedAccountsSection` in `login_view.dart`) with no Login Flow v2
+    needed - logging out must never be mistaken for forgetting an account.
+  - `removeAccount(id)` deletes everything for that account (secure-storage
+    password, namespaced prefs, its `accounts` entry) and, only if it was
+    the active one, falls back to another saved account or - if none
+    remain - calls the same `_deactivateSession()`. This is the only path
+    (besides `logout()`) that can set `isLoggedIn` false, and the only one
+    that's actually destructive/irreversible - UI call sites (`AccountView`)
+    gate it behind a confirmation dialog; `logout()` doesn't need one.
+  - Any UI code that calls either and might have ended the session should
+    check `!provider.isLoggedIn` afterward and `Navigator.popUntil((r) =>
+    r.isFirst)` if so — otherwise a screen pushed on top (Settings) is left
+    stranded over a root route that's silently swapped to `LoginView`
+    underneath it. Don't pop unconditionally — removing a *non-active*
+    account, or one that fell back to another, keeps the user logged in and
+    Settings should just stay open.
+
+## App lock (login lock)
+
+An orthogonal, app-wide security layer on top of the Nextcloud
+login/session above — not account credentials, just a gate on *using* the
+app. [`AppLockService`](../../lib/services/app_lock_service.dart) wraps
+`local_auth`; this app never implements its own PIN entry/storage/hashing —
+`authenticate()` always delegates to whatever the OS already has configured
+(biometric, or device PIN/pattern/password as fallback, via
+`biometricOnly: false`). Never build a custom in-app PIN screen for this —
+extend `AppLockService`/the `ServerProvider` gates described in
+`architecture.md` instead.
+
+**Android native requirements** (both already done, keep them if you touch
+these files): `MainActivity.kt` must extend `FlutterFragmentActivity`, not
+the default `FlutterActivity` — `local_auth`'s Android implementation hosts
+its prompt via a Fragment and silently fails to build/crashes without it.
+`AndroidManifest.xml` needs `<uses-permission
+android:name="android.permission.USE_BIOMETRIC"/>` (also declared by the
+plugin's own manifest via merge, but kept explicit here too).
+`android/app/build.gradle.kts` floors `minSdk` at 24 (`local_auth_android`'s
+own requirement) via `maxOf(24, flutter.minSdkVersion)` rather than trusting
+Flutter's own default to already be high enough.
 
 `isRestoringSession` still gates the splash screen until the above resolves
 — see `standards.md` for why widget tests must mock both storage channels

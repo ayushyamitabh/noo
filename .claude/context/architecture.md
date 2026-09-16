@@ -10,12 +10,12 @@ lib/
                        # SavedAccount, AppTab, ...)
   providers/           # ServerProvider — the single app-wide ChangeNotifier
   services/             # network/IO: NextcloudService, LoginFlowService,
-                         # AccountStore
+                         # AccountStore, AppLockService
   theme/                 # AppTheme (Material 3 ThemeData)
   views/                  # one screen each (FilesView, PhotosView, TrashView,
                            # SharesView, RecentView, ActivityView, SearchView,
                            # AccountView, LoginView, FileViewerScreen,
-                           # ShareUploadView)
+                           # ShareUploadView, LockScreenView)
   widgets/                 # reusable pieces shared across views
     details/                # the file-details bottom sheet and its tabs
 ```
@@ -54,9 +54,23 @@ There is exactly one `ChangeNotifier`: [`ServerProvider`](../../lib/providers/se
 - UI settings that persist across launches — split into **global** (theme
   mode, seed color, dynamic-color toggle, bottom-bar opacity/blur,
   tap-tab-to-scroll-top, seek bar style, tab order/visibility/default, swipe
-  actions) and **per-account** (grid/list view, favorites-only, show-hidden,
-  storage scope, Photos sort, Files' per-folder sort map, cache policy) — see
-  `server.md` for exactly which is which and why
+  actions, login lock — see below) and **per-account** (grid/list view,
+  favorites-only, show-hidden, storage scope, Photos sort, Files'
+  per-folder sort map, cache policy) — see `server.md` for exactly which is
+  which and why
+- **Login lock** (`loginLockEnabled`/`lockAccountSwitching`/
+  `lockHiddenFiles`/`needsUnlock`): an app-wide PIN/biometric gate via
+  `AppLockService` (a thin wrapper over `local_auth` — this app never
+  stores or hashes a PIN itself, it delegates entirely to whatever
+  credential the OS already has configured). `needsUnlock` is
+  `loginLockEnabled && !_isUnlocked`, where `_isUnlocked` is transient
+  (never persisted) and reset to `false` on every backgrounding
+  (`didChangeAppLifecycleState`, `AppLifecycleState.paused`) so the lock has
+  real value rather than only firing once per cold start. `switchAccount`/
+  `cycleToNextAccount`/`cycleToPreviousAccount` and *enabling* (not
+  disabling) `showHiddenFiles`/`showHiddenPhotos` each call the shared
+  `_passGate` helper, which no-ops unless both `loginLockEnabled` and the
+  relevant per-feature toggle are on.
 
 New **global** state belongs on `ServerProvider` as a private field + getter
 + a method that mutates it, calls `notifyListeners()`, and persists via
@@ -70,7 +84,7 @@ split.
 
 There's no separate repository/data layer: views call `ServerProvider`
 methods directly, which call `NextcloudService`/`LoginFlowService`/
-`AccountStore`.
+`AccountStore`/`AppLockService`.
 
 ## Navigation / screen flow
 
@@ -85,6 +99,7 @@ state, no named routes:
   Flow v2) — `isLoggedIn` is only ever false here or after the last saved
   account is removed; switching between multiple saved accounts never
   routes through this screen (see `server.md`)
+- else `provider.needsUnlock` → `LockScreenView` (login lock — see above)
 - else `MainShellView`
 
 `MainShellView` is a bottom-nav `IndexedStack` over up to 6 tabs — Files,

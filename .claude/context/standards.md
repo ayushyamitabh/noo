@@ -66,6 +66,32 @@ class/method already makes obvious.
   of failing fast. See `test/widget_test.dart` for the reference setup.
 - Run with `flutter test`.
 
+## Local install/deploy
+
+Never use `flutter install` to push a build to a test device — it always
+does a full **uninstall-then-install** (prints "Uninstalling old
+version..."), and Android deletes all app data (SharedPreferences, secure
+storage — every saved account/preference) on uninstall. This wipes the app
+clean on every single deploy, which looks like an account/settings-loss bug
+but is actually just the install method.
+
+Instead, build then install with `adb`'s replace flag, which updates the
+APK in place and preserves app data:
+
+```bash
+flutter build apk --release
+adb install -r build/app/outputs/flutter-apk/app-release.apk
+```
+
+This only preserves data if the new APK's signature matches what's already
+on the device — a local build's release variant currently reuses the debug
+signing config (`android/app/build.gradle.kts`), so consecutive local
+builds share a key and `adb install -r` works cleanly. Installing a build
+signed with a different key (e.g. a CI-signed release APK from the Gitea
+release pipeline) over a differently-signed local build forces Android to
+require a full uninstall regardless of the install method used — there's no
+way around that from the tooling side.
+
 ## Dependencies
 
 Networking is deliberately split: `package:http` for simple JSON/XML
