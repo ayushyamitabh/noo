@@ -1,9 +1,12 @@
 name: Build APK
 
+# Deliberately not "on every push" - only when a release-candidate tag
+# (RC1, RC2, RC2026.1, ...) is pushed. Tag the commit you want built:
+#   git tag RC1 && git push origin RC1
 on:
   push:
-    branches:
-      - main
+    tags:
+      - "RC*"
 
 jobs:
   build:
@@ -43,12 +46,19 @@ jobs:
       - name: Build release APK
         run: flutter build apk --release
 
-      - name: Upload APK
-        # v4 speaks a newer artifact protocol (Azure Blob-style) that
-        # Gitea Actions doesn't implement yet - it errors as
-        # "GHESNotSupportedError" even though this isn't GHES. v3 uses the
-        # older protocol Gitea does support.
-        uses: actions/upload-artifact@v3
+      - name: Rename APK to Noo-<version>.apk
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
+          mkdir -p release
+          cp build/app/outputs/flutter-apk/app-release.apk "release/Noo-${VERSION}.apk"
+          echo "APK_PATH=release/Noo-${VERSION}.apk" >> "$GITHUB_ENV"
+
+      - name: Publish Gitea release with APK attached
+        # Gitea-native release action (not GitHub's) - authenticates and
+        # talks to this same Gitea instance automatically via the
+        # `github.token`/`github.server_url` context Gitea Actions
+        # provides for compatibility. Release is named/tagged after
+        # whatever tag triggered this run (e.g. "RC1").
+        uses: akkuman/gitea-release-action@v1
         with:
-          name: app-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          files: ${{ env.APK_PATH }}
