@@ -25,6 +25,14 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # Google removed the legacy standalone "tools" package from the
+          # SDK repository (~Sep 2026); the action's own default packages
+          # list ("tools platform-tools") now makes its internal sdkmanager
+          # call fail for everyone. platform-tools is all this step needs
+          # to install itself - flutter build fetches whatever
+          # platform/build-tools versions it actually needs on its own.
+          packages: "platform-tools"
 
       - name: Install dependencies
         run: flutter pub get
