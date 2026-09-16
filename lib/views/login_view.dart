@@ -145,17 +145,12 @@ class _ServerForm extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Center(
-            child: Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: colorScheme.primaryContainer,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.cloud_outlined,
-                size: 44,
-                color: colorScheme.onPrimaryContainer,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Image.asset(
+                'assets/icon/app_icon.png',
+                width: 80,
+                height: 80,
               ),
             ),
           ),
