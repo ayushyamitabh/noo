@@ -1,0 +1,336 @@
+import 'package:flutter/material.dart';
+import '../models/nextcloud_item.dart';
+import '../providers/server_provider.dart';
+
+String formatBytes(int bytes) {
+  if (bytes <= 0) return '0 B';
+  if (bytes < 1024) return '$bytes B';
+  if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+  if (bytes < 1024 * 1024 * 1024) {
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+  return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+}
+
+/// "5.16 GB / 100 GB" — or "5.16 GB / ∞" when the server reports no quota
+/// limit (or doesn't report one at all).
+String formatQuota(NextcloudUserQuota quota) {
+  final total = quota.totalBytes > 0 ? formatBytes(quota.totalBytes) : '∞';
+  return '${formatBytes(quota.usedBytes)} / $total';
+}
+
+/// Shared "pull down to see sync status" scroll header used by both the
+/// Files and Photos tabs: a compact sync-status chip that expands into a
+/// storage-quota panel (Google Photos' "pull to see backup status"
+/// pattern), sitting on a gray backdrop above a white rounded-top card that
+/// holds the tab's own content slivers.
+class SyncedHeaderScaffold extends StatefulWidget {
+  final ScrollController scrollController;
+  final ServerProvider provider;
+
+  /// Trailing icons in the app bar (e.g. an upload button, the avatar).
+  final List<Widget> actions;
+
+  /// The tab's own content, already built as slivers (a filter/sort row,
+  /// breadcrumbs, the grid/list, empty/loading/error states, etc.). Wrapped
+  /// internally in the white rounded-top card.
+  final List<Widget> contentSlivers;
+
+  /// What a deliberate pull-to-sync should trigger. Defaults to
+  /// [ServerProvider.refreshData] (the current folder's listing); pass e.g.
+  /// `provider.fetchTrash` for a tab backed by different data.
+  final Future<void> Function()? onRefresh;
+
+  const SyncedHeaderScaffold({
+    super.key,
+    required this.scrollController,
+    required this.provider,
+    required this.actions,
+    required this.contentSlivers,
+    this.onRefresh,
+  });
+
+  @override
+  State<SyncedHeaderScaffold> createState() => _SyncedHeaderScaffoldState();
+}
+
+class _SyncedHeaderScaffoldState extends State<SyncedHeaderScaffold> {
+  static const double _lockThreshold = 100;
+  static const double _syncThreshold = 14;
+  static const double _pullingEpsilon = 8;
+
+  bool _headerLocked = false;
+  bool _isPulling = false;
+  double _pullDistance = 0;
+
+  void _revealPanel() {
+    if (widget.scrollController.hasClients) {
+      widget.scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
+  void _lockOpen() {
+    if (!_headerLocked) setState(() => _headerLocked = true);
+    _revealPanel();
+  }
+
+  bool _handleScrollNotification(ScrollNotification notification) {
+    final metrics = notification.metrics;
+    if (metrics.pixels < metrics.minScrollExtent) {
+      _pullDistance = metrics.minScrollExtent - metrics.pixels;
+      final pulling = _pullDistance > _pullingEpsilon;
+      if (pulling != _isPulling && !_headerLocked) {
+        setState(() => _isPulling = pulling);
+      }
+    } else if (_isPulling) {
+      setState(() => _isPulling = false);
+    }
+
+    if (notification is ScrollEndNotification) {
+      final pulled = _pullDistance;
+      _pullDistance = 0;
+      if (_isPulling) setState(() => _isPulling = false);
+
+      final refresh = widget.onRefresh ?? widget.provider.refreshData;
+      if (pulled >= _lockThreshold) {
+        _lockOpen();
+        refresh();
+      } else if (pulled >= _syncThreshold) {
+        refresh();
+      }
+    }
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final provider = widget.provider;
+
+    final Widget leadingWidget;
+    if (_headerLocked) {
+      leadingWidget = IconButton(
+        icon: const Icon(Icons.keyboard_arrow_up_rounded),
+        tooltip: 'Collapse',
+        onPressed: () => setState(() => _headerLocked = false),
+      );
+    } else if (_isPulling) {
+      leadingWidget = const SizedBox.shrink();
+    } else {
+      leadingWidget = _SyncStatusChip(provider: provider, onTap: _lockOpen);
+    }
+
+    return ColoredBox(
+      color: colorScheme.surfaceContainer,
+      child: NotificationListener<ScrollNotification>(
+        onNotification: _handleScrollNotification,
+        child: CustomScrollView(
+          controller: widget.scrollController,
+          // Plain BouncingScrollPhysics only bounces/overscrolls reliably
+          // once content already fills the viewport — with too little
+          // content (e.g. a single item) the pull gesture can fail to
+          // register at all. AlwaysScrollableScrollPhysics keeps the pull
+          // (and therefore the sync header) working regardless of content
+          // length.
+          physics: const AlwaysScrollableScrollPhysics(
+            parent: BouncingScrollPhysics(),
+          ),
+          slivers: [
+            SliverAppBar(
+              pinned: true,
+              stretch: true,
+              expandedHeight: _headerLocked ? 190 : kToolbarHeight,
+              collapsedHeight: kToolbarHeight,
+              backgroundColor: colorScheme.surfaceContainer,
+              surfaceTintColor: colorScheme.surfaceContainer,
+              scrolledUnderElevation: 0,
+              automaticallyImplyLeading: false,
+              leadingWidth: _headerLocked ? 56 : 160,
+              leading: leadingWidget,
+              actions: widget.actions,
+              flexibleSpace: FlexibleSpaceBar(
+                background: _SyncedStretchPanel(
+                  provider: provider,
+                  forceVisible: _headerLocked,
+                ),
+              ),
+            ),
+            DecoratedSliver(
+              decoration: BoxDecoration(
+                color: colorScheme.surface,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(28),
+                ),
+              ),
+              sliver: SliverMainAxisGroup(slivers: widget.contentSlivers),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A compact, always-visible summary of the same status shown by
+/// [_SyncedStretchPanel] — tapping it is a discoverable shortcut for pulling
+/// the header down to expand that same "Synced" view.
+class _SyncStatusChip extends StatelessWidget {
+  final ServerProvider provider;
+  final VoidCallback onTap;
+
+  const _SyncStatusChip({required this.provider, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final quota = provider.quota;
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 12),
+      child: Material(
+        color: Colors.transparent,
+        shape: const StadiumBorder(),
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const StadiumBorder(),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  provider.isLoading
+                      ? Icons.cloud_sync_rounded
+                      : Icons.cloud_done_outlined,
+                  color: colorScheme.primary,
+                  size: 18,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  quota != null ? formatQuota(quota) : 'Sync',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Revealed by pulling the header down past its normal height (Google
+/// Photos' "pull to see backup status" pattern). Shows storage quota;
+/// [_SyncedHeaderScaffoldState] decides via [forceVisible] whether it stays
+/// locked open.
+class _SyncedStretchPanel extends StatelessWidget {
+  final ServerProvider provider;
+
+  /// Keeps the panel fully shown even without live overscroll — used once
+  /// the header has "locked" open after a deliberate pull-down.
+  final bool forceVisible;
+
+  const _SyncedStretchPanel({
+    required this.provider,
+    this.forceVisible = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final topInset = MediaQuery.of(context).padding.top;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final settings = context
+            .dependOnInheritedWidgetOfExactType<FlexibleSpaceBarSettings>();
+        final maxExtent = settings?.maxExtent ?? constraints.maxHeight;
+        final stretch = (constraints.maxHeight - maxExtent).clamp(0.0, 80.0);
+        // Reaches 1.0 (title fully hidden) at 50px of pull — comfortably
+        // before the 100px lock threshold.
+        final progress = forceVisible ? 1.0 : (stretch / 50).clamp(0.0, 1.0);
+        final quota = provider.quota;
+
+        return Stack(
+          children: [
+            if (progress > 0)
+              // Anchored below the toolbar row (icons), never the bottom,
+              // so it can never share space with the title above.
+              Positioned(
+                left: 20,
+                right: 20,
+                top: topInset + kToolbarHeight + 4,
+                child: Opacity(
+                  opacity: progress,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        provider.isLoading ? 'Syncing…' : 'Synced',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      if (provider.serverUrl.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          provider.serverUrl.replaceFirst(
+                            RegExp(r'^https?://'),
+                            '',
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHigh,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.cloud_done_outlined,
+                              color: colorScheme.primary,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                quota != null
+                                    ? formatQuota(quota)
+                                    : 'Pull to refresh',
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}

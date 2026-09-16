@@ -18,6 +18,11 @@ class NextcloudItem {
   final int? imageHeight;
   final String? mountType;
 
+  /// Trash-bin items only: the folder path the item was deleted from, and
+  /// when it was deleted. Null for items fetched from a regular directory.
+  final String? originalLocation;
+  final DateTime? deletedAt;
+
   const NextcloudItem({
     required this.id,
     required this.name,
@@ -33,6 +38,8 @@ class NextcloudItem {
     this.imageWidth,
     this.imageHeight,
     this.mountType,
+    this.originalLocation,
+    this.deletedAt,
   }) : dateCreated = dateCreated ?? lastModified;
 
   bool get isFolder => type == NextcloudItemType.folder;
@@ -55,6 +62,8 @@ class NextcloudItem {
     int? imageWidth,
     int? imageHeight,
     String? mountType,
+    String? originalLocation,
+    DateTime? deletedAt,
   }) {
     return NextcloudItem(
       id: id ?? this.id,
@@ -71,6 +80,8 @@ class NextcloudItem {
       imageWidth: imageWidth ?? this.imageWidth,
       imageHeight: imageHeight ?? this.imageHeight,
       mountType: mountType ?? this.mountType,
+      originalLocation: originalLocation ?? this.originalLocation,
+      deletedAt: deletedAt ?? this.deletedAt,
     );
   }
 

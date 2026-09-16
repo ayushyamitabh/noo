@@ -24,14 +24,6 @@ class _SearchViewState extends State<SearchView> {
   bool _hasSearched = false;
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _focusNode.requestFocus(),
-    );
-  }
-
-  @override
   void dispose() {
     _debounce?.cancel();
     _controller.dispose();
@@ -104,30 +96,37 @@ class _SearchViewState extends State<SearchView> {
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 0,
-        title: TextField(
-          controller: _controller,
-          focusNode: _focusNode,
-          onChanged: _onChanged,
-          decoration: const InputDecoration(
-            hintText: 'Search your files...',
-            border: InputBorder.none,
-          ),
-          style: theme.textTheme.titleMedium,
-        ),
-        actions: [
-          if (_controller.text.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.close_rounded),
-              onPressed: () {
-                _controller.clear();
-                _onChanged('');
-              },
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+              child: SearchBar(
+                controller: _controller,
+                focusNode: _focusNode,
+                autoFocus: true,
+                hintText: 'Search your files...',
+                onChanged: _onChanged,
+                leading: IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  onPressed: () => Navigator.pop(context),
+                ),
+                trailing: [
+                  if (_controller.text.isNotEmpty)
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded),
+                      onPressed: () {
+                        _controller.clear();
+                        _onChanged('');
+                      },
+                    ),
+                ],
+              ),
             ),
-        ],
+            Expanded(child: _buildBody(context, colorScheme, theme)),
+          ],
+        ),
       ),
-      body: _buildBody(context, colorScheme, theme),
     );
   }
 

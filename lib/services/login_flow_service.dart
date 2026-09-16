@@ -32,7 +32,7 @@ class LoginFlowResult {
 /// back a scoped app password.
 /// https://docs.nextcloud.com/server/latest/developer_manual/client_apis/LoginFlow/index.html#login-flow-v2
 class LoginFlowService {
-  static const _userAgent = 'Nextcloud-Flutter-Client/1.0';
+  static const _userAgent = 'Noo/1.0';
 
   static String normalizeServerUrl(String input) {
     var url = input.trim();

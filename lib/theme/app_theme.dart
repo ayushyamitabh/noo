@@ -4,6 +4,24 @@ import 'package:google_fonts/google_fonts.dart';
 class AppTheme {
   static const Color defaultNextcloudBlue = Color(0xFF0082C9);
 
+  // Flutter's Material 3 default (ZoomPageTransitionsBuilder) doesn't
+  // implement Android's predictive-back gesture at all. Opting into
+  // PredictiveBackPageTransitionsBuilder here (Android only) is required —
+  // on top of the manifest's enableOnBackInvokedCallback flag — for the
+  // system back gesture to animate/scale the current screen away instead of
+  // popping instantly.
+  static const _pageTransitionsTheme = PageTransitionsTheme(
+    builders: {TargetPlatform.android: PredictiveBackPageTransitionsBuilder()},
+  );
+
+  // Flutter's Slider defaults to the older "2023" Material 3 look even with
+  // useMaterial3 on; year2023: false opts into the current redesign (gapped
+  // track, taller handle-shaped thumb) app-wide instead of per-slider. The
+  // flag itself is deprecated in favor of `false` becoming the new default
+  // in a future Flutter release - safe to keep using until then.
+  // ignore: deprecated_member_use
+  static const _sliderTheme = SliderThemeData(year2023: false);
+
   static const List<Color> seedColors = [
     Color(0xFF0082C9), // Nextcloud Blue
     Color(0xFF009688), // Ocean Teal
@@ -29,6 +47,8 @@ class AppTheme {
       brightness: Brightness.light,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: colorScheme.surface,
+      pageTransitionsTheme: _pageTransitionsTheme,
+      sliderTheme: _sliderTheme,
       textTheme: GoogleFonts.interTextTheme(ThemeData.light().textTheme)
           .copyWith(
             headlineMedium: GoogleFonts.inter(
@@ -64,19 +84,37 @@ class AppTheme {
     Color seedColor, {
     ColorScheme? dynamicScheme,
     bool useDynamicColor = true,
+    bool amoled = false,
   }) {
-    final colorScheme = (useDynamicColor && dynamicScheme != null)
+    var colorScheme = (useDynamicColor && dynamicScheme != null)
         ? dynamicScheme
         : ColorScheme.fromSeed(
             seedColor: seedColor,
             brightness: Brightness.dark,
           );
 
+    if (amoled) {
+      // True OLED black across every surface tone Material 3 hands out -
+      // not just the scaffold - so cards, app bars and sheets all go black
+      // too instead of the usual dark-grey elevation tints.
+      colorScheme = colorScheme.copyWith(
+        surface: Colors.black,
+        surfaceContainerLowest: Colors.black,
+        surfaceContainerLow: Colors.black,
+        surfaceContainer: Colors.black,
+        surfaceContainerHigh: Colors.black,
+        surfaceContainerHighest: Colors.black,
+        surfaceDim: Colors.black,
+      );
+    }
+
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: colorScheme.surface,
+      pageTransitionsTheme: _pageTransitionsTheme,
+      sliderTheme: _sliderTheme,
       textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme)
           .copyWith(
             headlineMedium: GoogleFonts.inter(

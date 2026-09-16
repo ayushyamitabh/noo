@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/app_tab.dart';
 import '../providers/server_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/frosted_glass_container.dart';
@@ -22,7 +23,7 @@ class AccountView extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Account & Storage'),
+        title: const Text('Settings'),
         actions: [
           IconButton(
             onPressed: () => _showLogoutConfirmation(context, provider),
@@ -316,6 +317,16 @@ class AccountView extends StatelessWidget {
                             provider.setThemeMode(set.first),
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('AMOLED Black'),
+                      subtitle: const Text(
+                        'Use pure black backgrounds in dark mode',
+                      ),
+                      value: provider.amoledDark,
+                      onChanged: provider.setAmoledDark,
+                    ),
                   ],
                 ),
               ),
@@ -331,6 +342,78 @@ class AccountView extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             const _BottomBarAppearanceCard(),
+            const SizedBox(height: 24),
+
+            // Bottom Nav Tabs
+            Text(
+              'Bottom Bar Tabs',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Drag to reorder, tap the star to set the default, toggle to show or hide',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 10),
+            const _TabSettingsCard(),
+            const SizedBox(height: 24),
+
+            // Swipe Actions
+            Text(
+              'Files Swipe Actions',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Choose what swiping a file left or right does in list view',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 10),
+            const _SwipeActionsCard(),
+            const SizedBox(height: 24),
+
+            // Media Player
+            Text(
+              'Media Player',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Choose the seek bar style used when playing videos',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 10),
+            const _MediaPlayerCard(),
+            const SizedBox(height: 24),
+
+            // Files Cache
+            Text(
+              'Files Cache',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Reuse a folder\'s listing instead of refetching it on every visit',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 10),
+            const _CacheSettingsCard(),
           ],
         ),
       ),
@@ -571,6 +654,328 @@ class _AccentSwatch extends StatelessWidget {
           border: isSelected ? Border.all(color: borderColor, width: 3) : null,
         ),
         child: child,
+      ),
+    );
+  }
+}
+
+class _SwipeActionsCard extends StatelessWidget {
+  const _SwipeActionsCard();
+
+  String _label(SwipeAction action) {
+    switch (action) {
+      case SwipeAction.none:
+        return 'None';
+      case SwipeAction.favorite:
+        return 'Favorite';
+      case SwipeAction.delete:
+        return 'Delete';
+      case SwipeAction.share:
+        return 'Share';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final provider = context.watch<ServerProvider>();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        child: Column(
+          children: [
+            _buildRow(
+              context,
+              theme,
+              label: 'Swipe right',
+              value: provider.swipeRightAction,
+              onChanged: provider.setSwipeRightAction,
+            ),
+            const Divider(height: 1),
+            _buildRow(
+              context,
+              theme,
+              label: 'Swipe left',
+              value: provider.swipeLeftAction,
+              onChanged: provider.setSwipeLeftAction,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRow(
+    BuildContext context,
+    ThemeData theme, {
+    required String label,
+    required SwipeAction value,
+    required ValueChanged<SwipeAction> onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          DropdownButton<SwipeAction>(
+            value: value,
+            underline: const SizedBox.shrink(),
+            borderRadius: BorderRadius.circular(12),
+            items: SwipeAction.values
+                .map((a) => DropdownMenuItem(value: a, child: Text(_label(a))))
+                .toList(),
+            onChanged: (a) {
+              if (a != null) onChanged(a);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MediaPlayerCard extends StatelessWidget {
+  const _MediaPlayerCard();
+
+  String _label(MediaProgressBarStyle style) {
+    switch (style) {
+      case MediaProgressBarStyle.wavy:
+        return 'Wavy';
+      case MediaProgressBarStyle.classic:
+        return 'Classic';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final provider = context.watch<ServerProvider>();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Seek bar style',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            DropdownButton<MediaProgressBarStyle>(
+              value: provider.mediaProgressBarStyle,
+              underline: const SizedBox.shrink(),
+              borderRadius: BorderRadius.circular(12),
+              items: MediaProgressBarStyle.values
+                  .map(
+                    (s) => DropdownMenuItem(value: s, child: Text(_label(s))),
+                  )
+                  .toList(),
+              onChanged: (s) {
+                if (s != null) provider.setMediaProgressBarStyle(s);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CacheSettingsCard extends StatelessWidget {
+  const _CacheSettingsCard();
+
+  String _label(CachePolicy policy) {
+    switch (policy) {
+      case CachePolicy.never:
+        return 'Never cache';
+      case CachePolicy.interval:
+        return 'Refresh periodically';
+      case CachePolicy.manual:
+        return 'Refresh manually only';
+    }
+  }
+
+  String _description(CachePolicy policy) {
+    switch (policy) {
+      case CachePolicy.never:
+        return 'Every visit to a folder fetches it fresh (current behavior)';
+      case CachePolicy.interval:
+        return 'Reuse a folder\'s listing until it\'s a few minutes old';
+      case CachePolicy.manual:
+        return 'Reuse a folder\'s listing until you pull to refresh';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final provider = context.watch<ServerProvider>();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          children: [
+            RadioGroup<CachePolicy>(
+              groupValue: provider.cachePolicy,
+              onChanged: (value) {
+                if (value != null) provider.setCachePolicy(value);
+              },
+              child: Column(
+                children: [
+                  for (final policy in CachePolicy.values)
+                    RadioListTile<CachePolicy>(
+                      value: policy,
+                      title: Text(_label(policy)),
+                      subtitle: Text(_description(policy)),
+                    ),
+                ],
+              ),
+            ),
+            if (provider.cachePolicy == CachePolicy.interval)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Divider(),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Refresh interval',
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                        Text(
+                          '${provider.cacheIntervalMinutes} min',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Slider(
+                      value: provider.cacheIntervalMinutes.toDouble(),
+                      min: 1,
+                      max: 60,
+                      divisions: 59,
+                      label: '${provider.cacheIntervalMinutes} min',
+                      onChanged: (value) =>
+                          provider.setCacheIntervalMinutes(value.round()),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TabSettingsCard extends StatelessWidget {
+  const _TabSettingsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<ServerProvider>();
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: ReorderableListView(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        onReorderItem: (oldIndex, newIndex) {
+          final order = List<AppTab>.from(provider.tabOrder);
+          final tab = order.removeAt(oldIndex);
+          order.insert(newIndex, tab);
+          provider.setTabOrder(order);
+        },
+        children: [
+          for (final tab in provider.tabOrder)
+            _TabConfigRow(
+              key: ValueKey(tab),
+              tab: tab,
+              isVisible: !provider.hiddenTabs.contains(tab),
+              isDefault: provider.defaultTab == tab,
+              onVisibilityChanged: (value) {
+                final error = provider.setTabHidden(tab, !value);
+                if (error != null && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(error),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              },
+              onSetDefault: () => provider.setDefaultTab(tab),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TabConfigRow extends StatelessWidget {
+  final AppTab tab;
+  final bool isVisible;
+  final bool isDefault;
+  final ValueChanged<bool> onVisibilityChanged;
+  final VoidCallback onSetDefault;
+
+  const _TabConfigRow({
+    required super.key,
+    required this.tab,
+    required this.isVisible,
+    required this.isDefault,
+    required this.onVisibilityChanged,
+    required this.onSetDefault,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return ListTile(
+      leading: Icon(
+        tab.icon,
+        color: isVisible
+            ? colorScheme.onSurfaceVariant
+            : colorScheme.outlineVariant,
+      ),
+      title: Text(
+        tab.label,
+        style: TextStyle(color: isVisible ? null : colorScheme.outline),
+      ),
+      subtitle: isDefault ? const Text('Default tab') : null,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: Icon(
+              isDefault ? Icons.star_rounded : Icons.star_outline_rounded,
+              color: isDefault
+                  ? Colors.amber.shade700
+                  : colorScheme.outlineVariant,
+            ),
+            tooltip: 'Set as default tab',
+            onPressed: isVisible && !isDefault ? onSetDefault : null,
+          ),
+          Switch(value: isVisible, onChanged: onVisibilityChanged),
+        ],
       ),
     );
   }

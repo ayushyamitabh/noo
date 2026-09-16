@@ -1,13 +1,12 @@
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'models/app_tab.dart';
 import 'providers/server_provider.dart';
 import 'theme/app_theme.dart';
-import 'views/activity_view.dart';
-import 'views/files_view.dart';
 import 'views/login_view.dart';
-import 'views/photos_view.dart';
 import 'views/search_view.dart';
+import 'widgets/app_tab_view_builder.dart';
 import 'widgets/floating_bottom_bar.dart';
 
 void main() {
@@ -41,6 +40,7 @@ class NextcloudApp extends StatelessWidget {
             provider.seedColor,
             dynamicScheme: darkDynamic,
             useDynamicColor: provider.useDynamicColor,
+            amoled: provider.amoledDark,
           ),
           themeMode: provider.themeMode,
           home: provider.isRestoringSession
@@ -83,19 +83,24 @@ class MainShellView extends StatefulWidget {
 }
 
 class _MainShellViewState extends State<MainShellView> {
-  int _currentIndex = 0;
-
-  late final List<ScrollController> _scrollControllers;
+  late AppTab _currentTab;
+  late final Map<AppTab, ScrollController> _scrollControllers;
 
   @override
   void initState() {
     super.initState();
-    _scrollControllers = List.generate(3, (index) => ScrollController());
+    _scrollControllers = {
+      for (final tab in AppTab.values) tab: ScrollController(),
+    };
+    // Preferences load asynchronously, but in practice finish well before
+    // session restore (which also has to hit the network) does, so by the
+    // time this shell mounts `defaultTab` already reflects the saved value.
+    _currentTab = context.read<ServerProvider>().defaultTab;
   }
 
   @override
   void dispose() {
-    for (var c in _scrollControllers) {
+    for (final c in _scrollControllers.values) {
       c.dispose();
     }
     super.dispose();
@@ -104,31 +109,39 @@ class _MainShellViewState extends State<MainShellView> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ServerProvider>();
-    final navItems = const [
-      FloatingNavItem(label: 'Files', icon: Icons.folder_rounded),
-      FloatingNavItem(label: 'Photos', icon: Icons.photo_library_rounded),
-      FloatingNavItem(label: 'Activity', icon: Icons.history_rounded),
-    ];
+    final visible = provider.visibleTabs;
+    final selectedTab = visible.contains(_currentTab)
+        ? _currentTab
+        : (visible.isNotEmpty ? visible.first : AppTab.files);
+    final selectedIndex = visible
+        .indexOf(selectedTab)
+        .clamp(0, visible.isEmpty ? 0 : visible.length - 1);
+
+    final navItems = visible
+        .map((tab) => FloatingNavItem(label: tab.label, icon: tab.icon))
+        .toList();
 
     return Scaffold(
       body: Stack(
         children: [
           IndexedStack(
-            index: _currentIndex,
-            children: [
-              FilesView(scrollController: _scrollControllers[0]),
-              PhotosView(scrollController: _scrollControllers[1]),
-              ActivityView(scrollController: _scrollControllers[2]),
-            ],
+            index: selectedIndex,
+            children: visible
+                .map((tab) => buildAppTabView(tab, _scrollControllers[tab]!))
+                .toList(),
           ),
+          // Each tab now renders its own sticky selection toolbar inline
+          // (right under its sort/filter row) instead of this shell
+          // swapping in a shared floating bar - the bottom nav stays put
+          // and usable regardless of selection state.
           FloatingBottomNavBar(
-            selectedIndex: _currentIndex,
+            selectedIndex: selectedIndex,
             items: navItems,
             opacity: provider.bottomBarOpacity,
             blurSigma: provider.bottomBarBlur,
             onDestinationSelected: (index) {
               setState(() {
-                _currentIndex = index;
+                _currentTab = visible[index];
               });
             },
             onSearchTap: () {

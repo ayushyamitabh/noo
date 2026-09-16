@@ -1,26 +1,28 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../models/nextcloud_item.dart';
+import '../models/selection_action.dart';
 import '../providers/server_provider.dart';
+import '../widgets/breadcrumbs.dart';
+import '../widgets/details/details_sheet.dart';
+import '../widgets/more_tabs_button.dart';
 import '../widgets/profile_avatar_button.dart';
 import '../widgets/segmented_icon_toggle.dart';
+import '../widgets/selectable_thumbnail.dart';
+import '../widgets/share_sheet.dart';
+import '../widgets/sort_menu_button.dart';
+import '../widgets/sticky_header_delegate.dart';
+import '../widgets/swipeable_item.dart';
+import '../widgets/synced_header_scaffold.dart';
 import 'file_viewer_screen.dart';
-
-String _formatBytes(int bytes) {
-  if (bytes <= 0) return '0 B';
-  if (bytes < 1024) return '$bytes B';
-  if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-  if (bytes < 1024 * 1024 * 1024) {
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-  }
-  return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
-}
 
 class FilesView extends StatefulWidget {
   final ScrollController scrollController;
@@ -161,202 +163,111 @@ class _ItemThumbnail extends StatelessWidget {
   }
 }
 
-String _sortFieldLabel(FileSortField field) {
-  switch (field) {
-    case FileSortField.name:
-      return 'Name';
-    case FileSortField.dateCreated:
-      return 'Date created';
-    case FileSortField.dateModified:
-      return 'Date modified';
-    case FileSortField.size:
-      return 'Size';
-  }
-}
-
-/// Dropdown trigger (replacing the old "My files" label) for choosing which
-/// field the file list is sorted by.
-class _SortMenuButton extends StatelessWidget {
-  final FileSortField field;
-  final ValueChanged<FileSortField> onChanged;
-
-  const _SortMenuButton({required this.field, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return PopupMenuButton<FileSortField>(
-      initialValue: field,
-      onSelected: onChanged,
-      offset: const Offset(0, 36),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      itemBuilder: (context) => FileSortField.values.map((f) {
-        return PopupMenuItem(
-          value: f,
-          child: Row(
-            children: [
-              SizedBox(
-                width: 20,
-                child: f == field
-                    ? Icon(
-                        Icons.check_rounded,
-                        size: 18,
-                        color: colorScheme.primary,
-                      )
-                    : null,
-              ),
-              const SizedBox(width: 8),
-              Text(_sortFieldLabel(f)),
-            ],
-          ),
-        );
-      }).toList(),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              _sortFieldLabel(field),
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: colorScheme.onSurfaceVariant,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            Icon(
-              Icons.arrow_drop_down_rounded,
-              color: colorScheme.onSurfaceVariant,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Tappable "Home / Folder / Sub-folder" trail shown under the sort/filter
-/// row whenever the user has navigated below the root.
-class _Breadcrumbs extends StatelessWidget {
-  final List<String> pathStack;
-  final ValueChanged<int> onTap;
-
-  const _Breadcrumbs({required this.pathStack, required this.onTap});
-
-  String _labelFor(int index) {
-    if (index == 0) return 'Home';
-    final segments = pathStack[index]
-        .split('/')
-        .where((s) => s.isNotEmpty)
-        .toList();
-    return segments.isEmpty ? 'Home' : segments.last;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final lastIndex = pathStack.length - 1;
-
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          for (var i = 0; i < pathStack.length; i++) ...[
-            if (i > 0)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: Icon(
-                  Icons.chevron_right_rounded,
-                  size: 16,
-                  color: colorScheme.outlineVariant,
-                ),
-              ),
-            if (i == lastIndex)
-              Text(
-                _labelFor(i),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: colorScheme.onSurface,
-                ),
-              )
-            else
-              InkWell(
-                borderRadius: BorderRadius.circular(8),
-                onTap: () => onTap(i),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 2,
-                    vertical: 2,
-                  ),
-                  child: Text(
-                    _labelFor(i),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: colorScheme.primary,
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
 class _FilesViewState extends State<FilesView> {
-  static const double _lockThreshold = 100;
-  static const double _syncThreshold = 14;
-  static const double _pullingEpsilon = 8;
+  final Set<String> _selectedIds = {};
 
-  bool _headerLocked = false;
-  bool _isPulling = false;
-  double _pullDistance = 0;
+  bool get _isSelecting => _selectedIds.isNotEmpty;
 
-  void _revealPanel() {
-    if (widget.scrollController.hasClients) {
-      widget.scrollController.animateTo(
-        0,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOutCubic,
+  void _toggleSelection(NextcloudItem item) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      if (!_selectedIds.remove(item.id)) _selectedIds.add(item.id);
+    });
+  }
+
+  void _clearSelection() {
+    setState(_selectedIds.clear);
+  }
+
+  /// The bulk actions shown in the sticky selection toolbar for the
+  /// currently-selected items.
+  List<SelectionAction> _buildSelectionActions(
+    ServerProvider provider,
+    List<NextcloudItem> selected,
+  ) {
+    return [
+      SelectionAction(
+        icon: selected.every((i) => i.isFavorite)
+            ? Icons.favorite_rounded
+            : Icons.favorite_border_rounded,
+        label: selected.every((i) => i.isFavorite)
+            ? 'Remove from favorites'
+            : 'Favorite',
+        color: Colors.red.shade400,
+        onTap: () => _favoriteSelected(provider, selected),
+      ),
+      SelectionAction(
+        icon: Icons.share_rounded,
+        label: 'Share',
+        onTap: () => selected.length == 1
+            ? ShareSheet.show(context, selected.single)
+            : _shareSelected(context, provider, selected),
+      ),
+      SelectionAction(
+        icon: Icons.download_rounded,
+        label: 'Download',
+        onTap: () => _downloadSelected(context, provider, selected),
+      ),
+      SelectionAction(
+        icon: Icons.delete_outline_rounded,
+        label: 'Delete',
+        color: Theme.of(context).colorScheme.error,
+        onTap: () => _confirmDeleteSelected(context, provider, selected),
+      ),
+      if (selected.length == 1)
+        SelectionAction(
+          icon: Icons.info_outline_rounded,
+          label: 'Details',
+          onTap: () => DetailsSheet.show(context, selected.single),
+        ),
+    ];
+  }
+
+  Future<void> _shareSelected(
+    BuildContext context,
+    ServerProvider provider,
+    List<NextcloudItem> items,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Creating share link(s)…'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+    final lines = <String>[];
+    for (final item in items) {
+      final link = await provider.createShareLink(item);
+      if (link != null) {
+        lines.add(items.length > 1 ? '${item.name}: $link' : link);
+      }
+    }
+
+    if (!mounted) return;
+    messenger.hideCurrentSnackBar();
+    _clearSelection();
+    if (lines.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Could not create share link(s)'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    try {
+      await SharePlus.instance.share(ShareParams(text: lines.join('\n')));
+    } catch (_) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Could not open the share sheet'),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     }
-  }
-
-  void _lockOpen() {
-    if (!_headerLocked) setState(() => _headerLocked = true);
-    _revealPanel();
-  }
-
-  bool _handleScrollNotification(ScrollNotification notification) {
-    final metrics = notification.metrics;
-    if (metrics.pixels < metrics.minScrollExtent) {
-      _pullDistance = metrics.minScrollExtent - metrics.pixels;
-      final pulling = _pullDistance > _pullingEpsilon;
-      if (pulling != _isPulling && !_headerLocked) {
-        setState(() => _isPulling = pulling);
-      }
-    } else if (_isPulling) {
-      setState(() => _isPulling = false);
-    }
-
-    if (notification is ScrollEndNotification) {
-      final pulled = _pullDistance;
-      _pullDistance = 0;
-      if (_isPulling) setState(() => _isPulling = false);
-
-      if (pulled >= _lockThreshold) {
-        _lockOpen();
-        context.read<ServerProvider>().refreshData();
-      } else if (pulled >= _syncThreshold) {
-        context.read<ServerProvider>().refreshData();
-      }
-    }
-    return false;
   }
 
   @override
@@ -365,97 +276,140 @@ class _FilesViewState extends State<FilesView> {
     final colorScheme = theme.colorScheme;
     final provider = context.watch<ServerProvider>();
 
-    final Widget leadingWidget;
-    if (_headerLocked) {
-      leadingWidget = IconButton(
-        icon: const Icon(Icons.keyboard_arrow_up_rounded),
-        tooltip: 'Collapse',
-        onPressed: () => setState(() => _headerLocked = false),
-      );
-    } else if (_isPulling) {
-      leadingWidget = const SizedBox.shrink();
-    } else {
-      leadingWidget = _SyncStatusChip(provider: provider, onTap: _lockOpen);
-    }
+    final hasBreadcrumbs = provider.pathStack.length > 1;
+    final selectedItems = provider.items
+        .where((i) => _selectedIds.contains(i.id))
+        .toList();
 
-    final List<Widget> contentSlivers = [
-      SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  IconButton(
-                    icon: Icon(
-                      provider.sortAscending
-                          ? Icons.arrow_upward_rounded
-                          : Icons.arrow_downward_rounded,
-                      size: 20,
+    final controlsRow = Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            height: 44,
+            child: Row(
+              children: [
+                IconButton(
+                  icon: Icon(
+                    provider.sortAscending
+                        ? Icons.arrow_upward_rounded
+                        : Icons.arrow_downward_rounded,
+                    size: 20,
+                  ),
+                  visualDensity: VisualDensity.compact,
+                  tooltip: provider.sortAscending ? 'Ascending' : 'Descending',
+                  onPressed: provider.toggleSortOrder,
+                ),
+                Expanded(
+                  child: SortMenuButton(
+                    field: provider.sortField,
+                    onChanged: provider.setSortField,
+                  ),
+                ),
+                ToggleIconButton(
+                  icon: provider.showFavoritesOnlyFiles
+                      ? Icons.favorite_rounded
+                      : Icons.favorite_border_rounded,
+                  isSelected: provider.showFavoritesOnlyFiles,
+                  onTap: provider.toggleFavoritesFilterFiles,
+                  tooltip: 'Favorites only',
+                ),
+                const SizedBox(width: 4),
+                ToggleIconButton(
+                  icon: provider.showHiddenFiles
+                      ? Icons.visibility_rounded
+                      : Icons.visibility_off_rounded,
+                  isSelected: provider.showHiddenFiles,
+                  onTap: provider.toggleShowHiddenFiles,
+                  tooltip: 'Show hidden files',
+                ),
+                const SizedBox(width: 4),
+                SegmentedIconGroup(
+                  children: [
+                    ToggleIconButton(
+                      icon: Symbols.circles_rounded,
+                      isSelected: provider.storageScope == StorageScope.cloud,
+                      onTap: () => provider.setStorageScope(StorageScope.cloud),
+                      tooltip: 'Cloud storage',
                     ),
-                    visualDensity: VisualDensity.compact,
-                    tooltip: provider.sortAscending
-                        ? 'Ascending'
-                        : 'Descending',
-                    onPressed: provider.toggleSortOrder,
-                  ),
-                  Expanded(
-                    child: _SortMenuButton(
-                      field: provider.sortField,
-                      onChanged: provider.setSortField,
+                    ToggleIconButton(
+                      icon: Symbols.hard_drive_rounded,
+                      isSelected:
+                          provider.storageScope == StorageScope.external,
+                      onTap: () =>
+                          provider.setStorageScope(StorageScope.external),
+                      tooltip: 'External storage',
                     ),
-                  ),
-                  ToggleIconButton(
-                    icon: Icons.star_rounded,
-                    isSelected: provider.showFavoritesOnly,
-                    onTap: provider.toggleFavoritesFilter,
-                    tooltip: 'Favorites only',
-                  ),
-                  const SizedBox(width: 4),
-                  ToggleIconButton(
-                    icon: Symbols.hard_drive_rounded,
-                    isSelected: provider.showExternalOnly,
-                    onTap: provider.toggleExternalStorageFilter,
-                    tooltip: 'External storage only',
-                  ),
-                  const SizedBox(width: 4),
-                  ToggleIconButton(
-                    icon: Icons.visibility_rounded,
-                    isSelected: provider.showHidden,
-                    onTap: provider.toggleShowHidden,
-                    tooltip: 'Show hidden files',
-                  ),
-                  const SizedBox(width: 8),
-                  SegmentedIconGroup(
-                    children: [
-                      ToggleIconButton(
-                        icon: Icons.view_list_rounded,
-                        isSelected: !provider.isGridView,
-                        onTap: () => provider.setGridView(false),
-                        tooltip: 'List view',
-                      ),
-                      ToggleIconButton(
-                        icon: Icons.grid_view_rounded,
-                        isSelected: provider.isGridView,
-                        onTap: () => provider.setGridView(true),
-                        tooltip: 'Grid view',
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              if (provider.pathStack.length > 1) ...[
-                const SizedBox(height: 10),
-                _Breadcrumbs(
-                  pathStack: provider.pathStack,
-                  onTap: (index) => provider.navigateToPathIndex(index),
+                  ],
+                ),
+                const SizedBox(width: 8),
+                SegmentedIconGroup(
+                  children: [
+                    ToggleIconButton(
+                      icon: Icons.view_list_rounded,
+                      isSelected: !provider.isGridView,
+                      onTap: () => provider.setGridView(false),
+                      tooltip: 'List view',
+                    ),
+                    ToggleIconButton(
+                      icon: Icons.grid_view_rounded,
+                      isSelected: provider.isGridView,
+                      onTap: () => provider.setGridView(true),
+                      tooltip: 'Grid view',
+                    ),
+                  ],
                 ),
               ],
-            ],
+            ),
           ),
+          if (hasBreadcrumbs) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 32,
+              child: Breadcrumbs(
+                pathStack: provider.pathStack,
+                onTap: (index) => provider.navigateToPathIndex(index),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+
+    final List<Widget> contentSlivers = [
+      // Sticky while browsing; once selecting, the toolbar below takes over
+      // the pinned slot and this is free to scroll away.
+      SliverPersistentHeader(
+        pinned: !_isSelecting,
+        delegate: StickyHeaderDelegate(
+          height: hasBreadcrumbs ? 114 : 72,
+          child: controlsRow,
         ),
       ),
+      if (_isSelecting)
+        SliverAppBar(
+          pinned: true,
+          automaticallyImplyLeading: false,
+          leading: IconButton(
+            icon: const Icon(Icons.close_rounded),
+            tooltip: 'Cancel selection',
+            onPressed: _clearSelection,
+          ),
+          title: Text('${selectedItems.length} selected'),
+          actions: [
+            for (final action in _buildSelectionActions(
+              provider,
+              selectedItems,
+            ))
+              IconButton(
+                icon: Icon(action.icon, color: action.color),
+                tooltip: action.label,
+                onPressed: action.onTap,
+              ),
+            const SizedBox(width: 4),
+          ],
+        ),
 
       // Files List / Grid
       if (provider.isLoading)
@@ -567,56 +521,130 @@ class _FilesViewState extends State<FilesView> {
     ];
 
     return PopScope(
-      canPop: provider.pathStack.length <= 1,
+      canPop: !_isSelecting && provider.pathStack.length <= 1,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) provider.navigateUp();
+        if (didPop) return;
+        if (_isSelecting) {
+          _clearSelection();
+        } else {
+          provider.navigateUp();
+        }
       },
-      child: ColoredBox(
-        color: colorScheme.surfaceContainer,
-        child: NotificationListener<ScrollNotification>(
-          onNotification: _handleScrollNotification,
-          child: CustomScrollView(
-            controller: widget.scrollController,
-            physics: const BouncingScrollPhysics(),
-            slivers: [
-              SliverAppBar(
-                pinned: true,
-                stretch: true,
-                expandedHeight: _headerLocked ? 190 : kToolbarHeight,
-                collapsedHeight: kToolbarHeight,
-                backgroundColor: colorScheme.surfaceContainer,
-                surfaceTintColor: colorScheme.surfaceContainer,
-                scrolledUnderElevation: 0,
-                automaticallyImplyLeading: false,
-                leadingWidth: _headerLocked ? 56 : 160,
-                leading: leadingWidget,
-                actions: [
-                  IconButton(
-                    icon: const Icon(Icons.add_rounded),
-                    tooltip: 'New',
-                    onPressed: () => _showCreateMenu(context, provider),
-                  ),
-                  const ProfileAvatarButton(),
-                ],
-                flexibleSpace: FlexibleSpaceBar(
-                  background: _FilesStretchPanel(
-                    provider: provider,
-                    forceVisible: _headerLocked,
-                  ),
-                ),
-              ),
-              DecoratedSliver(
-                decoration: BoxDecoration(
-                  color: colorScheme.surface,
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(28),
-                  ),
-                ),
-                sliver: SliverMainAxisGroup(slivers: contentSlivers),
-              ),
-            ],
+      child: SyncedHeaderScaffold(
+        scrollController: widget.scrollController,
+        provider: provider,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add_rounded),
+            tooltip: 'New',
+            onPressed: () => _showCreateMenu(context, provider),
           ),
-        ),
+          const MoreTabsButton(),
+          const ProfileAvatarButton(),
+        ],
+        contentSlivers: contentSlivers,
+      ),
+    );
+  }
+
+  Future<void> _favoriteSelected(
+    ServerProvider provider,
+    List<NextcloudItem> items,
+  ) async {
+    final allFavorited = items.every((i) => i.isFavorite);
+    for (final item in items) {
+      if (item.isFavorite == allFavorited) {
+        await provider.toggleItemFavorite(item);
+      }
+    }
+    _clearSelection();
+  }
+
+  Future<void> _downloadSelected(
+    BuildContext context,
+    ServerProvider provider,
+    List<NextcloudItem> items,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Downloading ${items.length} item(s)...'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+    var succeeded = 0;
+    for (final item in items) {
+      if (item.isFolder) continue;
+      try {
+        final tempDir = await getTemporaryDirectory();
+        final tempPath = p.join(tempDir.path, item.name);
+        await provider.service!.downloadToFile(item.path, tempPath);
+        final ext = p.extension(item.name).replaceFirst('.', '');
+        final baseName = p.basenameWithoutExtension(item.name);
+        await FileSaver.instance.saveFile(
+          name: baseName,
+          filePath: tempPath,
+          ext: ext,
+        );
+        succeeded++;
+      } catch (_) {
+        // Reported in the summary snackbar below.
+      }
+    }
+
+    _clearSelection();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Downloaded $succeeded of ${items.length} item(s)'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _confirmDeleteSelected(
+    BuildContext context,
+    ServerProvider provider,
+    List<NextcloudItem> items,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Delete Items'),
+          content: Text(
+            'Delete ${items.length} item(s) from the server? This cannot be undone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(dialogContext).colorScheme.error,
+              ),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    var succeeded = 0;
+    for (final item in items) {
+      final success = await provider.deleteItem(item.path);
+      if (success) succeeded++;
+    }
+
+    _clearSelection();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Deleted $succeeded of ${items.length} item(s)'),
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
@@ -628,83 +656,102 @@ class _FilesViewState extends State<FilesView> {
   ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final isSelected = _selectedIds.contains(item.id);
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () {
-            if (item.isFolder) {
-              provider.navigateToFolder(item.path);
-            } else {
-              _openFile(context, item, provider);
-            }
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                _ItemThumbnail(
+    // No border radius here — the outer ClipRRect below is the only place
+    // that rounds this tile's corners. Rounding it here too would give the
+    // tile its own independent rounded edge, which becomes visible as a
+    // stray floating corner while it slides during a swipe.
+    final card = Material(
+      color: isSelected
+          ? colorScheme.primaryContainer.withValues(alpha: 0.5)
+          : colorScheme.surfaceContainerLow,
+      child: InkWell(
+        onTap: () {
+          if (_isSelecting) {
+            _toggleSelection(item);
+          } else if (item.isFolder) {
+            provider.navigateToFolder(item.path);
+          } else {
+            _openFile(context, item, provider);
+          }
+        },
+        onLongPress: () => _toggleSelection(item),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              SelectableThumbnail(
+                isSelected: isSelected,
+                size: 44,
+                checkmarkSize: 24,
+                child: _ItemThumbnail(
                   item: item,
                   provider: provider,
                   size: 44,
                   borderRadius: 12,
                   iconSize: 22,
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                        ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.name,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        item.isFolder
-                            ? 'Folder'
-                            : '${_formatBytes(item.size)} • ${DateFormat.yMMMd().format(item.lastModified)}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      item.isFolder
+                          ? 'Folder'
+                          : '${formatBytes(item.size)} • ${DateFormat.yMMMd().format(item.lastModified)}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                IconButton(
-                  icon: Icon(
-                    item.isFavorite
-                        ? Icons.star_rounded
-                        : Icons.star_outline_rounded,
-                    color: item.isFavorite
-                        ? Colors.amber.shade700
-                        : colorScheme.outlineVariant,
-                    size: 20,
-                  ),
-                  onPressed: () => provider.toggleItemFavorite(item),
-                ),
-                IconButton(
-                  icon: Icon(
-                    Icons.more_vert_rounded,
-                    color: colorScheme.onSurfaceVariant,
-                    size: 20,
-                  ),
-                  onPressed: () =>
-                      _showFileDetailsSheet(context, item, provider),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
+      ),
+    );
+
+    final content = _isSelecting
+        ? card
+        : SwipeableItem(
+            itemKey: ValueKey('file-${item.id}'),
+            provider: provider,
+            onFavorite: () => provider.toggleItemFavorite(item),
+            onShare: () => ShareSheet.show(context, item),
+            onDelete: () => _deleteViaSwipe(provider, item),
+            child: card,
+          );
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: ClipRRect(borderRadius: BorderRadius.circular(16), child: content),
+    );
+  }
+
+  Future<void> _deleteViaSwipe(
+    ServerProvider provider,
+    NextcloudItem item,
+  ) async {
+    final success = await provider.deleteItem(item.path);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          success ? 'Deleted ${item.name}' : 'Failed to delete ${item.name}',
+        ),
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
@@ -714,76 +761,164 @@ class _FilesViewState extends State<FilesView> {
     NextcloudItem item,
     ServerProvider provider,
   ) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final isSelected = _selectedIds.contains(item.id);
+    final isMedia =
+        (item.type == NextcloudItemType.image ||
+            item.type == NextcloudItemType.video) &&
+        item.previewUrl != null;
 
     return Material(
-      color: colorScheme.surfaceContainerLow,
+      color: Theme.of(context).colorScheme.surfaceContainerLow,
       borderRadius: BorderRadius.circular(20),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
         onTap: () {
-          if (item.isFolder) {
+          if (_isSelecting) {
+            _toggleSelection(item);
+          } else if (item.isFolder) {
             provider.navigateToFolder(item.path);
           } else {
             _openFile(context, item, provider);
           }
         },
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _ItemThumbnail(
-                    item: item,
-                    provider: provider,
-                    size: 40,
-                    borderRadius: 12,
-                    iconSize: 24,
-                  ),
-                  IconButton(
-                    icon: Icon(
-                      item.isFavorite
-                          ? Icons.star_rounded
-                          : Icons.star_outline_rounded,
-                      color: item.isFavorite
-                          ? Colors.amber.shade700
-                          : colorScheme.outlineVariant,
-                      size: 20,
-                    ),
-                    onPressed: () => provider.toggleItemFavorite(item),
-                  ),
-                ],
+        onLongPress: () => _toggleSelection(item),
+        child: SelectableThumbnail(
+          isSelected: isSelected,
+          checkmarkSize: 32,
+          child: isMedia
+              ? _buildMediaGridContent(context, item, provider)
+              : _buildPlainGridContent(context, item),
+        ),
+      ),
+    );
+  }
+
+  /// Grid content for images/videos: the actual preview fills the whole
+  /// card as a background, with the name/size legible over a bottom scrim
+  /// — matching a Google Photos-style grid instead of a small icon badge.
+  Widget _buildMediaGridContent(
+    BuildContext context,
+    NextcloudItem item,
+    ServerProvider provider,
+  ) {
+    final theme = Theme.of(context);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cachePixels =
+            (constraints.maxWidth * MediaQuery.of(context).devicePixelRatio)
+                .round();
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.network(
+              item.previewUrl!,
+              headers: provider.service?.authHeaders,
+              fit: BoxFit.cover,
+              cacheWidth: cachePixels,
+              cacheHeight: cachePixels,
+              filterQuality: FilterQuality.low,
+              gaplessPlayback: true,
+              errorBuilder: (ctx, err, stack) =>
+                  _buildPlainGridContent(context, item),
+            ),
+            if (item.type == NextcloudItemType.video)
+              const Center(
+                child: Icon(
+                  Icons.play_circle_fill_rounded,
+                  color: Colors.white,
+                  size: 36,
+                ),
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                    ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(10, 20, 10, 8),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.transparent, Colors.black87],
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    item.isFolder ? 'Folder' : _formatBytes(item.size),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                      fontSize: 11,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
                     ),
-                  ),
-                ],
+                    Text(
+                      formatBytes(item.size),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: Colors.white70,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Grid content for folders and non-previewable files: an icon badge
+  /// with name/size below, since there's no meaningful preview to show.
+  Widget _buildPlainGridContent(BuildContext context, NextcloudItem item) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final iconColor = _getIconColor(context, item.type);
+
+    return Padding(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(_getItemIcon(item.type), color: iconColor, size: 24),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                item.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                item.isFolder ? 'Folder' : formatBytes(item.size),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                  fontSize: 11,
+                ),
               ),
             ],
           ),
-        ),
+        ],
       ),
     );
   }
@@ -799,193 +934,12 @@ class _FilesViewState extends State<FilesView> {
     );
   }
 
-  Future<void> _downloadItem(
-    BuildContext context,
-    ServerProvider provider,
-    NextcloudItem item,
-  ) async {
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text('Downloading ${item.name}...'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-    try {
-      final tempDir = await getTemporaryDirectory();
-      final tempPath = p.join(tempDir.path, item.name);
-      await provider.service!.downloadToFile(item.path, tempPath);
-      final ext = p.extension(item.name).replaceFirst('.', '');
-      final baseName = p.basenameWithoutExtension(item.name);
-      await FileSaver.instance.saveFile(
-        name: baseName,
-        filePath: tempPath,
-        ext: ext,
-      );
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Saved ${item.name} to Downloads'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Download failed: $e'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
-  }
-
-  void _showFileDetailsSheet(
-    BuildContext context,
-    NextcloudItem item,
-    ServerProvider provider,
-  ) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: colorScheme.surfaceContainerHigh,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: colorScheme.outlineVariant,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: _getIconColor(
-                        context,
-                        item.type,
-                      ).withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Icon(
-                      _getItemIcon(item.type),
-                      color: _getIconColor(context, item.type),
-                      size: 28,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.name,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          item.path,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              const Divider(height: 1),
-              const SizedBox(height: 16),
-              if (!item.isFolder) ...[
-                ListTile(
-                  leading: const Icon(Icons.open_in_new_rounded),
-                  title: const Text('Open'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _openFile(context, item, provider);
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.download_rounded),
-                  title: const Text('Download'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _downloadItem(context, provider, item);
-                  },
-                ),
-              ],
-              ListTile(
-                leading: Icon(
-                  item.isFavorite
-                      ? Icons.star_rounded
-                      : Icons.star_outline_rounded,
-                  color: item.isFavorite ? Colors.amber.shade700 : null,
-                ),
-                title: Text(
-                  item.isFavorite
-                      ? 'Remove from Favorites'
-                      : 'Add to Favorites',
-                ),
-                onTap: () {
-                  provider.toggleItemFavorite(item);
-                  Navigator.pop(context);
-                },
-              ),
-              ListTile(
-                leading: Icon(
-                  Icons.delete_outline_rounded,
-                  color: colorScheme.error,
-                ),
-                title: Text(
-                  'Delete from Server',
-                  style: TextStyle(color: colorScheme.error),
-                ),
-                onTap: () async {
-                  Navigator.pop(context);
-                  final success = await provider.deleteItem(item.path);
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          success
-                              ? 'Deleted ${item.name}'
-                              : 'Failed to delete ${item.name}',
-                        ),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                  }
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   void _showCreateMenu(BuildContext context, ServerProvider provider) {
     final colorScheme = Theme.of(context).colorScheme;
     showModalBottomSheet(
       context: context,
       backgroundColor: colorScheme.surfaceContainerHigh,
+      showDragHandle: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
@@ -996,15 +950,6 @@ class _FilesViewState extends State<FilesView> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  width: 36,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: colorScheme.outlineVariant,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
                 ListTile(
                   leading: const Icon(Icons.upload_file_rounded),
                   title: const Text('Upload File'),
@@ -1130,149 +1075,5 @@ class _FilesViewState extends State<FilesView> {
         ),
       );
     }
-  }
-}
-
-/// A compact, always-visible summary of the same status shown by
-/// [_FilesStretchPanel] — tapping it is a discoverable shortcut for pulling
-/// the header down to expand that same "Synced" view.
-class _SyncStatusChip extends StatelessWidget {
-  final ServerProvider provider;
-  final VoidCallback onTap;
-
-  const _SyncStatusChip({required this.provider, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final quota = provider.quota;
-
-    return Padding(
-      padding: const EdgeInsets.only(left: 12),
-      child: Material(
-        color: Colors.transparent,
-        shape: const StadiumBorder(),
-        child: InkWell(
-          onTap: onTap,
-          customBorder: const StadiumBorder(),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  provider.isLoading
-                      ? Icons.cloud_sync_rounded
-                      : Icons.cloud_done_outlined,
-                  color: colorScheme.primary,
-                  size: 18,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  quota != null ? _formatBytes(quota.usedBytes) : 'Sync',
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Revealed by pulling the "Files" header down past its normal height
-/// (Google Photos' "pull to see backup status" pattern). Shows storage quota;
-/// [_FilesViewState] decides via [forceVisible] whether it stays locked open.
-class _FilesStretchPanel extends StatelessWidget {
-  final ServerProvider provider;
-
-  /// Keeps the panel fully shown even without live overscroll — used once
-  /// the header has "locked" open after a deliberate pull-down.
-  final bool forceVisible;
-
-  const _FilesStretchPanel({required this.provider, this.forceVisible = false});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final topInset = MediaQuery.of(context).padding.top;
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final settings = context
-            .dependOnInheritedWidgetOfExactType<FlexibleSpaceBarSettings>();
-        final maxExtent = settings?.maxExtent ?? constraints.maxHeight;
-        final stretch = (constraints.maxHeight - maxExtent).clamp(0.0, 80.0);
-        // Reaches 1.0 (title fully hidden) at 50px of pull — comfortably
-        // before the 100px stretchTriggerOffset that locks the header open.
-        final progress = forceVisible ? 1.0 : (stretch / 50).clamp(0.0, 1.0);
-        final quota = provider.quota;
-
-        return Stack(
-          children: [
-            if (progress > 0)
-              // Anchored below the toolbar row (icons), never the bottom,
-              // so it can never share space with the title above.
-              Positioned(
-                left: 20,
-                right: 20,
-                top: topInset + kToolbarHeight + 4,
-                child: Opacity(
-                  opacity: progress,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        provider.isLoading ? 'Syncing…' : 'Synced',
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          color: colorScheme.surfaceContainerHigh,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.cloud_done_outlined,
-                              color: colorScheme.primary,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                quota != null
-                                    ? (quota.totalBytes > 0
-                                          ? '${_formatBytes(quota.usedBytes)} of ${_formatBytes(quota.totalBytes)} used'
-                                          : '${_formatBytes(quota.usedBytes)} used')
-                                    : 'Pull to refresh',
-                                style: theme.textTheme.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-          ],
-        );
-      },
-    );
   }
 }

@@ -20,7 +20,7 @@ class ProfileAvatarButton extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: IconButton(
-        tooltip: 'Account',
+        tooltip: 'Settings',
         onPressed: () {
           Navigator.push(
             context,

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
 /// A single icon button that fills with a solid circle when active —
-/// the building block for Drive-style toggle controls.
+/// the building block for Drive-style toggle controls. Thin wrapper around
+/// the native Material 3 toggle `IconButton` (its `isSelected` constructor
+/// param, not a hand-rolled Material+InkWell) so every call site here gets
+/// the built-in selected/unselected treatment for free.
 class ToggleIconButton extends StatelessWidget {
   final IconData icon;
   final bool isSelected;
@@ -20,26 +23,26 @@ class ToggleIconButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    final button = Material(
-      color: isSelected ? colorScheme.primaryContainer : Colors.transparent,
-      shape: const CircleBorder(),
-      child: InkWell(
-        onTap: onTap,
-        customBorder: const CircleBorder(),
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Icon(
-            icon,
-            size: 20,
-            color: isSelected
-                ? colorScheme.onPrimaryContainer
-                : colorScheme.onSurfaceVariant,
-          ),
+    return IconButton(
+      isSelected: isSelected,
+      icon: Icon(icon, size: 20),
+      tooltip: tooltip,
+      onPressed: onTap,
+      visualDensity: VisualDensity.compact,
+      style: ButtonStyle(
+        shape: const WidgetStatePropertyAll(CircleBorder()),
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? colorScheme.onPrimaryContainer
+              : colorScheme.onSurfaceVariant,
+        ),
+        backgroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? colorScheme.primaryContainer
+              : Colors.transparent,
         ),
       ),
     );
-
-    return tooltip != null ? Tooltip(message: tooltip!, child: button) : button;
   }
 }
 

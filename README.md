@@ -1,4 +1,4 @@
-# nextcloud_client
+# Noo
 
 A new Flutter project.
 

@@ -1,4 +1,4 @@
-name: nextcloud_client
+name: noo
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -69,8 +69,9 @@ dev_dependencies:
 flutter_launcher_icons:
   android: true
   image_path: "assets/icon/app_icon.png"
-  adaptive_icon_background: "#3D5AD1"
+  adaptive_icon_background: "assets/icon/app_icon_background.png"
   adaptive_icon_foreground: "assets/icon/app_icon_foreground.png"
+  adaptive_icon_monochrome: "assets/icon/app_icon_monochrome.png"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

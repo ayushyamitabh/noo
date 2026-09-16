@@ -1,4 +1,4 @@
-package family.nasa.nextcloud_client
+package dev.ayushya.noo
 
 import io.flutter.embedding.android.FlutterActivity
 

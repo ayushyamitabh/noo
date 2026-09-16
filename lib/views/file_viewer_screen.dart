@@ -8,11 +8,13 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:pdfx/pdfx.dart';
 import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 import '../models/nextcloud_item.dart';
 import '../providers/server_provider.dart';
+import '../widgets/details/details_sheet.dart';
+import '../widgets/details/peek_details_sheet.dart';
 import '../widgets/frosted_glass_container.dart';
+import '../widgets/share_sheet.dart';
 
 const _textPreviewExtensions = {
   '.txt',
@@ -55,20 +57,44 @@ class FileViewerScreen extends StatefulWidget {
 
   /// Opens the viewer with no page transition — media should appear
   /// instantly, not fade/zoom in the way MaterialPageRoute normally would.
+  /// Going *back* still uses the theme's normal (predictive-back-capable)
+  /// transition, via [_InstantOpenPageRoute] below.
   static Route<void> route({
     required NextcloudItem item,
     List<NextcloudItem>? siblings,
   }) {
-    return PageRouteBuilder<void>(
-      pageBuilder: (context, animation, secondaryAnimation) =>
+    return _InstantOpenPageRoute<void>(
+      pageBuilder: (context) =>
           FileViewerScreen(item: item, siblings: siblings),
-      transitionDuration: Duration.zero,
-      reverseTransitionDuration: Duration.zero,
     );
   }
 
   @override
   State<FileViewerScreen> createState() => _FileViewerScreenState();
+}
+
+/// A [PageRoute] that opens instantly (zero-duration forward transition)
+/// but still delegates to the app's [PageTransitionsTheme] for the reverse
+/// transition — unlike a plain [PageRouteBuilder] with no transitionsBuilder,
+/// which never consults the theme and so can't participate in Android's
+/// predictive-back gesture at all.
+class _InstantOpenPageRoute<T> extends PageRoute<T>
+    with MaterialRouteTransitionMixin<T> {
+  _InstantOpenPageRoute({required this.pageBuilder, super.settings});
+
+  final WidgetBuilder pageBuilder;
+
+  @override
+  Widget buildContent(BuildContext context) => pageBuilder(context);
+
+  @override
+  bool get maintainState => true;
+
+  @override
+  Duration get transitionDuration => Duration.zero;
+
+  @override
+  Duration get reverseTransitionDuration => const Duration(milliseconds: 300);
 }
 
 class _FileViewerScreenState extends State<FileViewerScreen> {
@@ -184,23 +210,6 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Download failed: $e')));
-      }
-    } finally {
-      if (mounted) setState(() => _isBusy = false);
-    }
-  }
-
-  Future<void> _shareCurrentItem(ServerProvider provider) async {
-    final item = _currentItem;
-    setState(() => _isBusy = true);
-    try {
-      final path = await _downloadToTemp(provider, item);
-      await SharePlus.instance.share(ShareParams(files: [XFile(path)]));
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not share ${item.name}: $e')),
-        );
       }
     } finally {
       if (mounted) setState(() => _isBusy = false);
@@ -328,25 +337,45 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                 ),
               ),
             ),
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: AnimatedSlide(
-                duration: const Duration(milliseconds: 220),
-                curve: Curves.easeInOutCubic,
-                offset: _controlsVisible ? Offset.zero : const Offset(0, 1.4),
-                child: IgnorePointer(
-                  ignoring: !_controlsVisible,
-                  child: _MediaActionBar(
-                    isFavorite: _currentItem.isFavorite,
-                    isBusy: _isBusy,
-                    opacity: provider.bottomBarOpacity,
-                    blurSigma: provider.bottomBarBlur,
-                    onShare: () => _shareCurrentItem(provider),
-                    onFavorite: () => _toggleFavorite(provider),
-                    onDelete: () => _deleteCurrentItem(provider),
-                    onOpenExternally: () => _openExternally(provider),
-                    onDownload: () => _downloadToDevice(provider),
+            // The action bar floats just above the details peek below it,
+            // rather than overlapping it.
+            Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.sizeOf(context).height * 0.16,
+              ),
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: AnimatedSlide(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeInOutCubic,
+                  offset: _controlsVisible ? Offset.zero : const Offset(0, 1.4),
+                  child: IgnorePointer(
+                    ignoring: !_controlsVisible,
+                    child: _MediaActionBar(
+                      isFavorite: _currentItem.isFavorite,
+                      isBusy: _isBusy,
+                      opacity: provider.bottomBarOpacity,
+                      blurSigma: provider.bottomBarBlur,
+                      onShare: () => ShareSheet.show(context, _currentItem),
+                      onFavorite: () => _toggleFavorite(provider),
+                      onDelete: () => _deleteCurrentItem(provider),
+                      onOpenExternally: () => _openExternally(provider),
+                      onDownload: () => _downloadToDevice(provider),
+                      onDetails: () => DetailsSheet.show(context, _currentItem),
+                    ),
                   ),
+                ),
+              ),
+            ),
+            // Always-present peek of the current item's details, draggable
+            // up into the full Info/Versions/Activity sheet.
+            Positioned.fill(
+              child: IgnorePointer(
+                ignoring: !_controlsVisible,
+                child: AnimatedOpacity(
+                  opacity: _controlsVisible ? 1 : 0,
+                  duration: const Duration(milliseconds: 200),
+                  child: PeekDetailsSheet(item: _currentItem),
                 ),
               ),
             ),
@@ -404,6 +433,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
           item: widget.item,
           isBusy: _isBusy,
           onOpenExternally: () => _openExternally(provider),
+          onOpenDetails: () => DetailsSheet.show(context, widget.item),
         );
     }
   }
@@ -421,6 +451,7 @@ class _MediaActionBar extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback onOpenExternally;
   final VoidCallback onDownload;
+  final VoidCallback onDetails;
 
   const _MediaActionBar({
     required this.isFavorite,
@@ -432,6 +463,7 @@ class _MediaActionBar extends StatelessWidget {
     required this.onDelete,
     required this.onOpenExternally,
     required this.onDownload,
+    required this.onDetails,
   });
 
   @override
@@ -458,10 +490,10 @@ class _MediaActionBar extends StatelessWidget {
                   ),
                   _ActionIconButton(
                     icon: isFavorite
-                        ? Icons.star_rounded
-                        : Icons.star_outline_rounded,
+                        ? Icons.favorite_rounded
+                        : Icons.favorite_border_rounded,
                     tooltip: 'Favorite',
-                    color: isFavorite ? Colors.amber : null,
+                    color: isFavorite ? Colors.red : null,
                     onTap: onFavorite,
                   ),
                   _ActionIconButton(
@@ -479,6 +511,11 @@ class _MediaActionBar extends StatelessWidget {
                     tooltip: 'Delete',
                     color: colorScheme.error,
                     onTap: isBusy ? null : onDelete,
+                  ),
+                  _ActionIconButton(
+                    icon: Icons.info_outline_rounded,
+                    tooltip: 'Details',
+                    onTap: onDetails,
                   ),
                 ],
               ),
@@ -524,35 +561,102 @@ class _ActionIconButton extends StatelessWidget {
   }
 }
 
-class _ImagePreview extends StatelessWidget {
+class _ImagePreview extends StatefulWidget {
   final String url;
   final Map<String, String> headers;
 
   const _ImagePreview({super.key, required this.url, required this.headers});
 
   @override
+  State<_ImagePreview> createState() => _ImagePreviewState();
+}
+
+class _ImagePreviewState extends State<_ImagePreview>
+    with SingleTickerProviderStateMixin {
+  static const _doubleTapScale = 3.0;
+
+  final TransformationController _transformController =
+      TransformationController();
+  late final AnimationController _animController;
+  Animation<Matrix4>? _animation;
+  Offset _doubleTapPosition = Offset.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 220),
+        )..addListener(() {
+          if (_animation != null) {
+            _transformController.value = _animation!.value;
+          }
+        });
+  }
+
+  @override
+  void dispose() {
+    _animController.dispose();
+    _transformController.dispose();
+    super.dispose();
+  }
+
+  void _onDoubleTapDown(TapDownDetails details) {
+    _doubleTapPosition = details.localPosition;
+  }
+
+  void _onDoubleTap() {
+    final isZoomedIn = _transformController.value.getMaxScaleOnAxis() > 1.01;
+    final Matrix4 endMatrix;
+    if (isZoomedIn) {
+      endMatrix = Matrix4.identity();
+    } else {
+      final p = _doubleTapPosition;
+      endMatrix = Matrix4.identity()
+        ..translateByDouble(
+          -p.dx * (_doubleTapScale - 1),
+          -p.dy * (_doubleTapScale - 1),
+          0,
+          1,
+        )
+        ..scaleByDouble(_doubleTapScale, _doubleTapScale, _doubleTapScale, 1);
+    }
+    _animation = Matrix4Tween(
+      begin: _transformController.value,
+      end: endMatrix,
+    ).animate(CurveTween(curve: Curves.easeOut).animate(_animController));
+    _animController.forward(from: 0);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return SizedBox.expand(
-      child: InteractiveViewer(
-        minScale: 0.8,
-        maxScale: 5.0,
-        child: Center(
-          child: Image.network(
-            url,
-            headers: headers,
-            fit: BoxFit.contain,
-            loadingBuilder: (context, child, progress) {
-              if (progress == null) return child;
-              return Center(
-                child: CircularProgressIndicator(color: colorScheme.primary),
-              );
-            },
-            errorBuilder: (context, error, stack) => Center(
-              child: Icon(
-                Icons.broken_image_outlined,
-                color: colorScheme.onSurfaceVariant,
-                size: 64,
+      child: GestureDetector(
+        onDoubleTapDown: _onDoubleTapDown,
+        onDoubleTap: _onDoubleTap,
+        child: InteractiveViewer(
+          transformationController: _transformController,
+          minScale: 0.8,
+          maxScale: 5.0,
+          child: Center(
+            child: Image.network(
+              widget.url,
+              headers: widget.headers,
+              fit: BoxFit.contain,
+              loadingBuilder: (context, child, progress) {
+                if (progress == null) return child;
+                return Center(
+                  child: CircularProgressIndicator(color: colorScheme.primary),
+                );
+              },
+              errorBuilder: (context, error, stack) => Center(
+                child: Icon(
+                  Icons.broken_image_outlined,
+                  color: colorScheme.onSurfaceVariant,
+                  size: 64,
+                ),
               ),
             ),
           ),
@@ -647,6 +751,9 @@ class _VideoPreviewState extends State<_VideoPreview> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final progressBarStyle = context
+        .watch<ServerProvider>()
+        .mediaProgressBarStyle;
     if (_error != null) {
       return Center(
         child: Text(
@@ -737,6 +844,7 @@ class _VideoPreviewState extends State<_VideoPreview> {
                             controller: controller,
                             playedColor: fg,
                             trackColor: fg.withValues(alpha: 0.3),
+                            style: progressBarStyle,
                           ),
                         ),
                       ],
@@ -760,11 +868,13 @@ class _WavySeekBar extends StatefulWidget {
   final VideoPlayerController controller;
   final Color playedColor;
   final Color trackColor;
+  final MediaProgressBarStyle style;
 
   const _WavySeekBar({
     required this.controller,
     required this.playedColor,
     required this.trackColor,
+    required this.style,
   });
 
   @override
@@ -793,7 +903,8 @@ class _WavySeekBarState extends State<_WavySeekBar>
   @override
   Widget build(BuildContext context) {
     final value = widget.controller.value;
-    final isPlaying = value.isPlaying && _dragRatio == null;
+    final isWavy = widget.style == MediaProgressBarStyle.wavy;
+    final isPlaying = isWavy && value.isPlaying && _dragRatio == null;
     if (isPlaying && !_waveController.isAnimating) {
       _waveController.repeat();
     } else if (!isPlaying && _waveController.isAnimating) {
@@ -976,7 +1087,14 @@ class _PdfPreviewState extends State<_PdfPreview> {
         child: CircularProgressIndicator(color: colorScheme.primary),
       );
     }
-    return PdfViewPinch(controller: _controller!);
+    // pdfx's own default minScale (1.0 = the page's true/100% size) is
+    // often *larger* than the fit-to-width size a wide page first renders
+    // at, since that initial render is just normal box layout, not the
+    // InteractiveViewer transform pinching engages on first touch - so the
+    // moment you touch the page it snaps up to 1.0 and, with the default
+    // floor, can never pinch back down past it. A low floor here lets you
+    // zoom back out past that to the fit-width view you started at.
+    return PdfViewPinch(controller: _controller!, minScale: 0.3);
   }
 }
 
@@ -1049,11 +1167,13 @@ class _UnsupportedPreview extends StatelessWidget {
   final NextcloudItem item;
   final bool isBusy;
   final VoidCallback onOpenExternally;
+  final VoidCallback onOpenDetails;
 
   const _UnsupportedPreview({
     required this.item,
     required this.isBusy,
     required this.onOpenExternally,
+    required this.onOpenDetails,
   });
 
   @override
@@ -1093,6 +1213,12 @@ class _UnsupportedPreview extends StatelessWidget {
               onPressed: isBusy ? null : onOpenExternally,
               icon: const Icon(Icons.open_in_new_rounded),
               label: const Text('Open with...'),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: onOpenDetails,
+              icon: const Icon(Icons.info_outline_rounded),
+              label: const Text('Details'),
             ),
           ],
         ),
