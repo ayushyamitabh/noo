@@ -44,7 +44,11 @@ jobs:
         run: flutter build apk --release
 
       - name: Upload APK
-        uses: actions/upload-artifact@v4
+        # v4 speaks a newer artifact protocol (Azure Blob-style) that
+        # Gitea Actions doesn't implement yet - it errors as
+        # "GHESNotSupportedError" even though this isn't GHES. v3 uses the
+        # older protocol Gitea does support.
+        uses: actions/upload-artifact@v3
         with:
           name: app-release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
