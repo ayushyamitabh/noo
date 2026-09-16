@@ -163,8 +163,72 @@ class _ItemThumbnail extends StatelessWidget {
   }
 }
 
+/// Slides+fades its child in on first build. Give it a [Key] that changes
+/// whenever the folder changes (folder path + item id) so Flutter discards
+/// and remounts the Element instead of just updating it in place - that's
+/// what makes the whole visible list replay the animation on every folder
+/// navigation, not just newly-appearing rows.
+class _FolderEnterAnimation extends StatefulWidget {
+  final Widget child;
+  final bool fromRight;
+  final int index;
+
+  const _FolderEnterAnimation({
+    super.key,
+    required this.child,
+    required this.fromRight,
+    required this.index,
+  });
+
+  @override
+  State<_FolderEnterAnimation> createState() => _FolderEnterAnimationState();
+}
+
+class _FolderEnterAnimationState extends State<_FolderEnterAnimation>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _opacity;
+  late final Animation<Offset> _offset;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 260),
+    );
+    _opacity = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
+    _offset = Tween<Offset>(
+      begin: Offset(widget.fromRight ? 0.12 : -0.12, 0),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+    // Staggered slightly by position so the list reads as sliding in as a
+    // group rather than every row popping in simultaneously; capped so a
+    // long list doesn't visibly trickle in for seconds.
+    final delay = Duration(milliseconds: (widget.index * 12).clamp(0, 150));
+    Future.delayed(delay, () {
+      if (mounted) _controller.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _opacity,
+      child: SlideTransition(position: _offset, child: widget.child),
+    );
+  }
+}
+
 class _FilesViewState extends State<FilesView> {
   final Set<String> _selectedIds = {};
+  int _lastPathDepth = 1;
 
   bool get _isSelecting => _selectedIds.isNotEmpty;
 
@@ -331,6 +395,10 @@ class _FilesViewState extends State<FilesView> {
     final colorScheme = theme.colorScheme;
     final provider = context.watch<ServerProvider>();
 
+    final pathDepth = provider.pathStack.length;
+    final navigatingDeeper = pathDepth > _lastPathDepth;
+    _lastPathDepth = pathDepth;
+
     final hasBreadcrumbs = provider.pathStack.length > 1;
     final selectedItems = provider.items
         .where((i) => _selectedIds.contains(i.id))
@@ -346,81 +414,122 @@ class _FilesViewState extends State<FilesView> {
         children: [
           SizedBox(
             height: 44,
-            child: Row(
-              children: [
-                IconButton(
-                  icon: Icon(
-                    provider.filesSortAscending
-                        ? Icons.arrow_upward_rounded
-                        : Icons.arrow_downward_rounded,
-                    size: 20,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: Icon(
+                      provider.filesSortAscending
+                          ? Icons.arrow_upward_rounded
+                          : Icons.arrow_downward_rounded,
+                      size: 20,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                    tooltip: provider.filesSortAscending
+                        ? 'Ascending'
+                        : 'Descending',
+                    onPressed: provider.toggleFilesSortOrder,
                   ),
-                  visualDensity: VisualDensity.compact,
-                  tooltip: provider.filesSortAscending
-                      ? 'Ascending'
-                      : 'Descending',
-                  onPressed: provider.toggleFilesSortOrder,
-                ),
-                Expanded(
-                  child: SortMenuButton(
-                    field: provider.filesSortField,
-                    onChanged: provider.setFilesSortField,
+                  // A plain width, not Expanded - this row scrolls
+                  // horizontally now, which gives every control unbounded
+                  // width to lay out in, so a flex child would throw.
+                  SizedBox(
+                    width: 130,
+                    child: SortMenuButton(
+                      field: provider.filesSortField,
+                      onChanged: provider.setFilesSortField,
+                    ),
                   ),
-                ),
-                ToggleIconButton(
-                  icon: provider.showFavoritesOnlyFiles
-                      ? Icons.favorite_rounded
-                      : Icons.favorite_border_rounded,
-                  isSelected: provider.showFavoritesOnlyFiles,
-                  onTap: provider.toggleFavoritesFilterFiles,
-                  tooltip: 'Favorites only',
-                ),
-                const SizedBox(width: 4),
-                ToggleIconButton(
-                  icon: provider.showHiddenFiles
-                      ? Icons.visibility_rounded
-                      : Icons.visibility_off_rounded,
-                  isSelected: provider.showHiddenFiles,
-                  onTap: () => provider.toggleShowHiddenFiles(),
-                  tooltip: 'Show hidden files',
-                ),
-                const SizedBox(width: 4),
-                SegmentedIconGroup(
-                  children: [
-                    ToggleIconButton(
-                      icon: Symbols.circles_rounded,
-                      isSelected: provider.storageScope == StorageScope.cloud,
-                      onTap: () => provider.setStorageScope(StorageScope.cloud),
-                      tooltip: 'Cloud storage',
-                    ),
-                    ToggleIconButton(
-                      icon: Symbols.hard_drive_rounded,
-                      isSelected:
-                          provider.storageScope == StorageScope.external,
-                      onTap: () =>
-                          provider.setStorageScope(StorageScope.external),
-                      tooltip: 'External storage',
-                    ),
-                  ],
-                ),
-                const SizedBox(width: 8),
-                SegmentedIconGroup(
-                  children: [
-                    ToggleIconButton(
-                      icon: Icons.view_list_rounded,
-                      isSelected: !provider.isGridView,
-                      onTap: () => provider.setGridView(false),
-                      tooltip: 'List view',
-                    ),
-                    ToggleIconButton(
-                      icon: Icons.grid_view_rounded,
-                      isSelected: provider.isGridView,
-                      onTap: () => provider.setGridView(true),
-                      tooltip: 'Grid view',
-                    ),
-                  ],
-                ),
-              ],
+                  ToggleIconButton(
+                    icon: provider.showFavoritesOnlyFiles
+                        ? Icons.favorite_rounded
+                        : Icons.favorite_border_rounded,
+                    isSelected: provider.showFavoritesOnlyFiles,
+                    onTap: provider.toggleFavoritesFilterFiles,
+                    tooltip: 'Favorites only',
+                  ),
+                  const SizedBox(width: 4),
+                  ToggleIconButton(
+                    icon: provider.showHiddenFiles
+                        ? Icons.visibility_rounded
+                        : Icons.visibility_off_rounded,
+                    isSelected: provider.showHiddenFiles,
+                    onTap: () => provider.toggleShowHiddenFiles(),
+                    tooltip: 'Show hidden files',
+                  ),
+                  const SizedBox(width: 4),
+                  SegmentedIconGroup(
+                    children: [
+                      ToggleIconButton(
+                        icon: Symbols.circles_rounded,
+                        isSelected: provider.storageScope == StorageScope.cloud,
+                        onTap: () =>
+                            provider.setStorageScope(StorageScope.cloud),
+                        tooltip: 'Cloud storage',
+                      ),
+                      ToggleIconButton(
+                        icon: Symbols.hard_drive_rounded,
+                        isSelected:
+                            provider.storageScope == StorageScope.external,
+                        onTap: () =>
+                            provider.setStorageScope(StorageScope.external),
+                        tooltip: 'External storage',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 8),
+                  SegmentedIconGroup(
+                    children: [
+                      ToggleIconButton(
+                        icon: Icons.select_all_rounded,
+                        isSelected:
+                            provider.filesTypeFilter == FilesTypeFilter.all,
+                        onTap: () =>
+                            provider.setFilesTypeFilter(FilesTypeFilter.all),
+                        tooltip: 'Files & folders',
+                      ),
+                      ToggleIconButton(
+                        icon: Icons.insert_drive_file_outlined,
+                        isSelected:
+                            provider.filesTypeFilter ==
+                            FilesTypeFilter.filesOnly,
+                        onTap: () => provider.setFilesTypeFilter(
+                          FilesTypeFilter.filesOnly,
+                        ),
+                        tooltip: 'Files only',
+                      ),
+                      ToggleIconButton(
+                        icon: Icons.folder_outlined,
+                        isSelected:
+                            provider.filesTypeFilter ==
+                            FilesTypeFilter.foldersOnly,
+                        onTap: () => provider.setFilesTypeFilter(
+                          FilesTypeFilter.foldersOnly,
+                        ),
+                        tooltip: 'Folders only',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 8),
+                  SegmentedIconGroup(
+                    children: [
+                      ToggleIconButton(
+                        icon: Icons.view_list_rounded,
+                        isSelected: !provider.isGridView,
+                        onTap: () => provider.setGridView(false),
+                        tooltip: 'List view',
+                      ),
+                      ToggleIconButton(
+                        icon: Icons.grid_view_rounded,
+                        isSelected: provider.isGridView,
+                        onTap: () => provider.setGridView(true),
+                        tooltip: 'Grid view',
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
           if (hasBreadcrumbs) ...[
@@ -580,7 +689,12 @@ class _FilesViewState extends State<FilesView> {
             ),
             delegate: SliverChildBuilderDelegate((context, index) {
               final item = provider.items[index];
-              return _buildGridCard(context, item, provider);
+              return _FolderEnterAnimation(
+                key: ValueKey('${provider.currentFolderPath}::${item.id}'),
+                index: index,
+                fromRight: navigatingDeeper,
+                child: _buildGridCard(context, item, provider),
+              );
             }, childCount: provider.items.length),
           ),
         )
@@ -591,7 +705,12 @@ class _FilesViewState extends State<FilesView> {
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate((context, index) {
               final item = provider.items[index];
-              return _buildListTile(context, item, provider);
+              return _FolderEnterAnimation(
+                key: ValueKey('${provider.currentFolderPath}::${item.id}'),
+                index: index,
+                fromRight: navigatingDeeper,
+                child: _buildListTile(context, item, provider),
+              );
             }, childCount: provider.items.length),
           ),
         ),

@@ -28,6 +28,10 @@ enum StorageScope { cloud, external }
 /// in Settings.
 enum SwipeAction { none, favorite, delete, share }
 
+/// The Files tab's files/folders/both filter — independent of and applied
+/// after [StorageScope]/favorites/hidden filtering.
+enum FilesTypeFilter { all, filesOnly, foldersOnly }
+
 /// How aggressively the Files tab's folder listings (not thumbnails/file
 /// content - just the list of names/sizes/dates) are reused across
 /// navigation instead of refetched from the server every time.
@@ -70,6 +74,7 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _prefShowFavoritesOnlyFiles = 'ui_show_favorites_only';
   static const _prefShowFavoritesOnlyPhotos = 'ui_show_favorites_only_photos';
   static const _prefStorageScope = 'ui_storage_scope';
+  static const _prefFilesTypeFilter = 'ui_files_type_filter';
   static const _prefShowHiddenFiles = 'ui_show_hidden';
   static const _prefShowHiddenPhotos = 'ui_show_hidden_photos';
   static const _prefSortField = 'ui_sort_field';
@@ -141,6 +146,7 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool _showFavoritesOnlyFiles = false;
   bool _showFavoritesOnlyPhotos = false;
   StorageScope _storageScope = StorageScope.cloud;
+  FilesTypeFilter _filesTypeFilter = FilesTypeFilter.all;
   bool _showHiddenFiles = false;
   bool _showHiddenPhotos = false;
   // Photos tab sort - a single global setting (Photos has no folder concept,
@@ -309,6 +315,7 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool get showFavoritesOnlyFiles => _showFavoritesOnlyFiles;
   bool get showFavoritesOnlyPhotos => _showFavoritesOnlyPhotos;
   StorageScope get storageScope => _storageScope;
+  FilesTypeFilter get filesTypeFilter => _filesTypeFilter;
   bool get showHiddenFiles => _showHiddenFiles;
   bool get showHiddenPhotos => _showHiddenPhotos;
   FileSortField get photosSortField => _photosSortField;
@@ -385,11 +392,19 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   List<NextcloudItem> get items {
-    final filtered = _applyCommonFilters(
+    var filtered = _applyCommonFilters(
       _items,
       showFavoritesOnly: _showFavoritesOnlyFiles,
       showHidden: _showHiddenFiles,
     );
+    switch (_filesTypeFilter) {
+      case FilesTypeFilter.all:
+        break;
+      case FilesTypeFilter.filesOnly:
+        filtered = filtered.where((i) => !i.isFolder).toList();
+      case FilesTypeFilter.foldersOnly:
+        filtered = filtered.where((i) => i.isFolder).toList();
+    }
 
     final field = filesSortField;
     final folders = filtered.where((i) => i.isFolder).toList()
@@ -565,6 +580,7 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
       _showFavoritesOnlyFiles = false;
       _showFavoritesOnlyPhotos = false;
       _storageScope = StorageScope.cloud;
+      _filesTypeFilter = FilesTypeFilter.all;
       _showHiddenFiles = false;
       _showHiddenPhotos = false;
       _photosSortField = FileSortField.name;
@@ -586,6 +602,12 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _storageScope = StorageScope.values.firstWhere(
       (s) => s.name == storageScopeName,
       orElse: () => StorageScope.cloud,
+    );
+
+    final filesTypeFilterName = prefs.getString(k(_prefFilesTypeFilter));
+    _filesTypeFilter = FilesTypeFilter.values.firstWhere(
+      (f) => f.name == filesTypeFilterName,
+      orElse: () => FilesTypeFilter.all,
     );
 
     _showHiddenFiles = prefs.getBool(k(_prefShowHiddenFiles)) ?? false;
@@ -1199,6 +1221,16 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _persistAccountPref(
       _prefStorageScope,
       (p, key) => p.setString(key, scope.name),
+    );
+  }
+
+  void setFilesTypeFilter(FilesTypeFilter filter) {
+    if (_filesTypeFilter == filter) return;
+    _filesTypeFilter = filter;
+    notifyListeners();
+    _persistAccountPref(
+      _prefFilesTypeFilter,
+      (p, key) => p.setString(key, filter.name),
     );
   }
 

@@ -35,6 +35,7 @@ class AccountStore {
     'ui_sort_field',
     'ui_sort_ascending',
     'ui_folder_sort',
+    'ui_files_type_filter',
     'ui_cache_policy',
     'ui_cache_interval_minutes',
   ];
