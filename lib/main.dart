@@ -6,6 +6,7 @@ import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'models/app_tab.dart';
 import 'providers/server_provider.dart';
 import 'theme/app_theme.dart';
+import 'views/lock_screen_view.dart';
 import 'views/login_view.dart';
 import 'views/search_view.dart';
 import 'views/share_upload_view.dart';
@@ -48,9 +49,11 @@ class NextcloudApp extends StatelessWidget {
           themeMode: provider.themeMode,
           home: provider.isRestoringSession
               ? const _SplashView()
-              : (provider.isLoggedIn
-                    ? const MainShellView()
-                    : const LoginView()),
+              : (!provider.isLoggedIn
+                    ? const LoginView()
+                    : (provider.needsUnlock
+                          ? const LockScreenView()
+                          : const MainShellView())),
         );
       },
     );

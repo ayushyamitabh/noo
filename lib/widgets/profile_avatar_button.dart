@@ -13,15 +13,18 @@ import '../views/account_view.dart';
 class ProfileAvatarButton extends StatelessWidget {
   const ProfileAvatarButton({super.key});
 
-  void _handleVerticalSwipe(BuildContext context, DragEndDetails details) {
+  Future<void> _handleVerticalSwipe(
+    BuildContext context,
+    DragEndDetails details,
+  ) async {
     final velocity = details.primaryVelocity ?? 0;
     if (velocity.abs() < 250) return;
 
     final provider = context.read<ServerProvider>();
     final target = velocity < 0
-        ? provider.cycleToNextAccount()
-        : provider.cycleToPreviousAccount();
-    if (target == null) return;
+        ? await provider.cycleToNextAccount()
+        : await provider.cycleToPreviousAccount();
+    if (target == null || !context.mounted) return;
 
     HapticFeedback.selectionClick();
     ScaffoldMessenger.of(context).showSnackBar(

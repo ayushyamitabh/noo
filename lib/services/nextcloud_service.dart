@@ -44,6 +44,15 @@ DateTime? _parseDavDate(String? raw) {
   }
 }
 
+/// The OCS Activity API reports each event's time as an ISO 8601 string in
+/// a `datetime` field (e.g. "2025-09-15T12:34:56+00:00") - there is no
+/// numeric `timestamp` field despite that being a very easy name to guess.
+/// Falls back to now() only if the field is missing/unparseable, so a
+/// broken response reads as "just now" rather than the Unix epoch.
+DateTime _parseActivityDateTime(dynamic raw) {
+  return DateTime.tryParse(raw?.toString() ?? '') ?? DateTime.now();
+}
+
 /// Normalizes a WebDAV `href` (which servers may return as either a bare
 /// path or a full absolute URL) down to just its path, trailing slash
 /// stripped, so hrefs from either form can be compared directly.
@@ -872,6 +881,9 @@ class NextcloudService {
       final pct = total > 0 ? (used / total).clamp(0.0, 1.0) : 0.0;
       final display = ocsData['displayname'] ?? username;
       final email = ocsData['email'] ?? '$username@$serverUrl';
+      final groups = ((ocsData['groups'] as List?) ?? [])
+          .map((g) => g.toString())
+          .toList();
 
       return NextcloudUserQuota(
         usedBytes: used,
@@ -880,6 +892,7 @@ class NextcloudService {
         userName: display,
         email: email,
         serverVersion: 'Nextcloud Server',
+        groups: groups,
       );
     } else {
       throw Exception(
@@ -914,9 +927,7 @@ class NextcloudService {
             id: (a['activity_id'] ?? '').toString(),
             title: a['subject'] ?? 'Server Activity',
             subject: a['message'] ?? (a['subject'] ?? ''),
-            timestamp: DateTime.fromMillisecondsSinceEpoch(
-              (a['timestamp'] as int? ?? 0) * 1000,
-            ),
+            timestamp: _parseActivityDateTime(a['datetime']),
             icon: Icons.cloud_outlined,
             author: a['user'] ?? username,
           );
@@ -1500,9 +1511,7 @@ class NextcloudService {
             id: (a['activity_id'] ?? '').toString(),
             title: a['subject'] ?? 'Activity',
             subject: a['message'] ?? (a['subject'] ?? ''),
-            timestamp: DateTime.fromMillisecondsSinceEpoch(
-              (a['timestamp'] as int? ?? 0) * 1000,
-            ),
+            timestamp: _parseActivityDateTime(a['datetime']),
             icon: Icons.cloud_outlined,
             author: a['user'] ?? username,
           );

@@ -139,6 +139,7 @@ class NextcloudUserQuota {
   final String userName;
   final String email;
   final String serverVersion;
+  final List<String> groups;
 
   const NextcloudUserQuota({
     required this.usedBytes,
@@ -147,6 +148,7 @@ class NextcloudUserQuota {
     required this.userName,
     required this.email,
     required this.serverVersion,
+    this.groups = const [],
   });
 
   factory NextcloudUserQuota.demo() {
@@ -157,6 +159,7 @@ class NextcloudUserQuota {
       userName: 'Ayush Admin',
       email: 'ayush@cloud.internal',
       serverVersion: 'Nextcloud 29.0.4 Hub 8',
+      groups: ['Family', 'Friends'],
     );
   }
 }

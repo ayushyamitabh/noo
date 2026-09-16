@@ -18,7 +18,10 @@ android {
         applicationId = "dev.ayushya.noo"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // local_auth (app-lock/biometric) requires API 24+; Flutter's own
+        // default may be lower, so floor it here rather than relying on
+        // whatever flutter.minSdkVersion currently resolves to.
+        minSdk = maxOf(24, flutter.minSdkVersion)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

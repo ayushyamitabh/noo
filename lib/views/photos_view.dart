@@ -147,7 +147,7 @@ class _PhotosViewState extends State<PhotosView> {
                   ? Icons.visibility_rounded
                   : Icons.visibility_off_rounded,
               isSelected: provider.showHiddenPhotos,
-              onTap: provider.toggleShowHiddenPhotos,
+              onTap: () => provider.toggleShowHiddenPhotos(),
               tooltip: 'Show hidden files',
             ),
             const SizedBox(width: 4),

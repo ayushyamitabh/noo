@@ -6,16 +6,11 @@ import '../providers/server_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/frosted_glass_container.dart';
 import '../widgets/seek_bar_painter.dart';
+import '../widgets/synced_header_scaffold.dart' show formatQuota;
 import 'login_view.dart';
 
 class AccountView extends StatelessWidget {
   const AccountView({super.key});
-
-  String _formatBytes(int bytes) {
-    if (bytes <= 0) return '0 GB';
-    final gb = bytes / (1024 * 1024 * 1024);
-    return '${gb.toStringAsFixed(2)} GB';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -80,16 +75,33 @@ class AccountView extends StatelessWidget {
                           ],
                         ),
                       ),
-                      IconButton(
-                        onPressed: () =>
-                            _showLogoutConfirmation(context, provider),
-                        icon: const Icon(Icons.logout_rounded),
-                        tooltip: 'Log Out',
-                        color: colorScheme.error,
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Divider(height: 1),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.public_rounded,
+                        size: 18,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          Uri.tryParse(provider.serverUrl)?.host ??
+                              provider.serverUrl,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   const Divider(height: 1),
                   const SizedBox(height: 16),
                   Row(
@@ -102,11 +114,7 @@ class AccountView extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        quota != null
-                            ? (quota.totalBytes > 0
-                                  ? '${_formatBytes(quota.usedBytes)} of ${_formatBytes(quota.totalBytes)}'
-                                  : '${_formatBytes(quota.usedBytes)} (Unlimited)')
-                            : 'Live Server Storage',
+                        quota != null ? formatQuota(quota) : 'Loading…',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                           fontWeight: FontWeight.w500,
@@ -129,52 +137,111 @@ class AccountView extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    quota != null
-                        ? (quota.totalBytes > 0
-                              ? '${(quota.usagePercentage * 100).toStringAsFixed(1)}% used'
-                              : 'Unlimited Storage Plan')
-                        : 'WebDAV connection active',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                      fontSize: 11,
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      quota != null
+                          ? (quota.totalBytes > 0
+                                ? '${(quota.usagePercentage * 100).toStringAsFixed(1)}% used'
+                                : 'Unlimited storage')
+                          : '',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                        fontSize: 11,
+                      ),
                     ),
                   ),
+                  if (quota != null && quota.groups.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    const Divider(height: 1),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Groups',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final group in quota.groups)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: colorScheme.surfaceContainerHigh,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              group,
+                              style: theme.textTheme.bodyMedium,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   const Divider(height: 1),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
                   Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: provider.isLoggedIn
-                              ? Colors.green.withValues(alpha: 0.2)
-                              : Colors.red.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          provider.isLoggedIn ? 'ONLINE' : 'OFFLINE',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: provider.isLoggedIn
-                                ? Colors.green.shade800
-                                : Colors.red.shade800,
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () async {
+                            await provider.refreshData();
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Refreshed WebDAV data'),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                          },
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          child: const Text(
+                            'Refresh Cache',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 13),
                           ),
                         ),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(
-                          'Connected to ${provider.serverUrl}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
+                        child: FilledButton(
+                          onPressed: () => _handleLogout(context, provider),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: colorScheme.errorContainer,
+                            foregroundColor: colorScheme.onErrorContainer,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          child: const Text(
+                            'Logout',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 13),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: () =>
+                              _confirmRemoveActive(context, provider),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: colorScheme.error,
+                            foregroundColor: colorScheme.onError,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          child: const Text(
+                            'Remove',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 13),
                           ),
                         ),
                       ),
@@ -196,47 +263,15 @@ class AccountView extends StatelessWidget {
             const _AccountsCard(),
             const SizedBox(height: 24),
 
-            // Server Credentials Section
+            // Security Section
             Text(
-              'Server Connection Info',
+              'Security',
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w700,
               ),
             ),
             const SizedBox(height: 10),
-            Card(
-              child: Column(
-                children: [
-                  ListTile(
-                    leading: const Icon(Icons.dns_rounded),
-                    title: const Text('Nextcloud Host'),
-                    subtitle: Text(provider.serverUrl),
-                  ),
-                  const Divider(height: 1, indent: 16, endIndent: 16),
-                  ListTile(
-                    leading: const Icon(Icons.person_rounded),
-                    title: const Text('Logged In User'),
-                    subtitle: Text(provider.username),
-                  ),
-                  const Divider(height: 1, indent: 16, endIndent: 16),
-                  ListTile(
-                    leading: const Icon(Icons.refresh_rounded),
-                    title: const Text('Refresh WebDAV Cache'),
-                    onTap: () async {
-                      await provider.refreshData();
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Refreshed WebDAV directory data'),
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                      }
-                    },
-                  ),
-                ],
-              ),
-            ),
+            const _SecurityCard(),
             const SizedBox(height: 24),
 
             // Material You Design Settings
@@ -452,34 +487,62 @@ class AccountView extends StatelessWidget {
     );
   }
 
-  void _showLogoutConfirmation(BuildContext context, ServerProvider provider) {
-    showDialog(
+  /// Logout keeps the account saved (see [ServerProvider.logout]) so it's
+  /// harmless/reversible from a one-tap resume on the login screen -
+  /// doesn't need a confirmation dialog the way [_confirmRemoveActive] does.
+  Future<void> _handleLogout(
+    BuildContext context,
+    ServerProvider provider,
+  ) async {
+    final navigator = Navigator.of(context);
+    await provider.logout();
+    navigator.popUntil((route) => route.isFirst);
+  }
+
+  Future<void> _confirmRemoveActive(
+    BuildContext context,
+    ServerProvider provider,
+  ) async {
+    final host = Uri.tryParse(provider.serverUrl)?.host ?? provider.serverUrl;
+    final hasOtherAccounts = provider.accounts.length > 1;
+    final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Log Out'),
+          title: const Text('Remove Account'),
           content: Text(
-            'Are you sure you want to disconnect from ${provider.serverUrl}?',
+            hasOtherAccounts
+                ? 'Remove ${provider.username} ($host)? Another saved account will become active.'
+                : 'Remove ${provider.username} ($host)? You can add it again later.',
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(dialogContext, false),
               child: const Text('Cancel'),
             ),
             FilledButton(
               style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.error,
+                backgroundColor: Theme.of(dialogContext).colorScheme.error,
               ),
-              onPressed: () {
-                Navigator.of(context).popUntil((route) => route.isFirst);
-                provider.logout();
-              },
-              child: const Text('Log Out'),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Remove'),
             ),
           ],
         );
       },
     );
+    if (confirmed != true) return;
+    final id = provider.activeAccountId;
+    if (id == null) return;
+    if (!context.mounted) return;
+    final navigator = Navigator.of(context);
+    await provider.removeAccount(id);
+    // Only pop back to the root route if that was the last account and the
+    // session actually ended - if it fell back to another saved account,
+    // Settings just keeps showing (now for that account) instead.
+    if (!provider.isLoggedIn) {
+      navigator.popUntil((route) => route.isFirst);
+    }
   }
 }
 
@@ -523,7 +586,17 @@ class _AccountsCard extends StatelessWidget {
       },
     );
     if (confirmed == true) {
+      if (!context.mounted) return;
+      final navigator = Navigator.of(context);
       await provider.removeAccount(account.id);
+      // Only when this was the last saved account does isLoggedIn drop to
+      // false and main.dart swap the root route to LoginView underneath -
+      // pop back to it then, rather than leaving Settings stranded on top.
+      // Removing a non-active account, or falling back to another one,
+      // both keep the user logged in, so Settings should just stay put.
+      if (!provider.isLoggedIn) {
+        navigator.popUntil((route) => route.isFirst);
+      }
     }
   }
 
@@ -611,6 +684,77 @@ class _AccountRow extends StatelessWidget {
         ],
       ),
       onTap: onTap,
+    );
+  }
+}
+
+/// Login lock: gates opening the app, switching accounts, and revealing
+/// hidden files behind the device's own PIN/biometric credential (see
+/// AppLockService - this app never stores or handles a PIN itself).
+class _SecurityCard extends StatelessWidget {
+  const _SecurityCard();
+
+  Future<void> _handleLoginLockChanged(
+    BuildContext context,
+    ServerProvider provider,
+    bool value,
+  ) async {
+    final success = value
+        ? await provider.setupLoginLock()
+        : await provider.disableLoginLock();
+    if (!success && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            value
+                ? "Could not set up login lock - make sure this device has a PIN, pattern, password, or biometric configured"
+                : 'Could not turn off login lock',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<ServerProvider>();
+
+    return Card(
+      child: Column(
+        children: [
+          SwitchListTile(
+            secondary: const Icon(Icons.lock_outline_rounded),
+            title: const Text('Login Lock'),
+            subtitle: const Text(
+              "Require this device's PIN or biometric to open Noo",
+            ),
+            value: provider.loginLockEnabled,
+            onChanged: (value) =>
+                _handleLoginLockChanged(context, provider, value),
+          ),
+          const Divider(height: 1, indent: 16, endIndent: 16),
+          SwitchListTile(
+            secondary: const Icon(Icons.swap_horiz_rounded),
+            title: const Text('Lock account switching'),
+            subtitle: const Text('Unlock to switch between saved accounts'),
+            value: provider.lockAccountSwitching,
+            onChanged: provider.loginLockEnabled
+                ? provider.setLockAccountSwitching
+                : null,
+          ),
+          const Divider(height: 1, indent: 16, endIndent: 16),
+          SwitchListTile(
+            secondary: const Icon(Icons.visibility_off_rounded),
+            title: const Text('Lock hidden files'),
+            subtitle: const Text('Unlock to reveal hidden files and folders'),
+            value: provider.lockHiddenFiles,
+            onChanged: provider.loginLockEnabled
+                ? provider.setLockHiddenFiles
+                : null,
+          ),
+        ],
+      ),
     );
   }
 }

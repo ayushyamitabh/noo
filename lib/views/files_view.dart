@@ -381,7 +381,7 @@ class _FilesViewState extends State<FilesView> {
                       ? Icons.visibility_rounded
                       : Icons.visibility_off_rounded,
                   isSelected: provider.showHiddenFiles,
-                  onTap: provider.toggleShowHiddenFiles,
+                  onTap: () => provider.toggleShowHiddenFiles(),
                   tooltip: 'Show hidden files',
                 ),
                 const SizedBox(width: 4),

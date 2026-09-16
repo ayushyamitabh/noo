@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/saved_account.dart';
 import '../providers/server_provider.dart';
 
 class LoginView extends StatefulWidget {
@@ -82,17 +83,53 @@ class _LoginViewState extends State<LoginView> {
                       onCancel: () => provider.cancelLoginFlow(),
                       onReopenBrowser: provider.reopenLoginBrowser,
                     )
-                  : _ServerForm(
-                      formKey: _formKey,
-                      urlController: _urlController,
-                      isLoading: isInitiating || provider.isLoading,
-                      errorMessage:
-                          provider.loginFlowStatus == LoginFlowStatus.error
-                          ? provider.errorMessage
-                          : null,
-                      onContinue: _handleContinue,
-                      theme: theme,
-                      colorScheme: colorScheme,
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // A logout keeps the account saved rather than
+                        // deleting it, specifically so it can be resumed
+                        // from here with one tap - no need to repeat
+                        // Login Flow v2.
+                        if (!widget.isAddingAccount &&
+                            provider.accounts.isNotEmpty) ...[
+                          _SavedAccountsSection(
+                            accounts: provider.accounts,
+                            onSelect: (account) =>
+                                provider.switchAccount(account.id),
+                          ),
+                          const SizedBox(height: 28),
+                          Row(
+                            children: [
+                              const Expanded(child: Divider()),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                child: Text(
+                                  'or',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                              const Expanded(child: Divider()),
+                            ],
+                          ),
+                          const SizedBox(height: 28),
+                        ],
+                        _ServerForm(
+                          formKey: _formKey,
+                          urlController: _urlController,
+                          isLoading: isInitiating || provider.isLoading,
+                          errorMessage:
+                              provider.loginFlowStatus == LoginFlowStatus.error
+                              ? provider.errorMessage
+                              : null,
+                          onContinue: _handleContinue,
+                          theme: theme,
+                          colorScheme: colorScheme,
+                        ),
+                      ],
                     ),
             ),
           ),
@@ -261,6 +298,85 @@ class _ServerForm extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Saved accounts a logout left recoverable - tapping one resumes it via
+/// [ServerProvider.switchAccount] instead of repeating Login Flow v2.
+class _SavedAccountsSection extends StatelessWidget {
+  final List<SavedAccount> accounts;
+  final ValueChanged<SavedAccount> onSelect;
+
+  const _SavedAccountsSection({required this.accounts, required this.onSelect});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 8),
+          child: Text(
+            'Continue as',
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        Card(
+          margin: EdgeInsets.zero,
+          child: Column(
+            children: [
+              for (final account in accounts) ...[
+                _SavedAccountRow(
+                  account: account,
+                  onTap: () => onSelect(account),
+                ),
+                if (account != accounts.last)
+                  const Divider(height: 1, indent: 16, endIndent: 16),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SavedAccountRow extends StatelessWidget {
+  final SavedAccount account;
+  final VoidCallback onTap;
+
+  const _SavedAccountRow({required this.account, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final host = Uri.tryParse(account.serverUrl)?.host ?? account.serverUrl;
+    final initial = account.username.isNotEmpty
+        ? account.username[0].toUpperCase()
+        : '?';
+
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: colorScheme.primary,
+        child: Text(
+          initial,
+          style: TextStyle(
+            color: colorScheme.onPrimary,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+      title: Text(account.username),
+      subtitle: Text(host),
+      trailing: const Icon(Icons.chevron_right_rounded),
+      onTap: onTap,
     );
   }
 }

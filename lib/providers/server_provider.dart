@@ -11,6 +11,7 @@ import '../models/nextcloud_share.dart';
 import '../models/nextcloud_sharee.dart';
 import '../models/saved_account.dart';
 import '../services/account_store.dart';
+import '../services/app_lock_service.dart';
 import '../services/login_flow_service.dart';
 import '../services/nextcloud_service.dart';
 import '../theme/app_theme.dart';
@@ -84,6 +85,9 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _prefCachePolicy = 'ui_cache_policy';
   static const _prefCacheIntervalMinutes = 'ui_cache_interval_minutes';
   static const _prefTapTabToScrollTop = 'ui_tap_tab_to_scroll_top';
+  static const _prefLoginLockEnabled = 'ui_login_lock_enabled';
+  static const _prefLockAccountSwitching = 'ui_lock_account_switching';
+  static const _prefLockHiddenFiles = 'ui_lock_hidden_files';
 
   final Future<SharedPreferences> _prefsFuture =
       SharedPreferences.getInstance();
@@ -113,6 +117,17 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
   double _bottomBarOpacity = 0.55;
   double _bottomBarBlur = 28;
   bool _tapTabToScrollTop = true;
+
+  // App lock (PIN/biometric via the device's own credential, not our own
+  // storage - see AppLockService). Global, not per-account: it guards
+  // access to the app/its accounts, not any one account's content.
+  bool _loginLockEnabled = false;
+  bool _lockAccountSwitching = false;
+  bool _lockHiddenFiles = false;
+  // Transient (never persisted) - starts locked whenever the app process
+  // starts, and re-locks on every backgrounding if a lock is configured;
+  // see didChangeAppLifecycleState.
+  bool _isUnlocked = false;
 
   // Navigation state
   String _currentFolderPath = '/';
@@ -217,12 +232,20 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Starts/stops the periodic folder-listing refresh as the app leaves and
   /// returns to the foreground - only relevant under [CachePolicy.interval].
+  /// Also re-locks the app on backgrounding when login lock is set up - a
+  /// one-time unlock at cold start would give the feature no real security
+  /// value, since the realistic threat is someone else picking up an
+  /// already-running, unlocked phone.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _startCacheRefreshTimerIfNeeded();
     } else if (state == AppLifecycleState.paused) {
       _cacheRefreshTimer?.cancel();
+      if (_loginLockEnabled && _isUnlocked) {
+        _isUnlocked = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -260,6 +283,10 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
   double get bottomBarOpacity => _bottomBarOpacity;
   double get bottomBarBlur => _bottomBarBlur;
   bool get tapTabToScrollTop => _tapTabToScrollTop;
+  bool get loginLockEnabled => _loginLockEnabled;
+  bool get lockAccountSwitching => _lockAccountSwitching;
+  bool get lockHiddenFiles => _lockHiddenFiles;
+  bool get needsUnlock => _loginLockEnabled && !_isUnlocked;
 
   String get currentFolderPath => _currentFolderPath;
   AppTab? get requestedTab => _requestedTab;
@@ -450,6 +477,12 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
       _bottomBarBlur = prefs.getDouble(_prefBottomBarBlur) ?? _bottomBarBlur;
       _tapTabToScrollTop =
           prefs.getBool(_prefTapTabToScrollTop) ?? _tapTabToScrollTop;
+      _loginLockEnabled =
+          prefs.getBool(_prefLoginLockEnabled) ?? _loginLockEnabled;
+      _lockAccountSwitching =
+          prefs.getBool(_prefLockAccountSwitching) ?? _lockAccountSwitching;
+      _lockHiddenFiles =
+          prefs.getBool(_prefLockHiddenFiles) ?? _lockHiddenFiles;
       _applyAccountPrefs(prefs, _activeAccountId);
 
       final savedOrderNames = prefs.getStringList(_prefTabOrder);
@@ -865,15 +898,21 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// Switches to an already-saved account. No-op if it's already active or
-  /// unknown.
+  /// unknown. Gated behind login lock when [lockAccountSwitching] is on.
   Future<void> switchAccount(String accountId) async {
     if (accountId == _activeAccountId) return;
     if (!_accounts.any((a) => a.id == accountId)) return;
+    if (!await _passGate(_lockAccountSwitching, 'Unlock to switch accounts')) {
+      return;
+    }
     await _activateAccount(accountId);
   }
 
-  SavedAccount? _cycleAccount(int direction) {
+  Future<SavedAccount?> _cycleAccount(int direction) async {
     if (_accounts.length < 2) return null;
+    if (!await _passGate(_lockAccountSwitching, 'Unlock to switch accounts')) {
+      return null;
+    }
     final currentIndex = _accounts.indexWhere((a) => a.id == _activeAccountId);
     final targetIndex = currentIndex == -1
         ? 0
@@ -886,17 +925,18 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Cycles to the next/previous saved account (by the order they were
   /// added) - used by the avatar's swipe-up/down quick-switch gesture.
-  /// Returns the account it's switching to (synchronously, before the
-  /// switch's own network verification completes) so the caller can show
-  /// immediate feedback, or null if there's fewer than 2 saved accounts.
-  SavedAccount? cycleToNextAccount() => _cycleAccount(1);
-  SavedAccount? cycleToPreviousAccount() => _cycleAccount(-1);
+  /// Returns the account it's switching to once any login-lock gate has
+  /// passed (the switch's own network verification is still fire-and-forget
+  /// after that, same as before), or null if there's fewer than 2 saved
+  /// accounts or the gate was not passed.
+  Future<SavedAccount?> cycleToNextAccount() => _cycleAccount(1);
+  Future<SavedAccount?> cycleToPreviousAccount() => _cycleAccount(-1);
 
   /// Removes a saved account entirely: its stored password, its
   /// namespaced prefs, and its entry in the saved-accounts list. If it was
   /// the active account, falls back to another saved account, or - if none
-  /// remain - performs a full logout (the only path that sets
-  /// [isLoggedIn] false).
+  /// remain - deactivates the session (the only path here that sets
+  /// [isLoggedIn] false; unlike [logout], there's nothing left to keep).
   Future<void> removeAccount(String accountId) async {
     final index = _accounts.indexWhere((a) => a.id == accountId);
     if (index == -1) return;
@@ -916,28 +956,45 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     }
 
     if (_accounts.isEmpty) {
-      _sessionGeneration++;
-      _activeAccountId = null;
-      await _accountStore.saveActiveAccountId(prefs, null);
-      _cacheRefreshTimer?.cancel();
-      _directoryCache.clear();
-      _clearActiveContent();
-      _isLoggedIn = false;
-      _serverUrl = '';
-      _username = '';
-      _password = '';
-      _applyAccountPrefs(prefs, null);
-      notifyListeners();
+      await _deactivateSession();
       return;
     }
 
     await _activateAccount(_accounts.first.id);
   }
 
-  /// Removes the active account. Kept as the app's one "Log Out" action -
-  /// with multiple accounts saved this falls back to another one instead
-  /// of ending the session, exactly like removing any other account would.
-  Future<void> logout() => removeAccount(_activeAccountId ?? '');
+  /// Clears the active session pointer and tears down its content, without
+  /// touching any saved account's own data - shared by [logout] (which
+  /// deliberately keeps the account around to resume later, no
+  /// re-authentication needed) and [removeAccount]'s "nothing left to fall
+  /// back to" branch (where the account's data has already been deleted by
+  /// the time this runs).
+  Future<void> _deactivateSession() async {
+    _sessionGeneration++;
+    _cacheRefreshTimer?.cancel();
+    _directoryCache.clear();
+    _clearActiveContent();
+    _isLoggedIn = false;
+    _serverUrl = '';
+    _username = '';
+    _password = '';
+    _activeAccountId = null;
+    final prefs = await _prefsFuture;
+    await _accountStore.saveActiveAccountId(prefs, null);
+    _applyAccountPrefs(prefs, null);
+    notifyListeners();
+  }
+
+  /// Ends the active session but keeps this account saved - unlike
+  /// [removeAccount], nothing is deleted (password, prefs, its entry in
+  /// [accounts] all remain), so it's available to resume with a single tap
+  /// from the login screen's saved-accounts list, no Login Flow v2 needed.
+  /// Always lands on the login screen even if other accounts are saved -
+  /// deliberately not the same as switching to one of them.
+  Future<void> logout() async {
+    if (_activeAccountId == null) return;
+    await _deactivateSession();
+  }
 
   Future<void> refreshData() async {
     if (!_isLoggedIn || _service == null) {
@@ -1145,7 +1202,14 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     );
   }
 
-  void toggleShowHiddenFiles() {
+  /// Only *enabling* hidden-files visibility is gated - hiding them again
+  /// never exposes anything, so that direction is always allowed instantly.
+  Future<void> toggleShowHiddenFiles() async {
+    if (!_showHiddenFiles) {
+      if (!await _passGate(_lockHiddenFiles, 'Unlock to show hidden files')) {
+        return;
+      }
+    }
     _showHiddenFiles = !_showHiddenFiles;
     notifyListeners();
     _persistAccountPref(
@@ -1154,7 +1218,12 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     );
   }
 
-  void toggleShowHiddenPhotos() {
+  Future<void> toggleShowHiddenPhotos() async {
+    if (!_showHiddenPhotos) {
+      if (!await _passGate(_lockHiddenFiles, 'Unlock to show hidden files')) {
+        return;
+      }
+    }
     _showHiddenPhotos = !_showHiddenPhotos;
     notifyListeners();
     _persistAccountPref(
@@ -1641,6 +1710,78 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _tapTabToScrollTop = value;
     notifyListeners();
     _prefsFuture.then((p) => p.setBool(_prefTapTabToScrollTop, value));
+  }
+
+  /// Confirms the device can do local auth and prompts once to enable login
+  /// lock. Returns false (leaving lock disabled) if the device has no
+  /// biometric/PIN capability or the user cancels/fails the confirmation.
+  Future<bool> setupLoginLock() async {
+    if (!await AppLockService.isDeviceSupported()) return false;
+    final confirmed = await AppLockService.authenticate(
+      'Confirm to turn on login lock',
+    );
+    if (!confirmed) return false;
+    _loginLockEnabled = true;
+    // Already just authenticated - don't immediately re-prompt behind it.
+    _isUnlocked = true;
+    notifyListeners();
+    _prefsFuture.then((p) => p.setBool(_prefLoginLockEnabled, true));
+    return true;
+  }
+
+  /// Turns login lock off, along with both of its sub-toggles (meaningless
+  /// once the base lock is gone). Requires a successful auth first, same as
+  /// turning it on - otherwise anyone with momentary access to an unlocked
+  /// phone could just switch it off.
+  Future<bool> disableLoginLock() async {
+    if (!_loginLockEnabled) return true;
+    final confirmed = await AppLockService.authenticate(
+      'Confirm to turn off login lock',
+    );
+    if (!confirmed) return false;
+    _loginLockEnabled = false;
+    _lockAccountSwitching = false;
+    _lockHiddenFiles = false;
+    _isUnlocked = false;
+    notifyListeners();
+    _prefsFuture.then((p) {
+      p.setBool(_prefLoginLockEnabled, false);
+      p.setBool(_prefLockAccountSwitching, false);
+      p.setBool(_prefLockHiddenFiles, false);
+    });
+    return true;
+  }
+
+  void setLockAccountSwitching(bool value) {
+    if (!_loginLockEnabled) return;
+    _lockAccountSwitching = value;
+    notifyListeners();
+    _prefsFuture.then((p) => p.setBool(_prefLockAccountSwitching, value));
+  }
+
+  void setLockHiddenFiles(bool value) {
+    if (!_loginLockEnabled) return;
+    _lockHiddenFiles = value;
+    notifyListeners();
+    _prefsFuture.then((p) => p.setBool(_prefLockHiddenFiles, value));
+  }
+
+  /// Called by the lock screen. Returns whether it actually unlocked.
+  Future<bool> attemptUnlock() async {
+    final success = await AppLockService.authenticate('Unlock Noo');
+    if (success) {
+      _isUnlocked = true;
+      notifyListeners();
+    }
+    return success;
+  }
+
+  /// Prompts for auth if [gate] is on and login lock is configured;
+  /// returns true immediately (no prompt) otherwise. Shared by the
+  /// account-switching and hidden-files gates below.
+  Future<bool> _passGate(bool gate, String reason) async {
+    if (!_loginLockEnabled || !gate) return true;
+    return AppLockService.authenticate(reason);
   }
 
   void setThemeMode(ThemeMode mode) {

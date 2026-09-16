@@ -55,6 +55,7 @@ dependencies:
   shared_preferences: ^2.5.5
   receive_sharing_intent: ^1.8.1
   marquee: ^2.3.0
+  local_auth: ^2.3.0
 
 dev_dependencies:
   flutter_test:
