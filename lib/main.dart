@@ -1,11 +1,14 @@
+import 'dart:async';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'models/app_tab.dart';
 import 'providers/server_provider.dart';
 import 'theme/app_theme.dart';
 import 'views/login_view.dart';
 import 'views/search_view.dart';
+import 'views/share_upload_view.dart';
 import 'widgets/app_tab_view_builder.dart';
 import 'widgets/floating_bottom_bar.dart';
 
@@ -92,6 +95,7 @@ class MainShellView extends StatefulWidget {
 class _MainShellViewState extends State<MainShellView> {
   late AppTab _currentTab;
   late final Map<AppTab, ScrollController> _scrollControllers;
+  StreamSubscription<List<SharedMediaFile>>? _shareSub;
 
   @override
   void initState() {
@@ -103,6 +107,32 @@ class _MainShellViewState extends State<MainShellView> {
     // session restore (which also has to hit the network) does, so by the
     // time this shell mounts `defaultTab` already reflects the saved value.
     _currentTab = context.read<ServerProvider>().defaultTab;
+
+    // Handles both a cold start via another app's "Share to..." sheet
+    // (getInitialMedia) and a share arriving while the app is already
+    // running (getMediaStream) - the plugin guarantees the stream doesn't
+    // re-emit whatever getInitialMedia already returned.
+    ReceiveSharingIntent.instance.getInitialMedia().then(_handleSharedFiles);
+    _shareSub = ReceiveSharingIntent.instance.getMediaStream().listen(
+      _handleSharedFiles,
+    );
+  }
+
+  void _handleSharedFiles(List<SharedMediaFile> files) {
+    final uploadable = files
+        .where(
+          (f) =>
+              f.type != SharedMediaType.text && f.type != SharedMediaType.url,
+        )
+        .toList();
+    if (uploadable.isEmpty) return;
+    ReceiveSharingIntent.instance.reset();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => ShareUploadView(files: uploadable)),
+      );
+    });
   }
 
   @override
@@ -110,6 +140,7 @@ class _MainShellViewState extends State<MainShellView> {
     for (final c in _scrollControllers.values) {
       c.dispose();
     }
+    _shareSub?.cancel();
     super.dispose();
   }
 

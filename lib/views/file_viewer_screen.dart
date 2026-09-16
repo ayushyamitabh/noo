@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
+import 'package:marquee/marquee.dart';
 import 'package:open_file/open_file.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -312,24 +313,43 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                   ),
                 ),
               ),
-            IgnorePointer(
-              ignoring: !_controlsVisible,
-              child: AnimatedOpacity(
-                opacity: _controlsVisible ? 1 : 0,
-                duration: const Duration(milliseconds: 200),
+            AnimatedSlide(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeInOutCubic,
+              offset: _controlsVisible ? Offset.zero : const Offset(0, -1.4),
+              child: IgnorePointer(
+                ignoring: !_controlsVisible,
                 child: SafeArea(
                   child: Padding(
-                    padding: const EdgeInsets.only(left: 20, top: 12),
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
                     child: FrostedGlassContainer(
                       opacity: provider.bottomBarOpacity,
                       blurSigma: provider.bottomBarBlur,
-                      child: SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: IconButton(
-                          icon: const Icon(Icons.arrow_back_rounded),
-                          color: colorScheme.onSurfaceVariant,
-                          onPressed: () => Navigator.pop(context),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 6,
+                        ),
+                        child: Row(
+                          children: [
+                            _ActionIconButton(
+                              icon: Icons.arrow_back_rounded,
+                              tooltip: 'Back',
+                              onTap: () => Navigator.pop(context),
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: _MarqueeTitle(
+                                text: _currentItem.name,
+                                style: Theme.of(context).textTheme.titleSmall
+                                    ?.copyWith(
+                                      color: colorScheme.onSurface,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                          ],
                         ),
                       ),
                     ),
@@ -525,8 +545,8 @@ class _ActionIconButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final fg = onTap == null
-        ? colorScheme.onSurfaceVariant.withValues(alpha: 0.4)
-        : (color ?? colorScheme.onSurfaceVariant);
+        ? colorScheme.onSurface.withValues(alpha: 0.4)
+        : (color ?? colorScheme.onSurface);
 
     return Tooltip(
       message: tooltip,
@@ -538,6 +558,53 @@ class _ActionIconButton extends StatelessWidget {
           child: Icon(icon, color: fg, size: 22),
         ),
       ),
+    );
+  }
+}
+
+/// The media viewer's title: a plain, single-line ellipsized [Text] for
+/// names that fit, or an auto-scrolling [Marquee] for names too long for
+/// the available width - measured once via [TextPainter] rather than
+/// always marqueeing, so a short filename just sits still like normal.
+class _MarqueeTitle extends StatelessWidget {
+  final String text;
+  final TextStyle? style;
+
+  const _MarqueeTitle({required this.text, required this.style});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final painter = TextPainter(
+          text: TextSpan(text: text, style: style),
+          maxLines: 1,
+          textDirection: Directionality.of(context),
+        )..layout(maxWidth: double.infinity);
+
+        if (painter.width <= constraints.maxWidth) {
+          return Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: style,
+          );
+        }
+
+        return SizedBox(
+          height: painter.height,
+          child: Marquee(
+            text: text,
+            style: style,
+            blankSpace: 48,
+            velocity: 30,
+            startPadding: 0,
+            pauseAfterRound: const Duration(seconds: 1),
+            fadingEdgeStartFraction: 0.1,
+            fadingEdgeEndFraction: 0.15,
+          ),
+        );
+      },
     );
   }
 }
@@ -770,7 +837,7 @@ class _VideoPreviewState extends State<_VideoPreview> {
               animation: controller,
               builder: (context, _) {
                 final colorScheme = Theme.of(context).colorScheme;
-                final fg = colorScheme.onSurfaceVariant;
+                final fg = colorScheme.onSurface;
                 // Same frosted-glass treatment (and user opacity/blur
                 // settings) as the back button and media action bar, so the
                 // transport controls match the rest of the app's chrome.
@@ -788,14 +855,14 @@ class _VideoPreviewState extends State<_VideoPreview> {
                       children: [
                         Row(
                           children: [
-                            IconButton(
-                              icon: Icon(
-                                controller.value.isPlaying
-                                    ? Icons.pause_rounded
-                                    : Icons.play_arrow_rounded,
-                                color: fg,
-                              ),
-                              onPressed: () => controller.value.isPlaying
+                            _ActionIconButton(
+                              icon: controller.value.isPlaying
+                                  ? Icons.pause_rounded
+                                  : Icons.play_arrow_rounded,
+                              tooltip: controller.value.isPlaying
+                                  ? 'Pause'
+                                  : 'Play',
+                              onTap: () => controller.value.isPlaying
                                   ? controller.pause()
                                   : controller.play(),
                             ),
@@ -806,14 +873,14 @@ class _VideoPreviewState extends State<_VideoPreview> {
                                 style: TextStyle(color: fg, fontSize: 13),
                               ),
                             ),
-                            IconButton(
-                              icon: Icon(
-                                controller.value.volume == 0
-                                    ? Icons.volume_off_rounded
-                                    : Icons.volume_up_rounded,
-                                color: fg,
-                              ),
-                              onPressed: () => controller.setVolume(
+                            _ActionIconButton(
+                              icon: controller.value.volume == 0
+                                  ? Icons.volume_off_rounded
+                                  : Icons.volume_up_rounded,
+                              tooltip: controller.value.volume == 0
+                                  ? 'Unmute'
+                                  : 'Mute',
+                              onTap: () => controller.setVolume(
                                 controller.value.volume == 0 ? 1 : 0,
                               ),
                             ),

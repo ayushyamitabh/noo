@@ -350,19 +350,21 @@ class _FilesViewState extends State<FilesView> {
               children: [
                 IconButton(
                   icon: Icon(
-                    provider.sortAscending
+                    provider.filesSortAscending
                         ? Icons.arrow_upward_rounded
                         : Icons.arrow_downward_rounded,
                     size: 20,
                   ),
                   visualDensity: VisualDensity.compact,
-                  tooltip: provider.sortAscending ? 'Ascending' : 'Descending',
-                  onPressed: provider.toggleSortOrder,
+                  tooltip: provider.filesSortAscending
+                      ? 'Ascending'
+                      : 'Descending',
+                  onPressed: provider.toggleFilesSortOrder,
                 ),
                 Expanded(
                   child: SortMenuButton(
-                    field: provider.sortField,
-                    onChanged: provider.setSortField,
+                    field: provider.filesSortField,
+                    onChanged: provider.setFilesSortField,
                   ),
                 ),
                 ToggleIconButton(

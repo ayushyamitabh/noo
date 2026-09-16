@@ -299,108 +299,115 @@ class _ShareSheetState extends State<ShareSheet> {
         .toList();
     final internalLink = internalLinkFor(provider.serverUrl, widget.item.id);
 
-    return ListView(
+    return Scrollbar(
       controller: widget.scrollController,
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-      children: [
-        Text(
-          widget.item.name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 16),
-        _sectionHeader('Internal shares'),
-        const SizedBox(height: 8),
-        TextField(
-          controller: _searchController,
-          decoration: InputDecoration(
-            hintText: 'Type names or teams',
-            prefixIcon: const Icon(Icons.search_rounded),
-            suffixIcon: _isSearching
-                ? const Padding(
-                    padding: EdgeInsets.all(14),
-                    child: SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  )
-                : null,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-            filled: true,
-            fillColor: colorScheme.surfaceContainerLow,
-          ),
-          onChanged: _search,
-        ),
-        for (final sharee in _searchResults)
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(
-              sharee.type == ShareeType.group
-                  ? Icons.groups_rounded
-                  : Icons.person_rounded,
+      child: ListView(
+        controller: widget.scrollController,
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        children: [
+          Text(
+            widget.item.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
             ),
-            title: Text(sharee.label),
-            subtitle: sharee.subtitle != null ? Text(sharee.subtitle!) : null,
-            onTap: () => _addSharee(sharee),
           ),
-        for (final share in userGroupShares) _shareRow(share),
-        if (_inherited.isNotEmpty)
-          ExpansionTile(
-            tilePadding: EdgeInsets.zero,
-            leading: const Icon(Icons.more_horiz_rounded),
-            title: Text('Others with access (${_inherited.length})'),
-            children: [
-              for (final share in _inherited)
-                _shareRow(share, removable: false),
-            ],
+          const SizedBox(height: 16),
+          _sectionHeader('Internal shares'),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: 'Type names or teams',
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: _isSearching
+                  ? const Padding(
+                      padding: EdgeInsets.all(14),
+                      child: SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
+                  : null,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              filled: true,
+              fillColor: colorScheme.surfaceContainerLow,
+            ),
+            onChanged: _search,
           ),
-        if (internalLink != null)
+          for (final sharee in _searchResults)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                sharee.type == ShareeType.group
+                    ? Icons.groups_rounded
+                    : Icons.person_rounded,
+              ),
+              title: Text(sharee.label),
+              subtitle: sharee.subtitle != null ? Text(sharee.subtitle!) : null,
+              onTap: () => _addSharee(sharee),
+            ),
+          for (final share in userGroupShares) _shareRow(share),
+          if (_inherited.isNotEmpty)
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              leading: const Icon(Icons.more_horiz_rounded),
+              title: Text('Others with access (${_inherited.length})'),
+              children: [
+                for (final share in _inherited)
+                  _shareRow(share, removable: false),
+              ],
+            ),
+          if (internalLink != null)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.link_rounded),
+              title: const Text('Internal link'),
+              subtitle: const Text('For people who already have access'),
+              trailing: IconButton(
+                icon: const Icon(Icons.copy_rounded),
+                tooltip: 'Copy link',
+                onPressed: () => _copy(internalLink, 'internal link'),
+              ),
+            ),
+          const SizedBox(height: 20),
+          const Divider(),
+          const SizedBox(height: 12),
+          _sectionHeader('External shares'),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _emailController,
+            keyboardType: TextInputType.emailAddress,
+            decoration: InputDecoration(
+              hintText: 'Type an email',
+              prefixIcon: const Icon(Icons.email_outlined),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              filled: true,
+              fillColor: colorScheme.surfaceContainerLow,
+            ),
+            onSubmitted: (_) => _addEmailShare(),
+          ),
+          for (final share in emailShares) _shareRow(share),
+          const SizedBox(height: 8),
+          for (final share in publicLinkShares) _shareRow(share, copyUrl: true),
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.link_rounded),
-            title: const Text('Internal link'),
-            subtitle: const Text('For people who already have access'),
+            title: const Text('Create public link'),
             trailing: IconButton(
-              icon: const Icon(Icons.copy_rounded),
-              tooltip: 'Copy link',
-              onPressed: () => _copy(internalLink, 'internal link'),
+              icon: const Icon(Icons.add_rounded),
+              tooltip: 'Create public link',
+              onPressed: _createPublicLink,
             ),
           ),
-        const SizedBox(height: 20),
-        const Divider(),
-        const SizedBox(height: 12),
-        _sectionHeader('External shares'),
-        const SizedBox(height: 8),
-        TextField(
-          controller: _emailController,
-          keyboardType: TextInputType.emailAddress,
-          decoration: InputDecoration(
-            hintText: 'Type an email',
-            prefixIcon: const Icon(Icons.email_outlined),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-            filled: true,
-            fillColor: colorScheme.surfaceContainerLow,
-          ),
-          onSubmitted: (_) => _addEmailShare(),
-        ),
-        for (final share in emailShares) _shareRow(share),
-        const SizedBox(height: 8),
-        for (final share in publicLinkShares) _shareRow(share, copyUrl: true),
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.link_rounded),
-          title: const Text('Create public link'),
-          trailing: IconButton(
-            icon: const Icon(Icons.add_rounded),
-            tooltip: 'Create public link',
-            onPressed: _createPublicLink,
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

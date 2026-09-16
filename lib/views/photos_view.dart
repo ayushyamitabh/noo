@@ -116,19 +116,21 @@ class _PhotosViewState extends State<PhotosView> {
           children: [
             IconButton(
               icon: Icon(
-                provider.sortAscending
+                provider.photosSortAscending
                     ? Icons.arrow_upward_rounded
                     : Icons.arrow_downward_rounded,
                 size: 20,
               ),
               visualDensity: VisualDensity.compact,
-              tooltip: provider.sortAscending ? 'Ascending' : 'Descending',
-              onPressed: provider.toggleSortOrder,
+              tooltip: provider.photosSortAscending
+                  ? 'Ascending'
+                  : 'Descending',
+              onPressed: provider.togglePhotosSortOrder,
             ),
             Expanded(
               child: SortMenuButton(
-                field: provider.sortField,
-                onChanged: provider.setSortField,
+                field: provider.photosSortField,
+                onChanged: provider.setPhotosSortField,
               ),
             ),
             ToggleIconButton(

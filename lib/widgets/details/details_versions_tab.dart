@@ -118,43 +118,45 @@ class _DetailsVersionsTabState extends State<DetailsVersionsTab> {
       ..._versions,
     ];
 
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-      itemCount: items.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 4),
-      itemBuilder: (context, index) {
-        final version = items[index];
-        return ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: CircleAvatar(
-            backgroundColor: colorScheme.primaryContainer,
-            child: Icon(
-              Icons.history_rounded,
-              color: colorScheme.onPrimaryContainer,
-              size: 20,
+    return Scrollbar(
+      child: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        itemCount: items.length,
+        separatorBuilder: (context, index) => const SizedBox(height: 4),
+        itemBuilder: (context, index) {
+          final version = items[index];
+          return ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: CircleAvatar(
+              backgroundColor: colorScheme.primaryContainer,
+              child: Icon(
+                Icons.history_rounded,
+                color: colorScheme.onPrimaryContainer,
+                size: 20,
+              ),
             ),
-          ),
-          title: Text(
-            version.isCurrent
-                ? 'Current version'
-                : DateFormat.yMMMd().add_jm().format(version.timestamp),
-          ),
-          subtitle: Text(
-            '${DateFormat.yMMMd().format(version.timestamp)} • ${formatBytes(version.size)}',
-          ),
-          trailing: version.isCurrent
-              ? null
-              : PopupMenuButton<String>(
-                  onSelected: (value) => value == 'restore'
-                      ? _restore(version)
-                      : _download(version),
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(value: 'restore', child: Text('Restore')),
-                    PopupMenuItem(value: 'download', child: Text('Download')),
-                  ],
-                ),
-        );
-      },
+            title: Text(
+              version.isCurrent
+                  ? 'Current version'
+                  : DateFormat.yMMMd().add_jm().format(version.timestamp),
+            ),
+            subtitle: Text(
+              '${DateFormat.yMMMd().format(version.timestamp)} • ${formatBytes(version.size)}',
+            ),
+            trailing: version.isCurrent
+                ? null
+                : PopupMenuButton<String>(
+                    onSelected: (value) => value == 'restore'
+                        ? _restore(version)
+                        : _download(version),
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(value: 'restore', child: Text('Restore')),
+                      PopupMenuItem(value: 'download', child: Text('Download')),
+                    ],
+                  ),
+          );
+        },
+      ),
     );
   }
 }

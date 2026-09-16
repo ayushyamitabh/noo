@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
@@ -76,6 +77,7 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _prefShowHiddenPhotos = 'ui_show_hidden_photos';
   static const _prefSortField = 'ui_sort_field';
   static const _prefSortAscending = 'ui_sort_ascending';
+  static const _prefFolderSort = 'ui_folder_sort';
   static const _prefTabOrder = 'ui_tab_order';
   static const _prefHiddenTabs = 'ui_hidden_tabs';
   static const _prefDefaultTab = 'ui_default_tab';
@@ -130,8 +132,17 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
   StorageScope _storageScope = StorageScope.cloud;
   bool _showHiddenFiles = false;
   bool _showHiddenPhotos = false;
-  FileSortField _sortField = FileSortField.name;
-  bool _sortAscending = true;
+  // Photos tab sort - a single global setting (Photos has no folder concept,
+  // it spans the whole account).
+  FileSortField _photosSortField = FileSortField.name;
+  bool _photosSortAscending = true;
+
+  // Files tab sort - unlinked from Photos and remembered per folder path
+  // (like Windows Explorer's per-folder view settings), so switching
+  // folders can restore a different sort than the parent. Falls back to
+  // name/ascending for any folder with no saved entry.
+  final Map<String, FileSortField> _folderSortField = {};
+  final Map<String, bool> _folderSortAscending = {};
 
   // Bottom nav tab configuration
   List<AppTab> _tabOrder = AppTab.values.toList();
@@ -248,8 +259,12 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
   StorageScope get storageScope => _storageScope;
   bool get showHiddenFiles => _showHiddenFiles;
   bool get showHiddenPhotos => _showHiddenPhotos;
-  FileSortField get sortField => _sortField;
-  bool get sortAscending => _sortAscending;
+  FileSortField get photosSortField => _photosSortField;
+  bool get photosSortAscending => _photosSortAscending;
+  FileSortField get filesSortField =>
+      _folderSortField[_currentFolderPath] ?? FileSortField.name;
+  bool get filesSortAscending =>
+      _folderSortAscending[_currentFolderPath] ?? true;
   CachePolicy get cachePolicy => _cachePolicy;
   int get cacheIntervalMinutes => _cacheIntervalMinutes;
 
@@ -270,8 +285,8 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// and trigger downloads/previews directly.
   NextcloudService? get service => _service;
 
-  int _compareItems(NextcloudItem a, NextcloudItem b) {
-    switch (_sortField) {
+  int _compareItems(NextcloudItem a, NextcloudItem b, FileSortField field) {
+    switch (field) {
       case FileSortField.name:
         return a.name.toLowerCase().compareTo(b.name.toLowerCase());
       case FileSortField.dateCreated:
@@ -324,11 +339,12 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
       showHidden: _showHiddenFiles,
     );
 
+    final field = filesSortField;
     final folders = filtered.where((i) => i.isFolder).toList()
-      ..sort(_compareItems);
+      ..sort((a, b) => _compareItems(a, b, field));
     final files = filtered.where((i) => !i.isFolder).toList()
-      ..sort(_compareItems);
-    return _sortAscending
+      ..sort((a, b) => _compareItems(a, b, field));
+    return filesSortAscending
         ? [...folders, ...files]
         : [...folders.reversed, ...files.reversed];
   }
@@ -341,8 +357,8 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
       media,
       showFavoritesOnly: _showFavoritesOnlyPhotos,
       showHidden: _showHiddenPhotos,
-    )..sort(_compareItems);
-    return _sortAscending ? filtered : filtered.reversed.toList();
+    )..sort((a, b) => _compareItems(a, b, _photosSortField));
+    return _photosSortAscending ? filtered : filtered.reversed.toList();
   }
 
   bool get isMediaLoading => _isMediaLoading;
@@ -428,12 +444,34 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
           prefs.getBool(_prefShowHiddenPhotos) ?? _showHiddenPhotos;
       final sortFieldName = prefs.getString(_prefSortField);
       if (sortFieldName != null) {
-        _sortField = FileSortField.values.firstWhere(
+        _photosSortField = FileSortField.values.firstWhere(
           (f) => f.name == sortFieldName,
           orElse: () => FileSortField.name,
         );
       }
-      _sortAscending = prefs.getBool(_prefSortAscending) ?? _sortAscending;
+      _photosSortAscending =
+          prefs.getBool(_prefSortAscending) ?? _photosSortAscending;
+
+      final folderSortJson = prefs.getString(_prefFolderSort);
+      if (folderSortJson != null) {
+        try {
+          final decoded = jsonDecode(folderSortJson) as Map<String, dynamic>;
+          for (final entry in decoded.entries) {
+            final value = entry.value as Map<String, dynamic>;
+            final fieldName = value['field'] as String?;
+            if (fieldName != null) {
+              _folderSortField[entry.key] = FileSortField.values.firstWhere(
+                (f) => f.name == fieldName,
+                orElse: () => FileSortField.name,
+              );
+            }
+            final ascending = value['ascending'] as bool?;
+            if (ascending != null) _folderSortAscending[entry.key] = ascending;
+          }
+        } catch (e) {
+          debugPrint('[ServerProvider] Folder sort restore failed: $e');
+        }
+      }
 
       final savedOrderNames = prefs.getStringList(_prefTabOrder);
       if (savedOrderNames != null) {
@@ -879,17 +917,48 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     );
   }
 
-  void setSortField(FileSortField field) {
-    if (_sortField == field) return;
-    _sortField = field;
+  void setPhotosSortField(FileSortField field) {
+    if (_photosSortField == field) return;
+    _photosSortField = field;
     notifyListeners();
     _prefsFuture.then((p) => p.setString(_prefSortField, field.name));
   }
 
-  void toggleSortOrder() {
-    _sortAscending = !_sortAscending;
+  void togglePhotosSortOrder() {
+    _photosSortAscending = !_photosSortAscending;
     notifyListeners();
-    _prefsFuture.then((p) => p.setBool(_prefSortAscending, _sortAscending));
+    _prefsFuture.then(
+      (p) => p.setBool(_prefSortAscending, _photosSortAscending),
+    );
+  }
+
+  void _persistFolderSort() {
+    final combined = <String, dynamic>{};
+    for (final path in {
+      ..._folderSortField.keys,
+      ..._folderSortAscending.keys,
+    }) {
+      combined[path] = {
+        'field': _folderSortField[path]?.name,
+        'ascending': _folderSortAscending[path],
+      };
+    }
+    _prefsFuture.then(
+      (p) => p.setString(_prefFolderSort, jsonEncode(combined)),
+    );
+  }
+
+  void setFilesSortField(FileSortField field) {
+    if (filesSortField == field) return;
+    _folderSortField[_currentFolderPath] = field;
+    notifyListeners();
+    _persistFolderSort();
+  }
+
+  void toggleFilesSortOrder() {
+    _folderSortAscending[_currentFolderPath] = !filesSortAscending;
+    notifyListeners();
+    _persistFolderSort();
   }
 
   void setTabOrder(List<AppTab> order) {

@@ -18,6 +18,7 @@ class SearchView extends StatefulWidget {
 class _SearchViewState extends State<SearchView> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
+  final _resultsScrollController = ScrollController();
   Timer? _debounce;
 
   List<NextcloudItem> _results = [];
@@ -30,6 +31,7 @@ class _SearchViewState extends State<SearchView> {
     _debounce?.cancel();
     _controller.dispose();
     _focusNode.dispose();
+    _resultsScrollController.dispose();
     super.dispose();
   }
 
@@ -185,24 +187,32 @@ class _SearchViewState extends State<SearchView> {
         ),
       );
     }
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      itemCount: _results.length,
-      itemBuilder: (context, index) {
-        final item = _results[index];
-        return ListTile(
-          leading: Icon(_iconFor(item.type), color: colorScheme.primary),
-          title: Text(item.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-          subtitle: Text(
-            item.isFolder
-                ? item.path
-                : DateFormat.yMMMd().format(item.lastModified),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          onTap: () => _openResult(item),
-        );
-      },
+    return Scrollbar(
+      controller: _resultsScrollController,
+      child: ListView.builder(
+        controller: _resultsScrollController,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        itemCount: _results.length,
+        itemBuilder: (context, index) {
+          final item = _results[index];
+          return ListTile(
+            leading: Icon(_iconFor(item.type), color: colorScheme.primary),
+            title: Text(
+              item.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Text(
+              item.isFolder
+                  ? item.path
+                  : DateFormat.yMMMd().format(item.lastModified),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            onTap: () => _openResult(item),
+          );
+        },
+      ),
     );
   }
 }

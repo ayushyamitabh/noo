@@ -161,47 +161,50 @@ class _SyncedHeaderScaffoldState extends State<SyncedHeaderScaffold> {
         children: [
           NotificationListener<ScrollNotification>(
             onNotification: _handleScrollNotification,
-            child: CustomScrollView(
+            child: Scrollbar(
               controller: widget.scrollController,
-              // Plain BouncingScrollPhysics only bounces/overscrolls reliably
-              // once content already fills the viewport — with too little
-              // content (e.g. a single item) the pull gesture can fail to
-              // register at all. AlwaysScrollableScrollPhysics keeps the pull
-              // (and therefore the sync header) working regardless of content
-              // length.
-              physics: const AlwaysScrollableScrollPhysics(
-                parent: BouncingScrollPhysics(),
+              child: CustomScrollView(
+                controller: widget.scrollController,
+                // Plain BouncingScrollPhysics only bounces/overscrolls
+                // reliably once content already fills the viewport — with
+                // too little content (e.g. a single item) the pull gesture
+                // can fail to register at all. AlwaysScrollableScrollPhysics
+                // keeps the pull (and therefore the sync header) working
+                // regardless of content length.
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics(),
+                ),
+                slivers: [
+                  SliverAppBar(
+                    pinned: true,
+                    stretch: true,
+                    expandedHeight: _headerLocked ? 190 : kToolbarHeight,
+                    collapsedHeight: kToolbarHeight,
+                    backgroundColor: colorScheme.surfaceContainer,
+                    surfaceTintColor: colorScheme.surfaceContainer,
+                    scrolledUnderElevation: 0,
+                    automaticallyImplyLeading: false,
+                    leadingWidth: _headerLocked ? 56 : 160,
+                    leading: leadingWidget,
+                    actions: widget.actions,
+                    flexibleSpace: FlexibleSpaceBar(
+                      background: _SyncedStretchPanel(
+                        provider: provider,
+                        forceVisible: _headerLocked,
+                      ),
+                    ),
+                  ),
+                  DecoratedSliver(
+                    decoration: BoxDecoration(
+                      color: colorScheme.surface,
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(28),
+                      ),
+                    ),
+                    sliver: SliverMainAxisGroup(slivers: widget.contentSlivers),
+                  ),
+                ],
               ),
-              slivers: [
-                SliverAppBar(
-                  pinned: true,
-                  stretch: true,
-                  expandedHeight: _headerLocked ? 190 : kToolbarHeight,
-                  collapsedHeight: kToolbarHeight,
-                  backgroundColor: colorScheme.surfaceContainer,
-                  surfaceTintColor: colorScheme.surfaceContainer,
-                  scrolledUnderElevation: 0,
-                  automaticallyImplyLeading: false,
-                  leadingWidth: _headerLocked ? 56 : 160,
-                  leading: leadingWidget,
-                  actions: widget.actions,
-                  flexibleSpace: FlexibleSpaceBar(
-                    background: _SyncedStretchPanel(
-                      provider: provider,
-                      forceVisible: _headerLocked,
-                    ),
-                  ),
-                ),
-                DecoratedSliver(
-                  decoration: BoxDecoration(
-                    color: colorScheme.surface,
-                    borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(28),
-                    ),
-                  ),
-                  sliver: SliverMainAxisGroup(slivers: widget.contentSlivers),
-                ),
-              ],
             ),
           ),
           // The classic Material pull-to-refresh "bubble" — a floating

@@ -35,398 +35,400 @@ class AccountView extends StatelessWidget {
         ],
       ),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-          physics: const BouncingScrollPhysics(),
-          children: [
-            Text(
-              'Connected to ${provider.serverUrl}',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // User Profile & Storage Card
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: colorScheme.primaryContainer.withValues(alpha: 0.4),
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(
-                  color: colorScheme.primary.withValues(alpha: 0.2),
+        child: Scrollbar(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+            physics: const BouncingScrollPhysics(),
+            children: [
+              Text(
+                'Connected to ${provider.serverUrl}',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
                 ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 28,
-                        backgroundColor: colorScheme.primary,
-                        child: Text(
-                          (quota?.userName ?? provider.username)
-                              .substring(0, 1)
-                              .toUpperCase(),
-                          style: theme.textTheme.headlineSmall?.copyWith(
-                            color: colorScheme.onPrimary,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              quota?.userName ?? provider.username,
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              quota?.email ?? provider.username,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: provider.isLoggedIn
-                              ? Colors.green.withValues(alpha: 0.2)
-                              : Colors.red.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          provider.isLoggedIn ? 'ONLINE' : 'OFFLINE',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: provider.isLoggedIn
-                                ? Colors.green.shade800
-                                : Colors.red.shade800,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  const Divider(height: 1),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Storage Quota',
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Text(
-                        quota != null
-                            ? (quota.totalBytes > 0
-                                  ? '${_formatBytes(quota.usedBytes)} of ${_formatBytes(quota.totalBytes)}'
-                                  : '${_formatBytes(quota.usedBytes)} (Unlimited)')
-                            : 'Live Server Storage',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: LinearProgressIndicator(
-                      value: quota != null && quota.totalBytes > 0
-                          ? quota.usagePercentage
-                          : 0.1,
-                      minHeight: 10,
-                      backgroundColor: colorScheme.surfaceContainerHighest,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        colorScheme.primary,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    quota != null
-                        ? (quota.totalBytes > 0
-                              ? '${(quota.usagePercentage * 100).toStringAsFixed(1)}% used'
-                              : 'Unlimited Storage Plan')
-                        : 'WebDAV connection active',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
+              const SizedBox(height: 20),
 
-            // Server Credentials Section
-            Text(
-              'Server Connection Info',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Card(
-              child: Column(
-                children: [
-                  ListTile(
-                    leading: const Icon(Icons.dns_rounded),
-                    title: const Text('Nextcloud Host'),
-                    subtitle: Text(provider.serverUrl),
+              // User Profile & Storage Card
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: colorScheme.primaryContainer.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(
+                    color: colorScheme.primary.withValues(alpha: 0.2),
                   ),
-                  const Divider(height: 1, indent: 16, endIndent: 16),
-                  ListTile(
-                    leading: const Icon(Icons.person_rounded),
-                    title: const Text('Logged In User'),
-                    subtitle: Text(provider.username),
-                  ),
-                  const Divider(height: 1, indent: 16, endIndent: 16),
-                  ListTile(
-                    leading: const Icon(Icons.refresh_rounded),
-                    title: const Text('Refresh WebDAV Cache'),
-                    onTap: () async {
-                      await provider.refreshData();
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Refreshed WebDAV directory data'),
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                      }
-                    },
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Material You Design Settings
-            Text(
-              'Material You Aesthetics',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Accent Color',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      provider.useDynamicColor
-                          ? 'Matching your wallpaper'
-                          : 'Custom color',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
-                        _AccentSwatch(
-                          isSelected: provider.useDynamicColor,
-                          onTap: () => provider.setUseDynamicColor(true),
-                          borderColor: colorScheme.onSurface,
-                          background: colorScheme.surfaceContainerHighest,
-                          child: Icon(
-                            Icons.wallpaper_rounded,
-                            color: colorScheme.onSurfaceVariant,
-                            size: 20,
+                        CircleAvatar(
+                          radius: 28,
+                          backgroundColor: colorScheme.primary,
+                          child: Text(
+                            (quota?.userName ?? provider.username)
+                                .substring(0, 1)
+                                .toUpperCase(),
+                            style: theme.textTheme.headlineSmall?.copyWith(
+                              color: colorScheme.onPrimary,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
-                        ...AppTheme.seedColors.map((color) {
-                          final isSelected =
-                              !provider.useDynamicColor &&
-                              provider.seedColor == color;
-                          return _AccentSwatch(
-                            isSelected: isSelected,
-                            onTap: () => provider.setSeedColor(color),
-                            borderColor: colorScheme.onSurface,
-                            background: color,
-                            child: isSelected
-                                ? const Icon(
-                                    Icons.check_rounded,
-                                    color: Colors.white,
-                                    size: 20,
-                                  )
-                                : null,
-                          );
-                        }),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                quota?.userName ?? provider.username,
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                quota?.email ?? provider.username,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: provider.isLoggedIn
+                                ? Colors.green.withValues(alpha: 0.2)
+                                : Colors.red.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            provider.isLoggedIn ? 'ONLINE' : 'OFFLINE',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: provider.isLoggedIn
+                                  ? Colors.green.shade800
+                                  : Colors.red.shade800,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 20),
                     const Divider(height: 1),
                     const SizedBox(height: 16),
-                    Text(
-                      'Theme Mode',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Storage Quota',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          quota != null
+                              ? (quota.totalBytes > 0
+                                    ? '${_formatBytes(quota.usedBytes)} of ${_formatBytes(quota.totalBytes)}'
+                                    : '${_formatBytes(quota.usedBytes)} (Unlimited)')
+                              : 'Live Server Storage',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: SegmentedButton<ThemeMode>(
-                        segments: const [
-                          ButtonSegment(
-                            value: ThemeMode.system,
-                            icon: Icon(Icons.brightness_auto_rounded),
-                            label: Text('System'),
-                          ),
-                          ButtonSegment(
-                            value: ThemeMode.light,
-                            icon: Icon(Icons.light_mode_rounded),
-                            label: Text('Light'),
-                          ),
-                          ButtonSegment(
-                            value: ThemeMode.dark,
-                            icon: Icon(Icons.dark_mode_rounded),
-                            label: Text('Dark'),
-                          ),
-                        ],
-                        selected: {provider.themeMode},
-                        onSelectionChanged: (set) =>
-                            provider.setThemeMode(set.first),
+                    const SizedBox(height: 10),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: LinearProgressIndicator(
+                        value: quota != null && quota.totalBytes > 0
+                            ? quota.usagePercentage
+                            : 0.1,
+                        minHeight: 10,
+                        backgroundColor: colorScheme.surfaceContainerHighest,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          colorScheme.primary,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 8),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('AMOLED Black'),
-                      subtitle: const Text(
-                        'Use pure black backgrounds in dark mode',
+                    Text(
+                      quota != null
+                          ? (quota.totalBytes > 0
+                                ? '${(quota.usagePercentage * 100).toStringAsFixed(1)}% used'
+                                : 'Unlimited Storage Plan')
+                          : 'WebDAV connection active',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                        fontSize: 11,
                       ),
-                      value: provider.amoledDark,
-                      onChanged: provider.setAmoledDark,
                     ),
                   ],
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
+              const SizedBox(height: 24),
 
-            // UI Settings
-            Text(
-              'UI',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 10),
-            const _BottomBarAppearanceCard(),
-            const SizedBox(height: 12),
-            Card(
-              child: SwitchListTile(
-                title: const Text('Tap Tab to Scroll to Top'),
-                subtitle: const Text(
-                  'Tapping the current bottom bar tab scrolls its list back to the top',
+              // Server Credentials Section
+              Text(
+                'Server Connection Info',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
                 ),
-                value: provider.tapTabToScrollTop,
-                onChanged: provider.setTapTabToScrollTop,
               ),
-            ),
-            const SizedBox(height: 24),
+              const SizedBox(height: 10),
+              Card(
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.dns_rounded),
+                      title: const Text('Nextcloud Host'),
+                      subtitle: Text(provider.serverUrl),
+                    ),
+                    const Divider(height: 1, indent: 16, endIndent: 16),
+                    ListTile(
+                      leading: const Icon(Icons.person_rounded),
+                      title: const Text('Logged In User'),
+                      subtitle: Text(provider.username),
+                    ),
+                    const Divider(height: 1, indent: 16, endIndent: 16),
+                    ListTile(
+                      leading: const Icon(Icons.refresh_rounded),
+                      title: const Text('Refresh WebDAV Cache'),
+                      onTap: () async {
+                        await provider.refreshData();
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Refreshed WebDAV directory data'),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
 
-            // Bottom Nav Tabs
-            Text(
-              'Bottom Bar Tabs',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
+              // Material You Design Settings
+              Text(
+                'Material You Aesthetics',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Drag to reorder, tap the star to set the default, toggle to show or hide',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
+              const SizedBox(height: 10),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Accent Color',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        provider.useDynamicColor
+                            ? 'Matching your wallpaper'
+                            : 'Custom color',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          _AccentSwatch(
+                            isSelected: provider.useDynamicColor,
+                            onTap: () => provider.setUseDynamicColor(true),
+                            borderColor: colorScheme.onSurface,
+                            background: colorScheme.surfaceContainerHighest,
+                            child: Icon(
+                              Icons.wallpaper_rounded,
+                              color: colorScheme.onSurfaceVariant,
+                              size: 20,
+                            ),
+                          ),
+                          ...AppTheme.seedColors.map((color) {
+                            final isSelected =
+                                !provider.useDynamicColor &&
+                                provider.seedColor == color;
+                            return _AccentSwatch(
+                              isSelected: isSelected,
+                              onTap: () => provider.setSeedColor(color),
+                              borderColor: colorScheme.onSurface,
+                              background: color,
+                              child: isSelected
+                                  ? const Icon(
+                                      Icons.check_rounded,
+                                      color: Colors.white,
+                                      size: 20,
+                                    )
+                                  : null,
+                            );
+                          }),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      const Divider(height: 1),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Theme Mode',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: SegmentedButton<ThemeMode>(
+                          segments: const [
+                            ButtonSegment(
+                              value: ThemeMode.system,
+                              icon: Icon(Icons.brightness_auto_rounded),
+                              label: Text('System'),
+                            ),
+                            ButtonSegment(
+                              value: ThemeMode.light,
+                              icon: Icon(Icons.light_mode_rounded),
+                              label: Text('Light'),
+                            ),
+                            ButtonSegment(
+                              value: ThemeMode.dark,
+                              icon: Icon(Icons.dark_mode_rounded),
+                              label: Text('Dark'),
+                            ),
+                          ],
+                          selected: {provider.themeMode},
+                          onSelectionChanged: (set) =>
+                              provider.setThemeMode(set.first),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('AMOLED Black'),
+                        subtitle: const Text(
+                          'Use pure black backgrounds in dark mode',
+                        ),
+                        value: provider.amoledDark,
+                        onChanged: provider.setAmoledDark,
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(height: 10),
-            const _TabSettingsCard(),
-            const SizedBox(height: 24),
+              const SizedBox(height: 24),
 
-            // Swipe Actions
-            Text(
-              'Files Swipe Actions',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
+              // UI Settings
+              Text(
+                'UI',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Choose what swiping a file left or right does in list view',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
+              const SizedBox(height: 10),
+              const _BottomBarAppearanceCard(),
+              const SizedBox(height: 12),
+              Card(
+                child: SwitchListTile(
+                  title: const Text('Tap Tab to Scroll to Top'),
+                  subtitle: const Text(
+                    'Tapping the current bottom bar tab scrolls its list back to the top',
+                  ),
+                  value: provider.tapTabToScrollTop,
+                  onChanged: provider.setTapTabToScrollTop,
+                ),
               ),
-            ),
-            const SizedBox(height: 10),
-            const _SwipeActionsCard(),
-            const SizedBox(height: 24),
+              const SizedBox(height: 24),
 
-            // Media Player
-            Text(
-              'Media Player',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
+              // Bottom Nav Tabs
+              Text(
+                'Bottom Bar Tabs',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Choose the seek bar style used when playing videos',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
+              const SizedBox(height: 4),
+              Text(
+                'Drag to reorder, tap the star to set the default, toggle to show or hide',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
               ),
-            ),
-            const SizedBox(height: 10),
-            const _MediaPlayerCard(),
-            const SizedBox(height: 24),
+              const SizedBox(height: 10),
+              const _TabSettingsCard(),
+              const SizedBox(height: 24),
 
-            // Files Cache
-            Text(
-              'Files Cache',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
+              // Swipe Actions
+              Text(
+                'Files Swipe Actions',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Reuse a folder\'s listing instead of refetching it on every visit',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
+              const SizedBox(height: 4),
+              Text(
+                'Choose what swiping a file left or right does in list view',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
               ),
-            ),
-            const SizedBox(height: 10),
-            const _CacheSettingsCard(),
-          ],
+              const SizedBox(height: 10),
+              const _SwipeActionsCard(),
+              const SizedBox(height: 24),
+
+              // Media Player
+              Text(
+                'Media Player',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Choose the seek bar style used when playing videos',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 10),
+              const _MediaPlayerCard(),
+              const SizedBox(height: 24),
+
+              // Files Cache
+              Text(
+                'Files Cache',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Reuse a folder\'s listing instead of refetching it on every visit',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 10),
+              const _CacheSettingsCard(),
+            ],
+          ),
         ),
       ),
     );
