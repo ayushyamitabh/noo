@@ -13,6 +13,7 @@ import '../models/selection_action.dart';
 import '../providers/server_provider.dart';
 import '../widgets/breadcrumbs.dart';
 import '../widgets/details/details_sheet.dart';
+import '../widgets/item_icon.dart';
 import '../widgets/more_tabs_button.dart';
 import '../widgets/profile_avatar_button.dart';
 import '../widgets/segmented_icon_toggle.dart';
@@ -31,136 +32,6 @@ class FilesView extends StatefulWidget {
 
   @override
   State<FilesView> createState() => _FilesViewState();
-}
-
-IconData _getItemIcon(NextcloudItemType type) {
-  switch (type) {
-    case NextcloudItemType.folder:
-      return Icons.folder_rounded;
-    case NextcloudItemType.image:
-      return Icons.image_rounded;
-    case NextcloudItemType.video:
-      return Icons.movie_rounded;
-    case NextcloudItemType.audio:
-      return Icons.audiotrack_rounded;
-    case NextcloudItemType.document:
-      return Icons.description_rounded;
-    case NextcloudItemType.archive:
-      return Icons.folder_zip_rounded;
-    case NextcloudItemType.file:
-      return Icons.insert_drive_file_rounded;
-  }
-}
-
-Color _getIconColor(BuildContext context, NextcloudItemType type) {
-  final colorScheme = Theme.of(context).colorScheme;
-  switch (type) {
-    case NextcloudItemType.folder:
-      return colorScheme.primary;
-    case NextcloudItemType.image:
-      return Colors.amber.shade700;
-    case NextcloudItemType.video:
-      return Colors.deepOrange.shade600;
-    case NextcloudItemType.audio:
-      return Colors.purple.shade600;
-    case NextcloudItemType.document:
-      return Colors.blue.shade700;
-    case NextcloudItemType.archive:
-      return Colors.teal.shade700;
-    case NextcloudItemType.file:
-      return colorScheme.outline;
-  }
-}
-
-/// A file/folder's icon badge — for images and videos this shows an actual
-/// thumbnail (falling back to the plain icon on error or if there's no
-/// preview URL yet), matching the real-content treatment already used in
-/// the Photos tab.
-class _ItemThumbnail extends StatelessWidget {
-  final NextcloudItem item;
-  final ServerProvider provider;
-  final double size;
-  final double borderRadius;
-  final double iconSize;
-
-  const _ItemThumbnail({
-    required this.item,
-    required this.provider,
-    required this.size,
-    required this.borderRadius,
-    required this.iconSize,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final iconColor = _getIconColor(context, item.type);
-    final isMedia =
-        item.type == NextcloudItemType.image ||
-        item.type == NextcloudItemType.video;
-    // Decode straight to the size this thumbnail is actually painted at —
-    // the server hands back a 500x500 preview regardless, and decoding that
-    // in full for a ~40dp tile (times however many are on screen while
-    // scrolling) is a real source of jank.
-    final cachePixels = (size * MediaQuery.of(context).devicePixelRatio)
-        .round();
-
-    return Container(
-      width: size,
-      height: size,
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: iconColor.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(borderRadius),
-      ),
-      child: isMedia && item.previewUrl != null
-          ? Stack(
-              fit: StackFit.expand,
-              children: [
-                Image.network(
-                  item.previewUrl!,
-                  headers: provider.service?.authHeaders,
-                  fit: BoxFit.cover,
-                  cacheWidth: cachePixels,
-                  cacheHeight: cachePixels,
-                  filterQuality: FilterQuality.low,
-                  gaplessPlayback: true,
-                  loadingBuilder: (context, child, progress) {
-                    if (progress == null) return child;
-                    return Center(
-                      child: Icon(
-                        _getItemIcon(item.type),
-                        color: iconColor,
-                        size: iconSize,
-                      ),
-                    );
-                  },
-                  errorBuilder: (context, error, stack) => Center(
-                    child: Icon(
-                      _getItemIcon(item.type),
-                      color: iconColor,
-                      size: iconSize,
-                    ),
-                  ),
-                ),
-                if (item.type == NextcloudItemType.video)
-                  const Center(
-                    child: Icon(
-                      Icons.play_circle_fill_rounded,
-                      color: Colors.white,
-                      size: 18,
-                    ),
-                  ),
-              ],
-            )
-          : Center(
-              child: Icon(
-                _getItemIcon(item.type),
-                color: iconColor,
-                size: iconSize,
-              ),
-            ),
-    );
-  }
 }
 
 /// Slides+fades its child in on first build. Give it a [Key] that changes
@@ -229,8 +100,49 @@ class _FolderEnterAnimationState extends State<_FolderEnterAnimation>
 class _FilesViewState extends State<FilesView> {
   final Set<String> _selectedIds = {};
   int _lastPathDepth = 1;
+  final ScrollController _controlsScrollController = ScrollController();
 
   bool get _isSelecting => _selectedIds.isNotEmpty;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _playControlsScrollHint(),
+    );
+  }
+
+  /// A one-shot hint that the controls row scrolls: nudges it a little to
+  /// the right and back, once, right after it first appears - a motion cue
+  /// instead of a persistent widget (a chevron badge, an edge fade) sitting
+  /// on top of the actual controls the whole time. No-ops if there's
+  /// nothing to scroll (row already fits).
+  Future<void> _playControlsScrollHint() async {
+    // The delay lets the row's first frame (and its actual layout/max
+    // scroll extent) settle before nudging it, and reads more like a
+    // deliberate hint than something that happens to fire on load.
+    await Future.delayed(const Duration(milliseconds: 500));
+    if (!mounted || !_controlsScrollController.hasClients) return;
+    final maxExtent = _controlsScrollController.position.maxScrollExtent;
+    if (maxExtent <= 0) return;
+    await _controlsScrollController.animateTo(
+      maxExtent < 36 ? maxExtent : 36,
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOut,
+    );
+    if (!mounted || !_controlsScrollController.hasClients) return;
+    await _controlsScrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeIn,
+    );
+  }
+
+  @override
+  void dispose() {
+    _controlsScrollController.dispose();
+    super.dispose();
+  }
 
   void _toggleSelection(NextcloudItem item) {
     HapticFeedback.selectionClick();
@@ -414,7 +326,17 @@ class _FilesViewState extends State<FilesView> {
         children: [
           SizedBox(
             height: 44,
+            // No persistent hint widget here - instead, a one-shot nudge
+            // (see _playControlsScrollHint, triggered from initState) just
+            // scrolls this row a little to the right and back, once, right
+            // after it first appears. Two static attempts before this -
+            // fading the controls' own opacity via ShaderMask, then a
+            // chevron badge overlaid on the edge - both add a
+            // permanent element competing with the actual controls; a
+            // motion cue that plays once and gets out of the way reads
+            // just as clearly without that cost.
             child: SingleChildScrollView(
+              controller: _controlsScrollController,
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
@@ -890,7 +812,7 @@ class _FilesViewState extends State<FilesView> {
                 isSelected: isSelected,
                 size: 44,
                 checkmarkSize: 24,
-                child: _ItemThumbnail(
+                child: ItemThumbnail(
                   item: item,
                   provider: provider,
                   size: 44,
@@ -1085,7 +1007,7 @@ class _FilesViewState extends State<FilesView> {
   Widget _buildPlainGridContent(BuildContext context, NextcloudItem item) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final iconColor = _getIconColor(context, item.type);
+    final iconColor = getIconColor(context, item.type);
 
     return Padding(
       padding: const EdgeInsets.all(14),
@@ -1100,7 +1022,7 @@ class _FilesViewState extends State<FilesView> {
               color: iconColor.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(_getItemIcon(item.type), color: iconColor, size: 24),
+            child: Icon(getItemIcon(item.type), color: iconColor, size: 24),
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
