@@ -53,9 +53,9 @@ dependencies:
   share_plus: ^13.3.0
   material_symbols_icons: ^4.2960.0
   shared_preferences: ^2.5.5
-  receive_sharing_intent: ^1.8.1
   marquee: ^2.3.0
   local_auth: ^2.3.0
+  webview_flutter: ^4.14.1
 
 dev_dependencies:
   flutter_test:

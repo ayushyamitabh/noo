@@ -725,20 +725,39 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
       final init = await LoginFlowService.initiate(serverUrl);
       _pendingLoginUrl = init.loginUrl;
 
-      // Chrome Custom Tabs (inAppBrowserView): real Chrome, so the saved
-      // passwords/autofill service works normally, unlike Flutter's own
-      // embedded web view. The tradeoff is that - like Login Flow v2's
-      // grant page itself, which never redirects back into the app on its
-      // own (unlike the old nc:// Flow v1) - a Custom Tab belongs to
-      // Chrome's own task, not ours, so we have no way to close it
-      // automatically once polling below detects success; the user has to
-      // switch back manually, same as with the external browser.
-      final opened = await launchUrl(
-        init.loginUrl,
-        mode: LaunchMode.inAppBrowserView,
-      );
-      if (!opened) {
-        throw Exception('Could not open the browser for login.');
+      // Chrome Custom Tabs (inAppBrowserView) for the first/only login:
+      // real Chrome, so the saved passwords/autofill service works
+      // normally, unlike Flutter's own embedded web view. The tradeoff is
+      // that - like Login Flow v2's grant page itself, which never
+      // redirects back into the app on its own (unlike the old nc://
+      // Flow v1) - a Custom Tab belongs to Chrome's own task, not ours, so
+      // we have no way to close it automatically once polling below
+      // detects success; the user has to switch back manually, same as
+      // with the external browser.
+      //
+      // Adding another account instead shows the login page in
+      // LoginWebViewView, a real screen this app owns (pushed by LoginView
+      // once loginFlowStatus flips to awaitingBrowser below), backed by
+      // Flutter's own WebView rather than a Custom Tab. Two reasons, not
+      // just one: (1) a Custom Tab shares Chrome's actual browser
+      // profile/cookie jar, so if the user is still logged into the first
+      // account on the Nextcloud web UI in Chrome, it would silently reuse
+      // that session and authorize the wrong account instead of prompting
+      // fresh credentials; (2) url_launcher's own LaunchMode.inAppWebView
+      // is a bare native WebView Activity with no chrome of its own - no
+      // close button, and on at least some devices it draws edge-to-edge
+      // and hides the status bar. Owning the screen ourselves fixes both:
+      // isolated cookies, plus a normal AppBar/close button/safe area, and
+      // as a bonus we CAN close it automatically on success (LoginWebView
+      // View watches loginFlowStatus itself), unlike the Custom Tab case.
+      if (!addAccount) {
+        final opened = await launchUrl(
+          init.loginUrl,
+          mode: LaunchMode.inAppBrowserView,
+        );
+        if (!opened) {
+          throw Exception('Could not open the browser for login.');
+        }
       }
 
       _loginFlowStatus = LoginFlowStatus.awaitingBrowser;
@@ -790,6 +809,9 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  // Only relevant to the first/only-login Chrome Custom Tab path - the
+  // add-account LoginWebViewView is a normal pushed screen the user can't
+  // lose track of, so it has no equivalent "reopen" need.
   Future<void> reopenLoginBrowser() async {
     if (_pendingLoginUrl != null) {
       await launchUrl(_pendingLoginUrl!, mode: LaunchMode.inAppBrowserView);

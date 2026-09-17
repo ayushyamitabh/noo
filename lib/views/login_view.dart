@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/saved_account.dart';
 import '../providers/server_provider.dart';
+import 'login_webview_view.dart';
 
 class LoginView extends StatefulWidget {
   /// True when this is pushed from Settings ("Add account") on top of an
@@ -21,6 +22,7 @@ class _LoginViewState extends State<LoginView> {
   final _urlController = TextEditingController();
   String? _originalActiveAccountId;
   bool _popped = false;
+  bool _webViewPushed = false;
 
   @override
   void initState() {
@@ -67,6 +69,27 @@ class _LoginViewState extends State<LoginView> {
       });
     }
 
+    // The add-account flow shows its login page in LoginWebViewView (a
+    // real pushed screen, not a Custom Tab - see ServerProvider.
+    // startLoginFlow's doc comment for why) rather than this view's own
+    // _WaitingForBrowser, so push it the moment there's a URL to show.
+    // _webViewPushed resets once that route pops (cancelled or done) so a
+    // retry after cancelling pushes it again.
+    if (widget.isAddingAccount &&
+        !_webViewPushed &&
+        isAwaitingBrowser &&
+        provider.pendingLoginUrl != null) {
+      _webViewPushed = true;
+      final url = provider.pendingLoginUrl!;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        await Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => LoginWebViewView(url: url)));
+        _webViewPushed = false;
+      });
+    }
+
     final body = Scaffold(
       appBar: widget.isAddingAccount
           ? AppBar(title: const Text('Add Account'))
@@ -78,7 +101,7 @@ class _LoginViewState extends State<LoginView> {
             padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 440),
-              child: isAwaitingBrowser
+              child: isAwaitingBrowser && !widget.isAddingAccount
                   ? _WaitingForBrowser(
                       onCancel: () => provider.cancelLoginFlow(),
                       onReopenBrowser: provider.reopenLoginBrowser,
@@ -120,7 +143,10 @@ class _LoginViewState extends State<LoginView> {
                         _ServerForm(
                           formKey: _formKey,
                           urlController: _urlController,
-                          isLoading: isInitiating || provider.isLoading,
+                          isLoading:
+                              isInitiating ||
+                              provider.isLoading ||
+                              (widget.isAddingAccount && isAwaitingBrowser),
                           errorMessage:
                               provider.loginFlowStatus == LoginFlowStatus.error
                               ? provider.errorMessage
@@ -182,10 +208,18 @@ class _ServerForm extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Center(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(20),
+            // Same monochrome-tinted treatment as the splash/lock screens
+            // (see main.dart's _SplashView) - the asset is a plain white
+            // silhouette on transparent, meant to be recolored rather than
+            // shown as-is. Used everywhere the app shows its own icon
+            // in-app, rather than the full-color launcher icon.
+            child: ColorFiltered(
+              colorFilter: ColorFilter.mode(
+                Theme.of(context).colorScheme.onSurface,
+                BlendMode.srcIn,
+              ),
               child: Image.asset(
-                'assets/icon/app_icon.png',
+                'assets/icon/app_icon_monochrome.png',
                 width: 80,
                 height: 80,
               ),

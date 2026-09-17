@@ -2,9 +2,9 @@ import 'dart:async';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'models/app_tab.dart';
 import 'providers/server_provider.dart';
+import 'services/share_intent_service.dart';
 import 'theme/app_theme.dart';
 import 'views/lock_screen_view.dart';
 import 'views/login_view.dart';
@@ -112,7 +112,7 @@ class MainShellView extends StatefulWidget {
 class _MainShellViewState extends State<MainShellView> {
   late AppTab _currentTab;
   late final Map<AppTab, ScrollController> _scrollControllers;
-  StreamSubscription<List<SharedMediaFile>>? _shareSub;
+  StreamSubscription<List<SharedFileRef>>? _shareSub;
 
   @override
   void initState() {
@@ -126,29 +126,22 @@ class _MainShellViewState extends State<MainShellView> {
     _currentTab = context.read<ServerProvider>().defaultTab;
 
     // Handles both a cold start via another app's "Share to..." sheet
-    // (getInitialMedia) and a share arriving while the app is already
-    // running (getMediaStream) - the plugin guarantees the stream doesn't
-    // re-emit whatever getInitialMedia already returned.
-    ReceiveSharingIntent.instance.getInitialMedia().then(_handleSharedFiles);
-    _shareSub = ReceiveSharingIntent.instance.getMediaStream().listen(
-      _handleSharedFiles,
-    );
+    // (getInitialShare) and a share arriving while the app is already
+    // running (onNewShare). See MainActivity.kt's doc comment for why this
+    // is hand-rolled instead of the receive_sharing_intent plugin - in
+    // short, this only ever fetches cheap Uri metadata here, never a
+    // file's actual bytes, so a large shared file can't block startup.
+    ShareIntentService.getInitialShare().then(_handleSharedFiles);
+    _shareSub = ShareIntentService.onNewShare.listen(_handleSharedFiles);
   }
 
-  void _handleSharedFiles(List<SharedMediaFile> files) {
-    final uploadable = files
-        .where(
-          (f) =>
-              f.type != SharedMediaType.text && f.type != SharedMediaType.url,
-        )
-        .toList();
-    if (uploadable.isEmpty) return;
-    ReceiveSharingIntent.instance.reset();
+  void _handleSharedFiles(List<SharedFileRef> files) {
+    if (files.isEmpty) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => ShareUploadView(files: uploadable)),
-      );
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => ShareUploadView(files: files)));
     });
   }
 

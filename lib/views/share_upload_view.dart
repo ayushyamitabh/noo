@@ -1,17 +1,29 @@
 import 'package:flutter/material.dart';
-import 'package:path/path.dart' as p;
+import 'package:intl/intl.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
-import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import '../models/app_tab.dart';
+import '../models/nextcloud_item.dart';
 import '../providers/server_provider.dart';
+import '../services/share_intent_service.dart';
+import '../services/upload_service.dart';
 import '../widgets/breadcrumbs.dart';
+import '../widgets/item_icon.dart';
+import '../widgets/segmented_icon_toggle.dart';
+import '../widgets/sort_menu_button.dart';
+import '../widgets/synced_header_scaffold.dart' show formatBytes;
 
 /// Shown when another app shares one or more files to Noo (Android's
-/// "Share to..." sheet). Lets the user browse to a destination folder, then
-/// uploads every shared file into it via the same WebDAV upload path as the
-/// Files tab's own "Upload File" action.
+/// "Share to..." sheet). Lets the user browse to a destination folder,
+/// mirroring the Files tab's own controls/filters/listing so this feels
+/// like the same browser rather than a stripped-down picker, then hands the
+/// actual prepare+upload off to [UploadService] - a real Android foreground
+/// service (see `ShareUploadService.kt`'s doc comment), not something this
+/// screen or even the app needs to stay open for. [files] only ever carry
+/// cheap Uri metadata (see [ShareIntentService]'s doc comment); that
+/// service is the only thing that ever reads their actual bytes.
 class ShareUploadView extends StatefulWidget {
-  final List<SharedMediaFile> files;
+  final List<SharedFileRef> files;
 
   const ShareUploadView({super.key, required this.files});
 
@@ -20,10 +32,6 @@ class ShareUploadView extends StatefulWidget {
 }
 
 class _ShareUploadViewState extends State<ShareUploadView> {
-  bool _uploading = false;
-  int _currentFileIndex = 0;
-  double? _currentFileProgress;
-
   @override
   void initState() {
     super.initState();
@@ -35,42 +43,279 @@ class _ShareUploadViewState extends State<ShareUploadView> {
   }
 
   Future<void> _uploadHere(ServerProvider provider) async {
-    setState(() => _uploading = true);
-
-    var anyFailed = false;
-    for (var i = 0; i < widget.files.length; i++) {
-      final file = widget.files[i];
-      setState(() {
-        _currentFileIndex = i;
-        _currentFileProgress = 0;
-      });
-      final name = p.basename(file.path);
-      final success = await provider.uploadFileFromPath(
-        name,
-        file.path,
-        onProgress: (sent, total) {
-          if (total > 0 && mounted) {
-            setState(() => _currentFileProgress = sent / total);
-          }
-        },
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    try {
+      await UploadService.startUpload(provider, widget.files);
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Could not start upload: $e'),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
-      if (!success) anyFailed = true;
+      return;
     }
 
-    if (!mounted) return;
-
     provider.requestTab(AppTab.files);
-    Navigator.of(context).popUntil((route) => route.isFirst);
-    ScaffoldMessenger.of(context).showSnackBar(
+    navigator.popUntil((route) => route.isFirst);
+    messenger.showSnackBar(
       SnackBar(
         content: Text(
-          anyFailed
-              ? 'Some files failed to upload'
-              : widget.files.length == 1
-              ? 'Uploaded ${p.basename(widget.files.first.path)}'
-              : 'Uploaded ${widget.files.length} files',
+          widget.files.length == 1
+              ? 'Uploading ${widget.files.first.name} - see the notification for progress'
+              : 'Uploading ${widget.files.length} files - see the notification for progress',
         ),
         behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Widget _buildControlsRow(ServerProvider provider) {
+    return SizedBox(
+      height: 44,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            IconButton(
+              icon: Icon(
+                provider.filesSortAscending
+                    ? Icons.arrow_upward_rounded
+                    : Icons.arrow_downward_rounded,
+                size: 20,
+              ),
+              visualDensity: VisualDensity.compact,
+              tooltip: provider.filesSortAscending ? 'Ascending' : 'Descending',
+              onPressed: provider.toggleFilesSortOrder,
+            ),
+            SizedBox(
+              width: 130,
+              child: SortMenuButton(
+                field: provider.filesSortField,
+                onChanged: provider.setFilesSortField,
+              ),
+            ),
+            ToggleIconButton(
+              icon: provider.showFavoritesOnlyFiles
+                  ? Icons.favorite_rounded
+                  : Icons.favorite_border_rounded,
+              isSelected: provider.showFavoritesOnlyFiles,
+              onTap: provider.toggleFavoritesFilterFiles,
+              tooltip: 'Favorites only',
+            ),
+            const SizedBox(width: 4),
+            ToggleIconButton(
+              icon: provider.showHiddenFiles
+                  ? Icons.visibility_rounded
+                  : Icons.visibility_off_rounded,
+              isSelected: provider.showHiddenFiles,
+              onTap: () => provider.toggleShowHiddenFiles(),
+              tooltip: 'Show hidden files',
+            ),
+            const SizedBox(width: 4),
+            SegmentedIconGroup(
+              children: [
+                ToggleIconButton(
+                  icon: Symbols.circles_rounded,
+                  isSelected: provider.storageScope == StorageScope.cloud,
+                  onTap: () => provider.setStorageScope(StorageScope.cloud),
+                  tooltip: 'Cloud storage',
+                ),
+                ToggleIconButton(
+                  icon: Symbols.hard_drive_rounded,
+                  isSelected: provider.storageScope == StorageScope.external,
+                  onTap: () => provider.setStorageScope(StorageScope.external),
+                  tooltip: 'External storage',
+                ),
+              ],
+            ),
+            const SizedBox(width: 8),
+            SegmentedIconGroup(
+              children: [
+                ToggleIconButton(
+                  icon: Icons.select_all_rounded,
+                  isSelected: provider.filesTypeFilter == FilesTypeFilter.all,
+                  onTap: () => provider.setFilesTypeFilter(FilesTypeFilter.all),
+                  tooltip: 'Files & folders',
+                ),
+                ToggleIconButton(
+                  icon: Icons.insert_drive_file_outlined,
+                  isSelected:
+                      provider.filesTypeFilter == FilesTypeFilter.filesOnly,
+                  onTap: () =>
+                      provider.setFilesTypeFilter(FilesTypeFilter.filesOnly),
+                  tooltip: 'Files only',
+                ),
+                ToggleIconButton(
+                  icon: Icons.folder_outlined,
+                  isSelected:
+                      provider.filesTypeFilter == FilesTypeFilter.foldersOnly,
+                  onTap: () =>
+                      provider.setFilesTypeFilter(FilesTypeFilter.foldersOnly),
+                  tooltip: 'Folders only',
+                ),
+              ],
+            ),
+            const SizedBox(width: 8),
+            SegmentedIconGroup(
+              children: [
+                ToggleIconButton(
+                  icon: Icons.view_list_rounded,
+                  isSelected: !provider.isGridView,
+                  onTap: () => provider.setGridView(false),
+                  tooltip: 'List view',
+                ),
+                ToggleIconButton(
+                  icon: Icons.grid_view_rounded,
+                  isSelected: provider.isGridView,
+                  onTap: () => provider.setGridView(true),
+                  tooltip: 'Grid view',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Only folders are valid upload destinations - files still show (so the
+  // listing matches what the Files tab itself would show for this folder)
+  // but are visually dimmed and inert rather than hidden outright.
+  Widget _buildListTile(
+    BuildContext context,
+    NextcloudItem item,
+    ServerProvider provider,
+  ) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isFolder = item.isFolder;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Opacity(
+          opacity: isFolder ? 1 : 0.5,
+          child: Material(
+            color: colorScheme.surfaceContainerLow,
+            child: InkWell(
+              onTap: isFolder
+                  ? () => provider.navigateToFolder(item.path)
+                  : null,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                child: Row(
+                  children: [
+                    ItemThumbnail(
+                      item: item,
+                      provider: provider,
+                      size: 44,
+                      borderRadius: 12,
+                      iconSize: 22,
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.name,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            isFolder
+                                ? 'Folder'
+                                : '${formatBytes(item.size)} • ${DateFormat.yMMMd().format(item.lastModified)}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (isFolder) const Icon(Icons.chevron_right_rounded),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGridCard(
+    BuildContext context,
+    NextcloudItem item,
+    ServerProvider provider,
+  ) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isFolder = item.isFolder;
+    final iconColor = getIconColor(context, item.type);
+
+    return Opacity(
+      opacity: isFolder ? 1 : 0.5,
+      child: Material(
+        color: colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(20),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: isFolder ? () => provider.navigateToFolder(item.path) : null,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: iconColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    getItemIcon(item.type),
+                    color: iconColor,
+                    size: 24,
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isFolder ? 'Folder' : formatBytes(item.size),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -85,94 +330,79 @@ class _ShareUploadViewState extends State<ShareUploadView> {
     final currentLabel = currentPath == '/'
         ? 'Home'
         : currentPath.split('/').where((s) => s.isNotEmpty).last;
-    final folders = provider.items.where((i) => i.isFolder).toList();
+    final items = provider.items;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
           widget.files.length == 1
-              ? 'Upload ${p.basename(widget.files.first.path)}'
+              ? 'Upload ${widget.files.first.name}'
               : 'Upload ${widget.files.length} files',
         ),
       ),
-      body: _uploading
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(
-                      value: _currentFileProgress,
-                      color: colorScheme.primary,
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      widget.files.length == 1
-                          ? 'Uploading ${p.basename(widget.files[_currentFileIndex].path)}…'
-                          : 'Uploading ${_currentFileIndex + 1} of ${widget.files.length}…',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: _buildControlsRow(provider),
+          ),
+          if (hasBreadcrumbs)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              child: Breadcrumbs(
+                pathStack: provider.pathStack,
+                onTap: (index) => provider.navigateToPathIndex(index),
               ),
-            )
-          : Column(
-              children: [
-                if (hasBreadcrumbs)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                    child: Breadcrumbs(
-                      pathStack: provider.pathStack,
-                      onTap: (index) => provider.navigateToPathIndex(index),
+            ),
+          Expanded(
+            child: provider.isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : items.isEmpty
+                ? Center(
+                    child: Text(
+                      'Folder is empty',
+                      style: TextStyle(color: colorScheme.onSurfaceVariant),
                     ),
-                  ),
-                Expanded(
-                  child: provider.isLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : folders.isEmpty
-                      ? Center(
-                          child: Text(
-                            'No subfolders here',
-                            style: TextStyle(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        )
-                      : ListView.builder(
-                          itemCount: folders.length,
-                          itemBuilder: (context, index) {
-                            final folder = folders[index];
-                            return ListTile(
-                              leading: Icon(
-                                Icons.folder_rounded,
-                                color: colorScheme.primary,
-                              ),
-                              title: Text(folder.name),
-                              trailing: const Icon(Icons.chevron_right_rounded),
-                              onTap: () =>
-                                  provider.navigateToFolder(folder.path),
-                            );
-                          },
+                  )
+                : provider.isGridView
+                ? GridView.builder(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          childAspectRatio: 1.1,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
                         ),
-                ),
-              ],
-            ),
-      bottomNavigationBar: _uploading
-          ? null
-          : SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: FilledButton.icon(
-                  onPressed: () => _uploadHere(provider),
-                  icon: const Icon(Icons.upload_rounded),
-                  label: Text('Upload to $currentLabel'),
-                ),
-              ),
-            ),
+                    itemCount: items.length,
+                    itemBuilder: (context, index) =>
+                        _buildGridCard(context, items[index], provider),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
+                    itemCount: items.length,
+                    itemBuilder: (context, index) =>
+                        _buildListTile(context, items[index], provider),
+                  ),
+          ),
+        ],
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: FilledButton.icon(
+            onPressed: () => _uploadHere(provider),
+            icon: const Icon(Icons.upload_rounded),
+            label: Text('Upload to $currentLabel'),
+          ),
+        ),
+      ),
     );
   }
 }
