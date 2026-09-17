@@ -3,17 +3,17 @@ import 'package:provider/provider.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../providers/server_provider.dart';
 
-/// The "add another account" Login Flow v2 page, rendered in Flutter's own
-/// WebView rather than url_launcher's `LaunchMode.inAppWebView` - that mode
-/// hosts a bare native WebView Activity with no chrome of its own: no close
-/// button, and on at least some devices it draws edge-to-edge and hides the
-/// status bar with no way back short of the OS back gesture. A normal
-/// Scaffold/AppBar here gets the status bar/safe-area handling and a close
-/// button for free, exactly like every other screen in the app.
+/// Every Login Flow v2 page - first login or an additional account -
+/// rendered in Flutter's own WebView rather than a Chrome Custom Tab or
+/// url_launcher's `LaunchMode.inAppWebView`. The latter hosts a bare native
+/// WebView Activity with no chrome of its own: no close button, and on at
+/// least some devices it draws edge-to-edge and hides the status bar with
+/// no way back short of the OS back gesture. A normal Scaffold/AppBar here
+/// gets the status bar/safe-area handling and a close button for free,
+/// exactly like every other screen in the app - and unlike a Custom Tab,
+/// this screen can close itself automatically once login succeeds.
 ///
-/// See ServerProvider.startLoginFlow's doc comment for why the add-account
-/// flow uses an embedded WebView (isolated cookies) instead of a Chrome
-/// Custom Tab at all.
+/// See ServerProvider.startLoginFlow's doc comment for the full rationale.
 class LoginWebViewView extends StatefulWidget {
   final Uri url;
 
@@ -73,7 +73,7 @@ class _LoginWebViewViewState extends State<LoginWebViewView> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Add Account'),
+          title: const Text('Sign in'),
           leading: IconButton(
             icon: const Icon(Icons.close_rounded),
             tooltip: 'Cancel',

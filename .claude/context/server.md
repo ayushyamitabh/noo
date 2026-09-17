@@ -9,34 +9,23 @@ via [`LoginFlowService`](../../lib/services/login_flow_service.dart):
 1. `LoginFlowService.initiate(serverUrl)` POSTs to
    `{server}/index.php/login/v2`, gets back a browser login URL + a poll
    endpoint/token.
-2. The app opens the login URL for the user to authenticate/authorize.
-   Which browser depends on whether this is the first login or an
-   add-account flow (`addAccount`, see below):
-   - First/only login: a Chrome Custom Tab (`url_launcher`,
-     `LaunchMode.inAppBrowserView`) — real Chrome, so saved
-     passwords/autofill work, unlike Flutter's own embedded web view.
-     There's no way to close the tab automatically on success (Login Flow
-     v2 never redirects back into the app, and a Custom Tab belongs to
-     Chrome's own task) — the user switches back manually.
-   - Adding another account: [`LoginWebViewView`](../../lib/views/login_webview_view.dart),
-     a normal screen this app owns, backed by `package:webview_flutter`
-     rather than a Custom Tab - pushed by `LoginView` the moment
-     `loginFlowStatus` flips to `awaitingBrowser`. Two reasons this isn't
-     a Custom Tab: (1) a Custom Tab shares Chrome's actual browser
-     profile/cookie jar - if the user is still logged into the first
-     account on the Nextcloud web UI in Chrome, it would silently reuse
-     that session and authorize the wrong account instead of prompting
-     fresh credentials; (2) `url_launcher`'s own `LaunchMode.inAppWebView`
-     (tried first) is a bare native WebView Activity with no chrome of its
-     own - no close button, and on at least some devices it draws
-     edge-to-edge and hides the status bar. Owning the screen fixes both -
-     isolated cookies, a normal `AppBar`/close button/safe area - and lets
-     it close itself automatically on success (it watches
-     `loginFlowStatus` itself), unlike the Custom Tab case. The cost is no
-     Chrome-autofill for this one flow (Android's own system Autofill
-     framework, e.g. a password manager, may still work in the WebView;
-     Chrome's own saved-password autofill specifically cannot, since
-     that's Chrome-only).
+2. The app opens the login URL for the user to authenticate/authorize in
+   [`LoginWebViewView`](../../lib/views/login_webview_view.dart), a normal
+   screen this app owns (`package:webview_flutter`) - pushed by `LoginView`
+   the moment `loginFlowStatus` flips to `awaitingBrowser`, for every login
+   (first account or an additional one), not just add-account. This used
+   to be split: first login went through a Chrome Custom Tab
+   (`url_launcher`, `LaunchMode.inAppBrowserView`) for Chrome's own
+   autofill, and only add-account used the embedded WebView, specifically
+   to avoid a Custom Tab silently reusing Chrome's existing session for a
+   different account. But a Custom Tab has real costs even for the first
+   login - no way to close it automatically on success (the user has to
+   switch back manually), and it's a separate task outside this app's own
+   navigation entirely - so both paths now use the same owned screen.
+   `url_launcher` is no longer a dependency. The cost is no
+   Chrome-autofill (Android's own system Autofill framework, e.g. a
+   password manager, may still work in the WebView; Chrome's own
+   saved-password autofill specifically cannot, since that's Chrome-only).
 3. `ServerProvider` polls `LoginFlowService.poll(pollEndpoint, token)` every
    2 seconds (`Timer.periodic`, see `_pollTimer`/`_pollTimeoutTimer` in
    `server_provider.dart`) until it gets a 200 with `server`/`loginName`/

@@ -69,14 +69,12 @@ class _LoginViewState extends State<LoginView> {
       });
     }
 
-    // The add-account flow shows its login page in LoginWebViewView (a
-    // real pushed screen, not a Custom Tab - see ServerProvider.
-    // startLoginFlow's doc comment for why) rather than this view's own
-    // _WaitingForBrowser, so push it the moment there's a URL to show.
-    // _webViewPushed resets once that route pops (cancelled or done) so a
-    // retry after cancelling pushes it again.
-    if (widget.isAddingAccount &&
-        !_webViewPushed &&
+    // Every login (first account or an additional one) shows its login
+    // page in LoginWebViewView, a real screen this app owns - see
+    // ServerProvider.startLoginFlow's doc comment for why. Push it the
+    // moment there's a URL to show; _webViewPushed resets once that route
+    // pops (cancelled or done) so a retry after cancelling pushes it again.
+    if (!_webViewPushed &&
         isAwaitingBrowser &&
         provider.pendingLoginUrl != null) {
       _webViewPushed = true;
@@ -101,62 +99,52 @@ class _LoginViewState extends State<LoginView> {
             padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 440),
-              child: isAwaitingBrowser && !widget.isAddingAccount
-                  ? _WaitingForBrowser(
-                      onCancel: () => provider.cancelLoginFlow(),
-                      onReopenBrowser: provider.reopenLoginBrowser,
-                    )
-                  : Column(
-                      mainAxisSize: MainAxisSize.min,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // A logout keeps the account saved rather than
+                  // deleting it, specifically so it can be resumed
+                  // from here with one tap - no need to repeat
+                  // Login Flow v2.
+                  if (!widget.isAddingAccount &&
+                      provider.accounts.isNotEmpty) ...[
+                    _SavedAccountsSection(
+                      accounts: provider.accounts,
+                      onSelect: (account) => provider.switchAccount(account.id),
+                    ),
+                    const SizedBox(height: 28),
+                    Row(
                       children: [
-                        // A logout keeps the account saved rather than
-                        // deleting it, specifically so it can be resumed
-                        // from here with one tap - no need to repeat
-                        // Login Flow v2.
-                        if (!widget.isAddingAccount &&
-                            provider.accounts.isNotEmpty) ...[
-                          _SavedAccountsSection(
-                            accounts: provider.accounts,
-                            onSelect: (account) =>
-                                provider.switchAccount(account.id),
+                        const Expanded(child: Divider()),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Text(
+                            'or',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
                           ),
-                          const SizedBox(height: 28),
-                          Row(
-                            children: [
-                              const Expanded(child: Divider()),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                ),
-                                child: Text(
-                                  'or',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                              ),
-                              const Expanded(child: Divider()),
-                            ],
-                          ),
-                          const SizedBox(height: 28),
-                        ],
-                        _ServerForm(
-                          formKey: _formKey,
-                          urlController: _urlController,
-                          isLoading:
-                              isInitiating ||
-                              provider.isLoading ||
-                              (widget.isAddingAccount && isAwaitingBrowser),
-                          errorMessage:
-                              provider.loginFlowStatus == LoginFlowStatus.error
-                              ? provider.errorMessage
-                              : null,
-                          onContinue: _handleContinue,
-                          theme: theme,
-                          colorScheme: colorScheme,
                         ),
+                        const Expanded(child: Divider()),
                       ],
                     ),
+                    const SizedBox(height: 28),
+                  ],
+                  _ServerForm(
+                    formKey: _formKey,
+                    urlController: _urlController,
+                    isLoading:
+                        isInitiating || provider.isLoading || isAwaitingBrowser,
+                    errorMessage:
+                        provider.loginFlowStatus == LoginFlowStatus.error
+                        ? provider.errorMessage
+                        : null,
+                    onContinue: _handleContinue,
+                    theme: theme,
+                    colorScheme: colorScheme,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -166,7 +154,7 @@ class _LoginViewState extends State<LoginView> {
     if (!widget.isAddingAccount) return body;
 
     // Backing out mid-flow (system back/swipe-back, not just the explicit
-    // Cancel button in _WaitingForBrowser) should cancel the pending login
+    // Cancel button in LoginWebViewView) should cancel the pending login
     // flow rather than leaving its poll timer running after this screen is
     // gone - this view could never be popped before "add account" existed,
     // so that case wasn't reachable until now.
@@ -323,7 +311,7 @@ class _ServerForm extends StatelessWidget {
           ),
           const SizedBox(height: 24),
           Text(
-            "You'll finish signing in through your browser. This app never sees your password.",
+            "You'll finish signing in on the page that opens. This app never sees your password.",
             textAlign: TextAlign.center,
             style: theme.textTheme.bodySmall?.copyWith(
               color: colorScheme.onSurfaceVariant,
@@ -411,53 +399,6 @@ class _SavedAccountRow extends StatelessWidget {
       subtitle: Text(host),
       trailing: const Icon(Icons.chevron_right_rounded),
       onTap: onTap,
-    );
-  }
-}
-
-class _WaitingForBrowser extends StatelessWidget {
-  final VoidCallback onCancel;
-  final VoidCallback onReopenBrowser;
-
-  const _WaitingForBrowser({
-    required this.onCancel,
-    required this.onReopenBrowser,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        CircularProgressIndicator(color: colorScheme.primary),
-        const SizedBox(height: 28),
-        Text(
-          'Waiting for you to sign in',
-          textAlign: TextAlign.center,
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Complete the login in the browser window that just opened, then come back here.',
-          textAlign: TextAlign.center,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: colorScheme.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(height: 32),
-        OutlinedButton.icon(
-          onPressed: onReopenBrowser,
-          icon: const Icon(Icons.open_in_browser_rounded),
-          label: const Text('Reopen browser'),
-        ),
-        const SizedBox(height: 12),
-        TextButton(onPressed: onCancel, child: const Text('Cancel')),
-      ],
     );
   }
 }
