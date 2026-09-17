@@ -36,6 +36,12 @@ widgets. Key points:
 
 ## Reusable chrome
 
+- [`getItemIcon`/`getIconColor`/`ItemThumbnail`](../../lib/widgets/item_icon.dart)
+  — the icon/color/thumbnail treatment for a file or folder, shared by any
+  screen that lists `NextcloudItem`s the way the Files tab does (currently
+  `files_view.dart` and `share_upload_view.dart`'s destination picker).
+  Extend this rather than re-deriving per-type icons/colors at a new call
+  site.
 - [`FrostedGlassContainer`](../../lib/widgets/frosted_glass_container.dart) —
   the blurred/translucent pill background shared by all floating chrome
   (bottom nav bar, media-viewer top/bottom bars and video transport
@@ -81,3 +87,10 @@ widgets. Key points:
   exception, since those colors are content-identity cues, not theme).
 - Use `colorScheme.surfaceContainer*`/`onSurfaceVariant` tokens for
   elevation/secondary text rather than manual opacity on black/white.
+- **Anywhere the app shows its own icon in-app** (splash, lock screen,
+  login screen) uses `assets/icon/app_icon_monochrome.png` — a plain white
+  silhouette on transparent, tinted via `ColorFiltered(colorFilter:
+  ColorFilter.mode(colorScheme.onSurface, BlendMode.srcIn), ...)` so it
+  reads correctly in both light and dark mode. Never the full-color
+  `app_icon.png`/adaptive-icon assets for in-app UI — those are for the
+  launcher icon only (`flutter_launcher_icons` in `pubspec.yaml`).

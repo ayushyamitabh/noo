@@ -109,9 +109,11 @@ and rendered through `buildAppTabView` (`widgets/app_tab_view_builder.dart`).
 Each tab keeps its own `ScrollController` (survives tab switches via
 `IndexedStack`'s built-but-hidden trees) and tapping the already-active tab
 scrolls it back to top (`tapTabToScrollTop` setting). `MainShellView` also
-owns the app's share-intent listener (`receive_sharing_intent`): both
-`getInitialMedia()` (cold start via another app's "Share to...") and
-`getMediaStream()` (already running) push `ShareUploadView`.
+owns the app's share-intent listener (`ShareIntentService`, backed by
+hand-rolled native handling in `MainActivity.kt` - see `server.md` for why
+this isn't the `receive_sharing_intent` plugin): both `getInitialShare()`
+(cold start via another app's "Share to...") and `onNewShare` (already
+running) push `ShareUploadView`.
 
 Five of the six tabs (all but Files) plus each tab's own controls share
 [`SyncedHeaderScaffold`](../../lib/widgets/synced_header_scaffold.dart) — a

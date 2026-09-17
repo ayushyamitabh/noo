@@ -9,12 +9,34 @@ via [`LoginFlowService`](../../lib/services/login_flow_service.dart):
 1. `LoginFlowService.initiate(serverUrl)` POSTs to
    `{server}/index.php/login/v2`, gets back a browser login URL + a poll
    endpoint/token.
-2. The app opens the login URL in a Chrome Custom Tab (`url_launcher`,
-   `LaunchMode.inAppBrowserView` — real Chrome, so saved passwords/autofill
-   work, unlike Flutter's own embedded web view); the user authenticates and
-   authorizes there. There's no way to close the tab automatically on
-   success (Login Flow v2 never redirects back into the app, and a Custom
-   Tab belongs to Chrome's own task) — the user switches back manually.
+2. The app opens the login URL for the user to authenticate/authorize.
+   Which browser depends on whether this is the first login or an
+   add-account flow (`addAccount`, see below):
+   - First/only login: a Chrome Custom Tab (`url_launcher`,
+     `LaunchMode.inAppBrowserView`) — real Chrome, so saved
+     passwords/autofill work, unlike Flutter's own embedded web view.
+     There's no way to close the tab automatically on success (Login Flow
+     v2 never redirects back into the app, and a Custom Tab belongs to
+     Chrome's own task) — the user switches back manually.
+   - Adding another account: [`LoginWebViewView`](../../lib/views/login_webview_view.dart),
+     a normal screen this app owns, backed by `package:webview_flutter`
+     rather than a Custom Tab - pushed by `LoginView` the moment
+     `loginFlowStatus` flips to `awaitingBrowser`. Two reasons this isn't
+     a Custom Tab: (1) a Custom Tab shares Chrome's actual browser
+     profile/cookie jar - if the user is still logged into the first
+     account on the Nextcloud web UI in Chrome, it would silently reuse
+     that session and authorize the wrong account instead of prompting
+     fresh credentials; (2) `url_launcher`'s own `LaunchMode.inAppWebView`
+     (tried first) is a bare native WebView Activity with no chrome of its
+     own - no close button, and on at least some devices it draws
+     edge-to-edge and hides the status bar. Owning the screen fixes both -
+     isolated cookies, a normal `AppBar`/close button/safe area - and lets
+     it close itself automatically on success (it watches
+     `loginFlowStatus` itself), unlike the Custom Tab case. The cost is no
+     Chrome-autofill for this one flow (Android's own system Autofill
+     framework, e.g. a password manager, may still work in the WebView;
+     Chrome's own saved-password autofill specifically cannot, since
+     that's Chrome-only).
 3. `ServerProvider` polls `LoginFlowService.poll(pollEndpoint, token)` every
    2 seconds (`Timer.periodic`, see `_pollTimer`/`_pollTimeoutTimer` in
    `server_provider.dart`) until it gets a 200 with `server`/`loginName`/
@@ -68,13 +90,45 @@ rather than needing a rewrite for multi-account support.
   `ServerProvider` wrapper always uploads into `_currentFolderPath` — the
   share-to-upload flow (`ShareUploadView`) gets a caller-chosen destination
   by navigating there first (`navigateToAbsoluteFolder`), then uploading.
-- **Receiving a shared file from another app**: `receive_sharing_intent`
-  (Android `ACTION_SEND`/`ACTION_SEND_MULTIPLE`, `android:launchMode`
-  `singleTask` in the manifest so a second share while running hits
-  `onNewIntent` instead of spawning a new instance). `MainShellView` listens
-  via `getInitialMedia()`/`getMediaStream()` and pushes `ShareUploadView`,
-  which reuses the same `uploadFileFromPath` path after the user picks a
-  destination folder.
+- **Receiving a shared file from another app**: hand-rolled in
+  `MainActivity.kt` (Android `ACTION_SEND`/`ACTION_SEND_MULTIPLE`,
+  `android:launchMode` `singleTask` in the manifest so a second share while
+  running hits `onNewIntent` instead of spawning a new instance) plus
+  [`ShareIntentService`](../../lib/services/share_intent_service.dart) on
+  the Dart side - not the `receive_sharing_intent` plugin, which this used
+  to be. That plugin resolves a shared `content://` Uri by synchronously
+  copying the *entire* file into the cache dir on the main thread during
+  activity startup; for a large file that blocks long enough that Android
+  kills the newly-launched activity for failing to draw a first frame,
+  dropping the user straight back to the home screen with no error and no
+  Dart code ever running. `MainActivity.kt`'s doc comment has the full
+  story. The fix: `getInitialShare`/`onNewShare` only ever query cheap Uri
+  metadata (name/size/mime, not content) so `ShareUploadView`'s destination
+  picker - which mirrors the Files tab's own controls/filters/listing,
+  reusing the same `ServerProvider` fields and `widgets/item_icon.dart` -
+  always appears instantly regardless of file size.
+- **Uploading a shared file**: once the user picks a destination in
+  `ShareUploadView`, [`UploadService`](../../lib/services/upload_service.dart)
+  hands the whole batch off to `ShareUploadService.kt`, an Android
+  foreground service, rather than uploading from Dart in that screen. This
+  is deliberate, not just an implementation detail: the point is that
+  closing the app right after confirming a destination doesn't interrupt
+  the upload, the same guarantee a real file-manager app's upload
+  notification gives you - a plain Dart `Future` (even one kept alive by a
+  singleton service class) stops running once the Flutter engine/Activity
+  are gone, only an actual Android `Service` survives that. The service
+  re-implements the WebDAV PUT itself in Kotlin (`HttpURLConnection`, no
+  new HTTP dependency) since it can't reach the Dart-side `NextcloudService`/
+  Dio from a separate process lifecycle - `UploadService.startUpload` passes
+  everything the Kotlin side needs (the pre-built `Authorization` header
+  from `NextcloudService.authHeaders`, not the raw password) as Intent
+  extras, a one-way handoff with no channel back to Dart afterward. Keep
+  the two upload implementations in sync manually if upload semantics
+  change. Progress/cancellation is entirely notification-driven (one
+  ongoing, updatable notification for the whole batch; its Cancel action
+  re-delivers an Intent to the same running service instance, which an
+  `AtomicBoolean` the copy/upload loops poll) - there's no plumbing back to
+  the Dart UI, by design, since the app may not even be running.
 
 ## Multi-account storage & session persistence
 
