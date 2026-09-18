@@ -9,6 +9,7 @@ import '../models/nextcloud_item.dart';
 import '../models/selection_action.dart';
 import '../providers/server_provider.dart';
 import '../services/download_service.dart';
+import '../services/share_intent_service.dart';
 import '../widgets/breadcrumbs.dart';
 import '../widgets/details/details_sheet.dart';
 import '../widgets/item_icon.dart';
@@ -23,6 +24,7 @@ import '../widgets/swipeable_item.dart';
 import '../widgets/synced_header_scaffold.dart';
 import 'file_viewer_screen.dart';
 import 'move_copy_destination_picker.dart';
+import 'share_upload_view.dart';
 
 class FilesView extends StatefulWidget {
   final ScrollController scrollController;
@@ -1207,7 +1209,7 @@ class _FilesViewState extends State<FilesView>
                   title: const Text('Upload File'),
                   onTap: () {
                     Navigator.pop(sheetContext);
-                    _pickAndUploadFile(context, provider);
+                    _pickAndUploadFile(context);
                   },
                 ),
                 ListTile(
@@ -1274,58 +1276,27 @@ class _FilesViewState extends State<FilesView>
     );
   }
 
-  Future<void> _pickAndUploadFile(
-    BuildContext context,
-    ServerProvider provider,
-  ) async {
-    final result = await FilePicker.pickFiles();
-    if (result.isEmpty) return;
-    final picked = result.first;
-    if (picked.path == null) return;
-
-    final progress = ValueNotifier<double?>(0);
-    if (!context.mounted) return;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: Text('Uploading ${picked.name}'),
-          content: ValueListenableBuilder<double?>(
-            valueListenable: progress,
-            builder: (context, value, _) =>
-                LinearProgressIndicator(value: value),
+  // Mirrors `main.dart`'s `_handleSharedFiles` exactly, so picking a file
+  // via "+" lands on the same destination-picker screen and background
+  // foreground-service upload as receiving one via Android's "Share
+  // to..." sheet does, rather than a separate in-app-only upload path.
+  Future<void> _pickAndUploadFile(BuildContext context) async {
+    final picked = await FilePicker.pickFiles();
+    if (picked.isEmpty) return;
+    final files = picked
+        .where((f) => f.path != null)
+        .map(
+          (f) => SharedFileRef(
+            uri: Uri.file(f.path!).toString(),
+            name: f.name,
+            size: f.lengthSync(),
           ),
-        );
-      },
-    );
+        )
+        .toList();
+    if (files.isEmpty || !context.mounted) return;
 
-    bool success = false;
-    try {
-      success = await provider.uploadFileFromPath(
-        picked.name,
-        picked.path!,
-        onProgress: (sent, total) {
-          if (total > 0) progress.value = sent / total;
-        },
-      );
-    } catch (_) {
-      success = false;
-    }
-
-    if (context.mounted) {
-      Navigator.pop(context); // close progress dialog
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            success
-                ? 'Uploaded ${picked.name} to Nextcloud'
-                : 'Failed to upload ${picked.name}',
-          ),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => ShareUploadView(files: files)));
   }
 }

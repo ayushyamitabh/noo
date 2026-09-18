@@ -84,13 +84,19 @@ adb install -r build/app/outputs/flutter-apk/app-release.apk
 ```
 
 This only preserves data if the new APK's signature matches what's already
-on the device — a local build's release variant currently reuses the debug
-signing config (`android/app/build.gradle.kts`), so consecutive local
-builds share a key and `adb install -r` works cleanly. Installing a build
-signed with a different key (e.g. a CI-signed release APK from the Gitea
-release pipeline) over a differently-signed local build forces Android to
-require a full uninstall regardless of the install method used — there's no
-way around that from the tooling side.
+on the device. `android/app/build.gradle.kts` picks a release signing key
+in this order: a local `android/key.properties` (gitignored — points at a
+gitignored keystore file, e.g. `android/app/release-keystore.jks`), then
+CI env vars (`RELEASE_KEYSTORE_PATH`/`_PASSWORD`, `RELEASE_KEY_ALIAS`/
+`_PASSWORD`, set by `.gitea/workflows/build.yml` from repo secrets), then
+falls back to the debug key if neither is configured. As long as the same
+dedicated release keystore backs both `key.properties` locally and the
+Gitea secrets, local release builds and CI-built release APKs share one
+signature, so `adb install -r` works cleanly either way. A local checkout
+with no `key.properties` set up falls back to the (per-machine, ungitted)
+debug key, which won't match a CI-signed APK — installing one over the
+other still forces a full uninstall, since there's no way around Android's
+signature check from the tooling side.
 
 ## Dependencies
 

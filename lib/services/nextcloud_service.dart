@@ -1103,44 +1103,6 @@ class NextcloudService {
     return [];
   }
 
-  /// Uploads a file from disk, streaming it so large files don't need to be
-  /// buffered fully in memory, with progress reporting.
-  Future<bool> uploadFileFromPath(
-    String folderPath,
-    String fileName,
-    String localFilePath, {
-    void Function(int sent, int total)? onProgress,
-  }) async {
-    var cleanPath = folderPath.trim();
-    if (!cleanPath.startsWith('/')) cleanPath = '/$cleanPath';
-    if (!cleanPath.endsWith('/')) cleanPath = '$cleanPath/';
-
-    final url =
-        '$_cleanServerUrl/remote.php/dav/files/$username$cleanPath$fileName';
-    debugPrint('[Nextcloud DAV] Streaming upload to $url');
-
-    final file = File(localFilePath);
-    final length = await file.length();
-    final dio = Dio();
-
-    final response = await dio.put<void>(
-      url,
-      data: file.openRead(),
-      options: Options(
-        headers: {..._headers, Headers.contentLengthHeader: length},
-        contentType: 'application/octet-stream',
-      ),
-      onSendProgress: onProgress,
-    );
-
-    debugPrint(
-      '[Nextcloud DAV] Streaming upload status: ${response.statusCode}',
-    );
-    return response.statusCode == 201 ||
-        response.statusCode == 204 ||
-        response.statusCode == 200;
-  }
-
   Future<bool> deleteItem(String itemPath) async {
     var cleanPath = itemPath.trim();
     if (!cleanPath.startsWith('/')) cleanPath = '/$cleanPath';

@@ -1574,24 +1574,6 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _startCacheRefreshTimerIfNeeded();
   }
 
-  Future<bool> uploadFileFromPath(
-    String name,
-    String localFilePath, {
-    void Function(int sent, int total)? onProgress,
-  }) async {
-    if (_service == null) return false;
-    final success = await _service!.uploadFileFromPath(
-      _currentFolderPath,
-      name,
-      localFilePath,
-      onProgress: onProgress,
-    );
-    if (success) {
-      await refreshData();
-    }
-    return success;
-  }
-
   Future<bool> deleteItem(String itemPath) async {
     if (_service == null) return false;
     final success = await _service!.deleteItem(itemPath);

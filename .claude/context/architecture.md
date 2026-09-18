@@ -118,7 +118,12 @@ owns the app's share-intent listener (`ShareIntentService`, backed by
 hand-rolled native handling in `MainActivity.kt` - see `server.md` for why
 this isn't the `receive_sharing_intent` plugin): both `getInitialShare()`
 (cold start via another app's "Share to...") and `onNewShare` (already
-running) push `ShareUploadView`. It similarly owns the pick-intent listener
+running) push `ShareUploadView`. `FilesView`'s own "+" → "Upload File"
+(`_pickAndUploadFile`) reaches the exact same `ShareUploadView` screen
+through the same `SharedFileRef`-based path (wrapping `file_picker`'s
+result `Uri`s instead of a share intent's) rather than a separate
+in-app-only upload, so both entry points get the same destination picker
+and the same durable background-service upload. It similarly owns the pick-intent listener
 (`PickIntentService` - see `server.md` for the full "being picked by
 another app" story) that feeds `ServerProvider.pickRequest`; while
 `isPicking`, the visible tab list is overridden to just Files and Photos

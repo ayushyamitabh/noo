@@ -43,8 +43,22 @@ jobs:
       - name: Analyze
         run: flutter analyze
 
+      - name: Decode release keystore
+        # Keeps every release build - regardless of which runner built it -
+        # signed with the same key, so downloaded updates install cleanly
+        # over a previous release instead of failing with "App not
+        # installed" (mismatched signature). See android/app/build.gradle.kts.
+        run: echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > "${{ runner.temp }}/release-keystore.jks"
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+
       - name: Build release APK
         run: flutter build apk --release
+        env:
+          RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/release-keystore.jks
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
 
       - name: Rename APK to Noo-<version>.apk
         run: |
