@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/app_tab.dart';
 import '../views/activity_view.dart';
+import '../views/favorites_view.dart';
 import '../views/files_view.dart';
 import '../views/photos_view.dart';
 import '../views/recent_view.dart';
@@ -16,6 +17,8 @@ Widget buildAppTabView(AppTab tab, ScrollController controller) {
       return FilesView(scrollController: controller);
     case AppTab.photos:
       return PhotosView(scrollController: controller);
+    case AppTab.favorites:
+      return FavoritesView(scrollController: controller);
     case AppTab.activity:
       return ActivityView(scrollController: controller);
     case AppTab.trash:

@@ -76,12 +76,87 @@ rather than needing a rewrite for multi-account support.
 - **Everything else** (shares, activity, trash, favorites, quota, user info,
   file versions) goes through Nextcloud's OCS APIs (`/ocs/v2.php/...`), JSON
   in, with the `OCS-APIRequest: true` header required on every OCS call.
+  *Toggling* a favorite is OCS; *listing* every favorite (`fetchFavorites`,
+  for the Favorites tab) is WebDAV instead - the same `SEARCH` mechanism
+  `fetchAllMedia`/`fetchRecentFiles` use, filtered by `oc:favorite` instead
+  of mimetype/date. Favorites is a real tab
+  (`views/favorites_view.dart`/`ServerProvider.favoriteItems`/
+  `fetchAllFavorites`/`_allFavorites`), not a filter toggle scoped to
+  whatever folder the Files tab happens to be browsing (that's what it
+  used to be - see the note below on why that didn't work). It shares
+  Files' own sort/hidden/storage-scope/grid-list display prefs
+  (`applyFilesDisplayPrefs`, also used by the Move/Copy destination
+  picker) rather than a separate parallel settings dimension. Tapping a
+  favorited folder switches to the Files tab, navigated there
+  (`navigateToAbsoluteFolder` + `requestTab`); a favorited file opens
+  directly from the Favorites tab itself. `deleteItem`/`renameItem`/move/
+  copy all re-sync `_allFavorites` afterward via `_syncFavoritesIfLoaded`
+  (only once Favorites has actually been opened this session, tracked by
+  `_favoritesEverFetched`, so those actions don't pay for an extra request
+  on every edit for an account that's never visited the tab) since none of
+  them know how to patch `_allFavorites` in place the way
+  `toggleItemFavorite` does (added/removed/updated by id, right inline).
+  **Note**: this used to be a "favorites-only" filter toggle on the Files
+  tab's controls row instead of its own tab, filtering the currently
+  browsed folder's `_items`. That had two real bugs in sequence: first,
+  the filter dropped every non-favorited item *including folders*, so a
+  non-favorited folder (containing a favorited item nested inside)
+  vanished from the listing entirely, with no way to navigate into it;
+  fixing that by exempting folders from the filter was itself wrong,
+  because the actual intent was for favorites-only to show every
+  favorited item *account-wide*, not just direct children of whatever
+  folder was open - a strict filter over the wrong scope. Converting it to
+  a real tab, backed by an account-wide fetch, was the actual fix; keep
+  favorites account-wide rather than reintroducing a current-folder-scoped
+  filter.
 - Auth header is HTTP Basic (`username:appPassword`, base64), built in
   `_headers`/exposed as `authHeaders` for widgets that need to hit URLs
   directly (e.g. `Image.network(url, headers: service.authHeaders)` for
   thumbnails/previews).
-- Downloads stream through `Dio` (`downloadToFile`) for progress callbacks;
-  small in-app previews (text/PDF) use `fetchBytes` via `package:http`.
+- `NextcloudService.downloadToFile` (`Dio`, progress callbacks) is still
+  used for small in-app-only downloads: text/PDF previews (`fetchBytes` via
+  `package:http`) and "open externally" (`FileViewerScreen._downloadToTemp`
+  streams to the app's own cache dir so `open_file` can hand it to another
+  app). Explicitly saving a file **to the device** - the "Download" action
+  in Files/Photos' selection toolbar and the media viewer's download button
+  - instead hands off to `DownloadService.kt`, an Android foreground
+  service, the same way "Share to Noo" hands its upload off to
+  `ShareUploadService.kt` (see that section below) rather than downloading
+  in Dart and prompting `file_saver` per file: a real Service survives the
+  app being closed mid-download, with one cancellable notification for the
+  whole batch. `DownloadService.kt` re-implements a plain WebDAV GET in
+  Kotlin for the same reason `ShareUploadService.kt`'s PUT does - keep
+  `NextcloudService.downloadToFile` in sync manually if download semantics
+  change - and writes straight into the device's public Downloads
+  collection via `MediaStore.Downloads` (API 29+; a background Service
+  can't prompt `file_saver`'s SAF picker the way the Flutter/Activity side
+  can, so this is the direct equivalent) with a legacy
+  `Environment.DIRECTORY_DOWNLOADS` file-write fallback pre-Android-10.
+  Folders are filtered out client-side before handing off (no recursive/
+  zip download support); `DetailsVersionsTab`'s version-restore download
+  and `ShareSheet`'s "Share file directly" (native OS share, not saved to
+  Downloads) keep using `downloadToFile` directly instead, since both need
+  the bytes in-app rather than saved to Downloads.
+- **Move/Copy** (`moveItem`/`copyItem(itemPath, destFolderPath, {overwrite,
+  newName})`) share one private `_moveOrCopy` helper with `renameItem`
+  (itself just a same-folder MOVE) - WebDAV `MOVE`/`COPY` are the same
+  request shape, just a different verb, and both are recursive by default
+  for a folder ("collection"), so no extra `Depth` header is needed. They
+  return the raw HTTP status rather than a bool: `412 Precondition Failed`
+  is WebDAV's standard signal for "something's already there" when
+  `Overwrite: F`, which is exactly the conflict `ServerProvider.moveItems`/
+  `copyItems` need to detect without a separate existence-check request
+  per item. `ServerProvider` attempts every item in the batch first,
+  collects conflicts into `MoveCopyResult.conflicts`
+  (`models/move_copy_result.dart`), and only then shows one summary
+  (`MoveCopyConflictSheet`) instead of prompting per conflict as they're
+  hit; resolving picks overwrite/keep-both (auto-renamed via
+  `_nextAvailableName` against a fresh listing of the destination, fetched
+  once up front, not per item)/skip per item via `resolveConflicts`. The
+  destination-picker screen behind this
+  (`views/move_copy_destination_picker.dart`) is covered in
+  `architecture.md`, including why it can't reuse the Files tab's shared
+  navigation state the way `ShareUploadView` does.
 - **Uploads** (`uploadFileFromPath(folderPath, fileName, localFilePath,
   {onProgress})`) stream the local file via `Dio().put()` with an explicit
   `Content-Length` and `onSendProgress`, mirroring the download path. The

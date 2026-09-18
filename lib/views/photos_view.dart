@@ -1,14 +1,12 @@
-import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:material_symbols_icons/symbols.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/nextcloud_item.dart';
 import '../models/selection_action.dart';
 import '../providers/server_provider.dart';
+import '../services/download_service.dart';
 import '../widgets/details/details_sheet.dart';
 import '../widgets/more_tabs_button.dart';
 import '../widgets/profile_avatar_button.dart';
@@ -19,6 +17,7 @@ import '../widgets/sort_menu_button.dart';
 import '../widgets/sticky_header_delegate.dart';
 import '../widgets/synced_header_scaffold.dart';
 import 'file_viewer_screen.dart';
+import 'move_copy_destination_picker.dart';
 
 class PhotosView extends StatefulWidget {
   final ScrollController scrollController;
@@ -172,6 +171,16 @@ class _PhotosViewState extends State<PhotosView>
         icon: Icons.delete_outline_rounded,
         label: 'Delete',
         onTap: () => _confirmDeleteSelected(context, provider, selected),
+      ),
+      SelectionAction(
+        icon: Icons.copy_rounded,
+        label: 'Copy',
+        onTap: () => _moveOrCopySelected(provider, selected, copy: true),
+      ),
+      SelectionAction(
+        icon: Icons.drive_file_move_rounded,
+        label: 'Move',
+        onTap: () => _moveOrCopySelected(provider, selected, copy: false),
       ),
       if (selected.length == 1)
         SelectionAction(
@@ -633,45 +642,35 @@ class _PhotosViewState extends State<PhotosView>
     }
   }
 
+  /// Hands the whole batch off to `DownloadService.kt` - see
+  /// `FilesView._downloadSelected`'s identical doc comment for why.
   Future<void> _downloadSelected(
     BuildContext context,
     ServerProvider provider,
     List<NextcloudItem> items,
   ) async {
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text('Downloading ${items.length} item(s)...'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-
-    var succeeded = 0;
-    for (final item in items) {
-      try {
-        final tempDir = await getTemporaryDirectory();
-        final tempPath = p.join(tempDir.path, item.name);
-        await provider.service!.downloadToFile(item.path, tempPath);
-        final ext = p.extension(item.name).replaceFirst('.', '');
-        final baseName = p.basenameWithoutExtension(item.name);
-        await FileSaver.instance.saveFile(
-          name: baseName,
-          filePath: tempPath,
-          ext: ext,
-        );
-        succeeded++;
-      } catch (_) {
-        // Reported in the summary snackbar below.
-      }
-    }
-
     _clearSelection();
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text('Downloaded $succeeded of ${items.length} item(s)'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await DownloadService.startDownload(provider, items);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            items.length == 1
+                ? 'Downloading ${items.first.name} - see the notification for progress'
+                : 'Downloading ${items.length} files - see the notification for progress',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Could not start download: $e'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   Future<void> _confirmDeleteSelected(
@@ -716,6 +715,28 @@ class _PhotosViewState extends State<PhotosView>
     messenger.showSnackBar(
       SnackBar(
         content: Text('Deleted $succeeded of ${items.length} item(s)'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _moveOrCopySelected(
+    ServerProvider provider,
+    List<NextcloudItem> items, {
+    required bool copy,
+  }) async {
+    final result = await MoveCopyDestinationPicker.show(
+      context,
+      items,
+      copy: copy,
+    );
+    if (!mounted || result == null) return;
+    _clearSelection();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '${copy ? 'Copied' : 'Moved'} ${result.succeeded} of ${items.length} item(s)',
+        ),
         behavior: SnackBarBehavior.floating,
       ),
     );

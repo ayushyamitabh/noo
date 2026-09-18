@@ -102,10 +102,15 @@ state, no named routes:
 - else `provider.needsUnlock` → `LockScreenView` (login lock — see above)
 - else `MainShellView`
 
-`MainShellView` is a bottom-nav `IndexedStack` over up to 6 tabs — Files,
-Photos, Activity, Trash, Shares, Recent — user-configurable (order,
-visibility up to `maxVisibleTabs`, default tab) via `AppTab`/`ServerProvider`
-and rendered through `buildAppTabView` (`widgets/app_tab_view_builder.dart`).
+`MainShellView` is a bottom-nav `IndexedStack` over up to 7 tabs — Files,
+Photos, Favorites, Activity, Trash, Shares, Recent — user-configurable
+(order, visibility up to `maxVisibleTabs`, default tab) via
+`AppTab`/`ServerProvider` and rendered through `buildAppTabView`
+(`widgets/app_tab_view_builder.dart`). `maxVisibleTabs` (5) is less than the
+total tab count, and `ServerProvider._enforceMaxVisibleTabs` already
+auto-hides overflow on load (fresh install, or - as when Favorites was
+added - an existing saved tab order from before a new tab existed), so
+adding a tab to the `AppTab` enum needs no extra migration.
 Each tab keeps its own `ScrollController` (survives tab switches via
 `IndexedStack`'s built-but-hidden trees) and tapping the already-active tab
 scrolls it back to top (`tapTabToScrollTop` setting). `MainShellView` also
@@ -140,6 +145,23 @@ sheet peeking up from the bottom edge rather than a plain flat bar.
 [`MarqueeTitle`](../../lib/widgets/marquee_title.dart) (`package:marquee`) is
 shared with `FileViewerScreen`'s title - falls back to a plain ellipsized
 `Text` when the content already fits, so short text never marquees.
+
+The Move/Copy destination picker
+([`MoveCopyDestinationPicker`](../../lib/views/move_copy_destination_picker.dart),
+pushed from Files/Photos' selection toolbar - see `server.md` for the
+backend side) visually mirrors `ShareUploadView`'s browser the same way,
+but is a deliberately different case for state: it does **not** reuse
+`ServerProvider`'s shared `currentFolderPath`/`pathStack`/`items`, and
+owns its own local navigation state instead, fetching through the
+stateless `ServerProvider.fetchFolderListing`/`applyFilesDisplayPrefs`
+pair. `ShareUploadView` can get away with hijacking the shared state
+because it always resets to root on entry and pops all the way to the
+app's root route on completion - fine for a cold share-intent launch with
+no prior browsing session to preserve. The Move/Copy picker is pushed
+*while the user is actively browsing a specific Files-tab folder*, so
+reusing the shared state would strand that folder's `pathStack` under it;
+its local state means popping back always lands the user exactly where
+they were, untouched.
 `SearchView`, `AccountView` (Settings), the file-details sheet, and the
 share sheet are pushed on top via
 `Navigator`/`showModalBottomSheet`/`showGradualBottomSheet` rather than

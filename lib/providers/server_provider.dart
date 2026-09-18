@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/app_tab.dart';
+import '../models/move_copy_result.dart';
 import '../models/nextcloud_file_version.dart';
 import '../models/nextcloud_item.dart';
 import '../models/nextcloud_share.dart';
@@ -75,7 +76,6 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _prefBottomBarOpacity = 'ui_bottom_bar_opacity';
   static const _prefBottomBarBlur = 'ui_bottom_bar_blur';
   static const _prefGridView = 'ui_grid_view';
-  static const _prefShowFavoritesOnlyFiles = 'ui_show_favorites_only';
   static const _prefShowFavoritesOnlyPhotos = 'ui_show_favorites_only_photos';
   static const _prefStorageScope = 'ui_storage_scope';
   static const _prefFilesTypeFilter = 'ui_files_type_filter';
@@ -153,7 +153,6 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool _isDownloadingForPick = false;
   List<String> _pathStack = ['/'];
   bool _isGridView = false;
-  bool _showFavoritesOnlyFiles = false;
   bool _showFavoritesOnlyPhotos = false;
   StorageScope _storageScope = StorageScope.cloud;
   FilesTypeFilter _filesTypeFilter = FilesTypeFilter.all;
@@ -197,6 +196,26 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
   List<NextcloudItem> _allMedia = [];
   bool _isMediaLoading = false;
   String? _mediaErrorMessage;
+
+  // All-account favorites (the Favorites tab) - same idea as [_allMedia]:
+  // a strict filter (only favorited items) but an account-wide *scope*, so
+  // a favorited item several folders deep still shows up regardless of
+  // whether its parent folders are themselves favorited - which is exactly
+  // why this is its own tab (and its own fetch/loading state, kept
+  // separate from Files' own [_isLoading]/[_errorMessage] since both tabs
+  // are simultaneously mounted in MainShellView's IndexedStack and would
+  // otherwise bleed loading/error state into each other) rather than a
+  // filter toggle scoped to whatever folder the Files tab happens to be
+  // browsing.
+  List<NextcloudItem> _allFavorites = [];
+  bool _isFavoritesLoading = false;
+  String? _favoritesErrorMessage;
+  // True once fetchAllFavorites has run at least once (i.e. the Favorites
+  // tab has been visited) - delete/rename/move/copy re-sync [_allFavorites]
+  // afterward, but only when it's actually been loaded, so those actions
+  // don't pay for an extra network round-trip on every Files/Photos edit
+  // for an account that's never opened the Favorites tab this session.
+  bool _favoritesEverFetched = false;
 
   // Trash state — kept separate from the regular folder-loading/error state
   // above so a trash-fetch failure can't bleed a stale error into Files.
@@ -393,7 +412,6 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   List<String> get pathStack => _pathStack;
   bool get isGridView => _isGridView;
-  bool get showFavoritesOnlyFiles => _showFavoritesOnlyFiles;
   bool get showFavoritesOnlyPhotos => _showFavoritesOnlyPhotos;
   StorageScope get storageScope => _storageScope;
   FilesTypeFilter get filesTypeFilter => _filesTypeFilter;
@@ -446,10 +464,11 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
         .any((segment) => segment.startsWith('.'));
   }
 
-  /// Applies the shared favorites-only/hidden-files/storage-scope toggles,
-  /// used by both [items] and [photoItems]. `showFavoritesOnly`/`showHidden`
-  /// are passed in separately since Files and Photos each have their own
-  /// independent favorites-only and hidden-files toggles.
+  /// Applies the shared favorites-only/hidden-files/storage-scope toggles.
+  /// `showFavoritesOnly` is effectively Photos-only now (`items`/
+  /// `favoriteItems` both always pass `false` - see their own doc
+  /// comments for why); kept as a parameter here since `photoItems` still
+  /// has its own independent favorites-only toggle.
   List<NextcloudItem> _applyCommonFilters(
     List<NextcloudItem> source, {
     required bool showFavoritesOnly,
@@ -472,10 +491,31 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     return filtered;
   }
 
-  List<NextcloudItem> get items {
+  List<NextcloudItem> get items => applyFilesDisplayPrefs(_items);
+
+  /// The Favorites tab's content - every favorited item account-wide (see
+  /// `fetchAllFavorites`), run through the exact same hidden/type-filter/
+  /// sort/storage-scope display prefs as the Files tab (deliberately
+  /// shared rather than a separate parallel settings dimension, the same
+  /// way the Move/Copy destination picker reuses them). No favorites
+  /// filter needed here - the source list is already all-favorites.
+  List<NextcloudItem> get favoriteItems =>
+      applyFilesDisplayPrefs(_allFavorites);
+
+  /// Applies the Files tab's current sort/filter display prefs (hidden,
+  /// type filter, storage scope, sort field/direction) to an arbitrary raw
+  /// item list - factored out of the [items] getter so both the Favorites
+  /// tab ([favoriteItems]) and the Move/Copy destination picker (which
+  /// fetches its own listings via [fetchFolderListing] rather than reading
+  /// [items] itself - see that method's doc comment) can render with the
+  /// exact same controls/behavior as the Files tab without duplicating
+  /// this logic.
+  List<NextcloudItem> applyFilesDisplayPrefs(List<NextcloudItem> rawItems) {
     var filtered = _applyCommonFilters(
-      _items,
-      showFavoritesOnly: _showFavoritesOnlyFiles,
+      rawItems,
+      // Files itself no longer filters by favorite - that's the dedicated
+      // Favorites tab's job now (see `favoriteItems`/`fetchAllFavorites`).
+      showFavoritesOnly: false,
       showHidden: _showHiddenFiles,
     );
     switch (_filesTypeFilter) {
@@ -511,6 +551,8 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   bool get isMediaLoading => _isMediaLoading;
   String? get mediaErrorMessage => _mediaErrorMessage;
+  bool get isFavoritesLoading => _isFavoritesLoading;
+  String? get favoritesErrorMessage => _favoritesErrorMessage;
 
   NextcloudUserQuota? get quota => _quota;
   List<NextcloudActivity> get activities => _activities;
@@ -658,7 +700,6 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
 
     if (accountId == null) {
       _isGridView = false;
-      _showFavoritesOnlyFiles = false;
       _showFavoritesOnlyPhotos = false;
       _storageScope = StorageScope.cloud;
       _filesTypeFilter = FilesTypeFilter.all;
@@ -674,8 +715,6 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     String k(String base) => _accountStore.accountPrefKey(accountId, base);
 
     _isGridView = prefs.getBool(k(_prefGridView)) ?? false;
-    _showFavoritesOnlyFiles =
-        prefs.getBool(k(_prefShowFavoritesOnlyFiles)) ?? false;
     _showFavoritesOnlyPhotos =
         prefs.getBool(k(_prefShowFavoritesOnlyPhotos)) ?? false;
 
@@ -1196,6 +1235,48 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  /// Loads every favorited item across the whole account for the Favorites
+  /// tab - see [_allFavorites]'s doc comment for why this is a separate
+  /// account-wide fetch rather than a filter over the currently browsed
+  /// folder's [_items].
+  Future<void> fetchAllFavorites() async {
+    if (!_isLoggedIn || _service == null) return;
+    final gen = _sessionGeneration;
+    _favoritesEverFetched = true;
+
+    _isFavoritesLoading = true;
+    _favoritesErrorMessage = null;
+    notifyListeners();
+
+    try {
+      final favorites = await _service!.fetchFavorites();
+      if (gen != _sessionGeneration) return;
+      _allFavorites = favorites;
+      debugPrint('[ServerProvider] Loaded ${_allFavorites.length} favorites');
+    } catch (e) {
+      if (gen != _sessionGeneration) return;
+      debugPrint('[ServerProvider] Error fetching favorites: $e');
+      _favoritesErrorMessage = e.toString().replaceAll('Exception: ', '');
+    } finally {
+      if (gen == _sessionGeneration) {
+        _isFavoritesLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  /// Re-syncs [_allFavorites] after a delete/rename/move/copy elsewhere in
+  /// the app (Files, Photos, or Favorites itself) - those operations don't
+  /// know how to patch [_allFavorites] in place (a move changes an item's
+  /// path; WebDAV COPY's handling of custom properties like `oc:favorite`
+  /// isn't reliable enough to assume the copy is still favorited), so this
+  /// just refetches - but only if Favorites has actually been loaded this
+  /// session, so an account that never opens that tab doesn't pay for an
+  /// extra request on every edit.
+  Future<void> _syncFavoritesIfLoaded() {
+    return _favoritesEverFetched ? fetchAllFavorites() : Future.value();
+  }
+
   Future<void> navigateToFolder(String path) async {
     _pathStack.add(path);
     await _navigateTo(path);
@@ -1282,15 +1363,6 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _isGridView = value;
     notifyListeners();
     _persistAccountPref(_prefGridView, (p, key) => p.setBool(key, value));
-  }
-
-  void toggleFavoritesFilterFiles() {
-    _showFavoritesOnlyFiles = !_showFavoritesOnlyFiles;
-    notifyListeners();
-    _persistAccountPref(
-      _prefShowFavoritesOnlyFiles,
-      (p, key) => p.setBool(key, _showFavoritesOnlyFiles),
-    );
   }
 
   void toggleFavoritesFilterPhotos() {
@@ -1526,6 +1598,7 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     if (success) {
       _allMedia = _allMedia.where((i) => i.path != itemPath).toList();
       await refreshData();
+      await _syncFavoritesIfLoaded();
     }
     return success;
   }
@@ -1535,8 +1608,176 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     final success = await _service!.renameItem(item.path, newName);
     if (success) {
       await refreshData();
+      await _syncFavoritesIfLoaded();
     }
     return success;
+  }
+
+  /// A destination-picker-only fetch: the current folder listing state
+  /// (`items`/`currentFolderPath`/`pathStack`/`_directoryCache`) belongs to
+  /// whichever tab is actively browsing (Files), so the Move/Copy
+  /// destination picker deliberately doesn't touch any of it - it fetches
+  /// listings for its own local navigation state through this instead,
+  /// mirroring `searchFiles`'s identical stateless-pass-through shape.
+  Future<List<NextcloudItem>> fetchFolderListing(String path) {
+    return _service?.fetchDirectory(path) ?? Future.value([]);
+  }
+
+  /// True if [destFolderPath] is [folderPath] itself or one of its own
+  /// descendants - moving/copying a folder into itself (or a subfolder of
+  /// itself) is nonsensical and rejected client-side rather than left to
+  /// the server to (maybe) reject.
+  bool _isSelfOrDescendant(String destFolderPath, String folderPath) {
+    final dest = destFolderPath.endsWith('/')
+        ? destFolderPath
+        : '$destFolderPath/';
+    final folder = folderPath.endsWith('/') ? folderPath : '$folderPath/';
+    return dest == folder || dest.startsWith(folder);
+  }
+
+  Future<MoveCopyResult> _moveOrCopyItems(
+    List<NextcloudItem> items,
+    String destFolderPath, {
+    required bool copy,
+  }) async {
+    if (_service == null || items.isEmpty) return const MoveCopyResult();
+    for (final item in items) {
+      if (item.isFolder && _isSelfOrDescendant(destFolderPath, item.path)) {
+        return const MoveCopyResult(
+          blockedReason:
+              "Can't move a folder into itself or one of its own subfolders",
+        );
+      }
+    }
+
+    var succeeded = 0;
+    var failed = 0;
+    final conflicts = <MoveCopyConflict>[];
+    for (final item in items) {
+      final status = copy
+          ? await _service!.copyItem(item.path, destFolderPath)
+          : await _service!.moveItem(item.path, destFolderPath);
+      if (status == 201 || status == 204) {
+        succeeded++;
+      } else if (status == 412) {
+        conflicts.add(MoveCopyConflict(item));
+      } else {
+        failed++;
+      }
+    }
+    if (succeeded > 0) {
+      _directoryCache.clear();
+      await refreshData();
+      await _syncFavoritesIfLoaded();
+    }
+    return MoveCopyResult(
+      succeeded: succeeded,
+      conflicts: conflicts,
+      failed: failed,
+    );
+  }
+
+  /// Moves every item in [items] into [destFolderPath], keeping each
+  /// item's own filename. Items that would collide with something already
+  /// there come back in [MoveCopyResult.conflicts] rather than failing
+  /// outright - resolve those with [resolveConflicts].
+  Future<MoveCopyResult> moveItems(
+    List<NextcloudItem> items,
+    String destFolderPath,
+  ) {
+    return _moveOrCopyItems(items, destFolderPath, copy: false);
+  }
+
+  /// Same as [moveItems] but duplicates rather than relocates.
+  Future<MoveCopyResult> copyItems(
+    List<NextcloudItem> items,
+    String destFolderPath,
+  ) {
+    return _moveOrCopyItems(items, destFolderPath, copy: true);
+  }
+
+  /// Finds the first `name (n).ext` not already in [existing] - `existing`
+  /// is mutated as names are claimed, so a batch of "keep both" resolutions
+  /// never picks the same generated name twice.
+  String _nextAvailableName(String name, Set<String> existing) {
+    if (!existing.contains(name)) return name;
+    final dotIndex = name.lastIndexOf('.');
+    final hasExtension = dotIndex > 0 && dotIndex < name.length - 1;
+    final base = hasExtension ? name.substring(0, dotIndex) : name;
+    final ext = hasExtension ? name.substring(dotIndex) : '';
+    var n = 2;
+    while (existing.contains('$base ($n)$ext')) {
+      n++;
+    }
+    return '$base ($n)$ext';
+  }
+
+  /// Resolves a previous [moveItems]/[copyItems] call's conflicts per
+  /// [choices] (keyed by `item.id`): overwrite the existing item, keep
+  /// both (renamed against a fresh listing of [destFolderPath] so two
+  /// "keep both" picks in the same batch can't collide with each other),
+  /// or skip (left untouched at the source).
+  Future<MoveCopyResult> resolveConflicts(
+    List<MoveCopyConflict> conflicts,
+    String destFolderPath, {
+    required bool copy,
+    required Map<String, ConflictChoice> choices,
+  }) async {
+    if (_service == null || conflicts.isEmpty) return const MoveCopyResult();
+
+    final needsKeepBoth = conflicts.any(
+      (c) => choices[c.item.id] == ConflictChoice.keepBoth,
+    );
+    final existingNames = needsKeepBoth
+        ? (await fetchFolderListing(destFolderPath)).map((i) => i.name).toSet()
+        : <String>{};
+
+    var succeeded = 0;
+    var failed = 0;
+    for (final conflict in conflicts) {
+      final choice = choices[conflict.item.id] ?? ConflictChoice.skip;
+      if (choice == ConflictChoice.skip) continue;
+
+      final int status;
+      if (choice == ConflictChoice.overwrite) {
+        status = copy
+            ? await _service!.copyItem(
+                conflict.item.path,
+                destFolderPath,
+                overwrite: true,
+              )
+            : await _service!.moveItem(
+                conflict.item.path,
+                destFolderPath,
+                overwrite: true,
+              );
+      } else {
+        final newName = _nextAvailableName(conflict.item.name, existingNames);
+        existingNames.add(newName);
+        status = copy
+            ? await _service!.copyItem(
+                conflict.item.path,
+                destFolderPath,
+                newName: newName,
+              )
+            : await _service!.moveItem(
+                conflict.item.path,
+                destFolderPath,
+                newName: newName,
+              );
+      }
+      if (status == 201 || status == 204) {
+        succeeded++;
+      } else {
+        failed++;
+      }
+    }
+    if (succeeded > 0) {
+      _directoryCache.clear();
+      await refreshData();
+      await _syncFavoritesIfLoaded();
+    }
+    return MoveCopyResult(succeeded: succeeded, failed: failed);
   }
 
   Future<void> fetchTrash() async {
@@ -1673,6 +1914,21 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
       if (index != -1) _items[index] = updated;
       final mediaIndex = _allMedia.indexWhere((i) => i.id == item.id);
       if (mediaIndex != -1) _allMedia[mediaIndex] = updated;
+      // Keeps the Favorites tab's own list in sync in place (cheap enough
+      // not to need a full refetch, unlike delete/rename/move/copy - see
+      // `_syncFavoritesIfLoaded`) - added if newly favorited, removed if
+      // un-favorited, since [_allFavorites] should only ever hold
+      // favorited items.
+      final favIndex = _allFavorites.indexWhere((i) => i.id == item.id);
+      if (updated.isFavorite) {
+        if (favIndex != -1) {
+          _allFavorites[favIndex] = updated;
+        } else {
+          _allFavorites = [..._allFavorites, updated];
+        }
+      } else if (favIndex != -1) {
+        _allFavorites = [..._allFavorites]..removeAt(favIndex);
+      }
       notifyListeners();
     }
   }

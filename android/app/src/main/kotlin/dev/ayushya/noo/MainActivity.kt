@@ -41,6 +41,7 @@ class MainActivity : FlutterFragmentActivity() {
     private val shareIntentChannelName = "dev.ayushya.noo/share_intent"
     private val newShareChannelName = "dev.ayushya.noo/share_intent/new"
     private val uploadServiceChannelName = "dev.ayushya.noo/upload_service"
+    private val downloadServiceChannelName = "dev.ayushya.noo/download_service"
     private val pickIntentChannelName = "dev.ayushya.noo/pick_intent"
     private val newPickChannelName = "dev.ayushya.noo/pick_intent/new"
     private val notificationPermissionRequestCode = 4202
@@ -79,6 +80,16 @@ class MainActivity : FlutterFragmentActivity() {
                 when (call.method) {
                     "startUpload" -> {
                         startUploadService(call, result)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, downloadServiceChannelName)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "startDownload" -> {
+                        startDownloadService(call, result)
                     }
                     else -> result.notImplemented()
                 }
@@ -210,6 +221,42 @@ class MainActivity : FlutterFragmentActivity() {
             putExtra(ShareUploadService.EXTRA_USERNAME, username)
             putExtra(ShareUploadService.EXTRA_AUTH_HEADER, authHeader)
             putExtra(ShareUploadService.EXTRA_REMOTE_FOLDER, remoteFolder)
+        }
+        ContextCompat.startForegroundService(this, serviceIntent)
+        result.success(null)
+    }
+
+    /// Starts DownloadService with everything it needs to run entirely on
+    /// its own (see its doc comment) - same contract shape as
+    /// [startUploadService], kept in sync manually for the same reason.
+    private fun startDownloadService(call: MethodCall, result: MethodChannel.Result) {
+        val filesJson = call.argument<String>("files")
+        val serverUrl = call.argument<String>("serverUrl")
+        val username = call.argument<String>("username")
+        val authHeader = call.argument<String>("authHeader")
+        if (filesJson == null || serverUrl == null || username == null || authHeader == null) {
+            result.error("bad_args", "Missing required download arguments", null)
+            return
+        }
+
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            // Fire-and-forget: the service works fine even if this is denied,
+            // it just won't be able to show progress/cancel in a notification.
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                notificationPermissionRequestCode,
+            )
+        }
+
+        val serviceIntent = Intent(this, DownloadService::class.java).apply {
+            putExtra(DownloadService.EXTRA_FILES, filesJson)
+            putExtra(DownloadService.EXTRA_SERVER_URL, serverUrl)
+            putExtra(DownloadService.EXTRA_USERNAME, username)
+            putExtra(DownloadService.EXTRA_AUTH_HEADER, authHeader)
         }
         ContextCompat.startForegroundService(this, serviceIntent)
         result.success(null)

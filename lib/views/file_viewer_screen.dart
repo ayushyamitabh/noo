@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
-import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:open_file/open_file.dart';
 import 'package:path/path.dart' as p;
@@ -11,6 +10,7 @@ import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 import '../models/nextcloud_item.dart';
 import '../providers/server_provider.dart';
+import '../services/download_service.dart';
 import '../widgets/details/details_sheet.dart';
 import '../widgets/frosted_glass_container.dart';
 import '../widgets/marquee_title.dart';
@@ -189,21 +189,22 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
     }
   }
 
+  /// Hands off to `DownloadService.kt` (see its doc comment) rather than
+  /// downloading in Dart then prompting `file_saver` - same reasoning as
+  /// `UploadService`/`ShareUploadService.kt` on the upload side: a real
+  /// Android Service survives the app being closed mid-download, and one
+  /// notification covers progress/cancel instead of blocking this screen.
   Future<void> _downloadToDevice(ServerProvider provider) async {
     final item = _currentItem;
-    setState(() => _isBusy = true);
     try {
-      final tempPath = await _downloadToTemp(provider, item);
-      final ext = p.extension(item.name).replaceFirst('.', '');
-      final baseName = p.basenameWithoutExtension(item.name);
-      await FileSaver.instance.saveFile(
-        name: baseName,
-        filePath: tempPath,
-        ext: ext,
-      );
+      await DownloadService.startDownload(provider, [item]);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Saved ${item.name} to Downloads')),
+          SnackBar(
+            content: Text(
+              'Downloading ${item.name} - see the notification for progress',
+            ),
+          ),
         );
       }
     } catch (e) {
@@ -212,8 +213,6 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
           context,
         ).showSnackBar(SnackBar(content: Text('Download failed: $e')));
       }
-    } finally {
-      if (mounted) setState(() => _isBusy = false);
     }
   }
 

@@ -1,16 +1,14 @@
 import 'package:file_picker/file_picker.dart';
-import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:material_symbols_icons/symbols.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/nextcloud_item.dart';
 import '../models/selection_action.dart';
 import '../providers/server_provider.dart';
+import '../services/download_service.dart';
 import '../widgets/breadcrumbs.dart';
 import '../widgets/details/details_sheet.dart';
 import '../widgets/item_icon.dart';
@@ -24,6 +22,7 @@ import '../widgets/sticky_header_delegate.dart';
 import '../widgets/swipeable_item.dart';
 import '../widgets/synced_header_scaffold.dart';
 import 'file_viewer_screen.dart';
+import 'move_copy_destination_picker.dart';
 
 class FilesView extends StatefulWidget {
   final ScrollController scrollController;
@@ -267,6 +266,16 @@ class _FilesViewState extends State<FilesView>
         label: 'Delete',
         onTap: () => _confirmDeleteSelected(context, provider, selected),
       ),
+      SelectionAction(
+        icon: Icons.copy_rounded,
+        label: 'Copy',
+        onTap: () => _moveOrCopySelected(provider, selected, copy: true),
+      ),
+      SelectionAction(
+        icon: Icons.drive_file_move_rounded,
+        label: 'Move',
+        onTap: () => _moveOrCopySelected(provider, selected, copy: false),
+      ),
       if (selected.length == 1)
         SelectionAction(
           icon: Icons.drive_file_rename_outline_rounded,
@@ -440,15 +449,6 @@ class _FilesViewState extends State<FilesView>
                       onChanged: provider.setFilesSortField,
                     ),
                   ),
-                  ToggleIconButton(
-                    icon: provider.showFavoritesOnlyFiles
-                        ? Icons.favorite_rounded
-                        : Icons.favorite_border_rounded,
-                    isSelected: provider.showFavoritesOnlyFiles,
-                    onTap: provider.toggleFavoritesFilterFiles,
-                    tooltip: 'Favorites only',
-                  ),
-                  const SizedBox(width: 4),
                   ToggleIconButton(
                     icon: provider.showHiddenFiles
                         ? Icons.visibility_rounded
@@ -785,46 +785,42 @@ class _FilesViewState extends State<FilesView>
     _clearSelection();
   }
 
+  /// Hands the whole batch off to `DownloadService.kt` (see its doc
+  /// comment) rather than downloading each item in Dart then prompting
+  /// `file_saver` per file - same reasoning as `UploadService`/
+  /// `ShareUploadService.kt` on the upload side: a real Android Service
+  /// survives the app being closed mid-download, with one cancellable
+  /// notification for the whole selection instead of blocking here.
   Future<void> _downloadSelected(
     BuildContext context,
     ServerProvider provider,
     List<NextcloudItem> items,
   ) async {
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text('Downloading ${items.length} item(s)...'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-
-    var succeeded = 0;
-    for (final item in items) {
-      if (item.isFolder) continue;
-      try {
-        final tempDir = await getTemporaryDirectory();
-        final tempPath = p.join(tempDir.path, item.name);
-        await provider.service!.downloadToFile(item.path, tempPath);
-        final ext = p.extension(item.name).replaceFirst('.', '');
-        final baseName = p.basenameWithoutExtension(item.name);
-        await FileSaver.instance.saveFile(
-          name: baseName,
-          filePath: tempPath,
-          ext: ext,
-        );
-        succeeded++;
-      } catch (_) {
-        // Reported in the summary snackbar below.
-      }
-    }
-
+    final files = items.where((i) => !i.isFolder).toList();
     _clearSelection();
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text('Downloaded $succeeded of ${items.length} item(s)'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    if (files.isEmpty) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await DownloadService.startDownload(provider, files);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            files.length == 1
+                ? 'Downloading ${files.first.name} - see the notification for progress'
+                : 'Downloading ${files.length} files - see the notification for progress',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Could not start download: $e'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   Future<void> _confirmDeleteSelected(
@@ -869,6 +865,28 @@ class _FilesViewState extends State<FilesView>
     messenger.showSnackBar(
       SnackBar(
         content: Text('Deleted $succeeded of ${items.length} item(s)'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _moveOrCopySelected(
+    ServerProvider provider,
+    List<NextcloudItem> items, {
+    required bool copy,
+  }) async {
+    final result = await MoveCopyDestinationPicker.show(
+      context,
+      items,
+      copy: copy,
+    );
+    if (!mounted || result == null) return;
+    _clearSelection();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '${copy ? 'Copied' : 'Moved'} ${result.succeeded} of ${items.length} item(s)',
+        ),
         behavior: SnackBarBehavior.floating,
       ),
     );

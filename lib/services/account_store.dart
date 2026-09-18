@@ -27,7 +27,6 @@ class AccountStore {
   /// by account switching.
   static const perAccountPrefKeys = [
     'ui_grid_view',
-    'ui_show_favorites_only',
     'ui_show_favorites_only_photos',
     'ui_storage_scope',
     'ui_show_hidden',

@@ -51,11 +51,24 @@ class DetailsSheet extends StatelessWidget {
       child: Column(
         children: [
           DetailsHeader(item: item),
+          // Icon size matches the bottom nav bar's own tab icons
+          // (FloatingBottomNavBar) rather than TabBar's oversized default,
+          // so a "tabs" affordance reads the same size everywhere in the
+          // app.
           const TabBar(
             tabs: [
-              Tab(icon: Icon(Icons.info_outline_rounded), text: 'Info'),
-              Tab(icon: Icon(Icons.history_rounded), text: 'Versions'),
-              Tab(icon: Icon(Icons.electric_bolt_rounded), text: 'Activity'),
+              Tab(
+                icon: Icon(Icons.info_outline_rounded, size: 22),
+                text: 'Info',
+              ),
+              Tab(
+                icon: Icon(Icons.history_rounded, size: 22),
+                text: 'Versions',
+              ),
+              Tab(
+                icon: Icon(Icons.electric_bolt_rounded, size: 22),
+                text: 'Activity',
+              ),
             ],
           ),
           Expanded(

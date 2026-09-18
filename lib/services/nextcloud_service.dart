@@ -699,6 +699,170 @@ class NextcloudService {
     return results;
   }
 
+  /// Finds every favorited file/folder anywhere in the account (not just
+  /// the currently browsed folder) via the same WebDAV SEARCH-REPORT
+  /// mechanism as [fetchAllMedia], filtered by `oc:favorite` instead of
+  /// mimetype. Used by the Files tab's favorites-only toggle: filtering
+  /// should still be strict (only favorited items), but the *scope* is the
+  /// whole account, not whatever folder happens to be open - otherwise a
+  /// favorited item nested a few folders down would never show up just
+  /// because its parent folders aren't favorited themselves.
+  Future<List<NextcloudItem>> fetchFavorites() async {
+    final url = '$_cleanServerUrl/remote.php/dav/';
+    debugPrint('[Nextcloud DAV] SEARCH for favorites from $url');
+
+    final body =
+        '''<?xml version="1.0" encoding="utf-8" ?>
+<d:searchrequest xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns" xmlns:nc="http://nextcloud.org/ns">
+  <d:basicsearch>
+    <d:select>
+      <d:prop>
+        <d:displayname/>
+        <d:getcontentlength/>
+        <d:getlastmodified/>
+        <d:creationdate/>
+        <d:getcontenttype/>
+        <d:resourcetype/>
+        <oc:favorite/>
+        <oc:fileid/>
+        <nc:mount-type/>
+      </d:prop>
+    </d:select>
+    <d:from>
+      <d:scope>
+        <d:href>/files/$username</d:href>
+        <d:depth>infinity</d:depth>
+      </d:scope>
+    </d:from>
+    <d:where>
+      <d:eq>
+        <d:prop><oc:favorite/></d:prop>
+        <d:literal>1</d:literal>
+      </d:eq>
+    </d:where>
+    <d:orderby>
+      <d:order>
+        <d:prop><d:displayname/></d:prop>
+        <d:ascending/>
+      </d:order>
+    </d:orderby>
+  </d:basicsearch>
+</d:searchrequest>''';
+
+    final request = http.Request('SEARCH', Uri.parse(url))
+      ..headers.addAll({..._headers, 'Content-Type': 'text/xml'})
+      ..body = body;
+
+    final streamed = await http.Client().send(request);
+    final responseBody = await streamed.stream.bytesToString();
+    debugPrint(
+      '[Nextcloud DAV] Favorites SEARCH status: ${streamed.statusCode}, bytes: ${responseBody.length}',
+    );
+
+    if (streamed.statusCode != 207 && streamed.statusCode != 200) {
+      throw Exception('Failed to load favorites. HTTP ${streamed.statusCode}');
+    }
+
+    final document = xml.XmlDocument.parse(responseBody);
+    final responses = document.findLocalDescendants('response');
+
+    final results = <NextcloudItem>[];
+    for (var res in responses) {
+      final hrefNode =
+          res.findLocalChildren('href').firstOrNull ??
+          res.findLocalDescendants('href').firstOrNull;
+      final href = hrefNode?.innerText ?? '';
+      if (href.isEmpty) continue;
+
+      final props = res.findLocalDescendants('prop');
+      if (props.isEmpty) continue;
+
+      bool isCollection = false;
+      String? sizeStr;
+      String? lastModStr;
+      String? createdStr;
+      String? mimeType;
+      String? fileId;
+      String? mountType;
+
+      for (var prop in props) {
+        if (!isCollection) {
+          final resTypeNode = prop
+              .findLocalChildren('resourcetype')
+              .firstOrNull;
+          if (resTypeNode != null &&
+              resTypeNode.findLocalChildren('collection').isNotEmpty) {
+            isCollection = true;
+          }
+        }
+        sizeStr ??= prop
+            .findLocalChildren('getcontentlength')
+            .firstOrNull
+            ?.innerText;
+        lastModStr ??= prop
+            .findLocalChildren('getlastmodified')
+            .firstOrNull
+            ?.innerText;
+        createdStr ??= prop
+            .findLocalChildren('creationdate')
+            .firstOrNull
+            ?.innerText;
+        mimeType ??= prop
+            .findLocalChildren('getcontenttype')
+            .firstOrNull
+            ?.innerText;
+        fileId ??= prop.findLocalChildren('fileid').firstOrNull?.innerText;
+        mountType ??= prop
+            .findLocalChildren('mount-type')
+            .firstOrNull
+            ?.innerText;
+      }
+
+      var decodedHref = Uri.decodeFull(href);
+      if (decodedHref.endsWith('/') && decodedHref.length > 1) {
+        decodedHref = decodedHref.substring(0, decodedHref.length - 1);
+      }
+      final name = decodedHref.split('/').where((s) => s.isNotEmpty).last;
+      if (name.isEmpty) continue;
+
+      // Strip the DAV root prefix so `path` matches what fetchDirectory produces.
+      final marker = '/files/$username';
+      final markerIndex = decodedHref.indexOf(marker);
+      final itemPath = markerIndex >= 0
+          ? decodedHref.substring(markerIndex + marker.length)
+          : decodedHref;
+      if (itemPath.isEmpty) continue;
+
+      final size = int.tryParse(sizeStr ?? '0') ?? 0;
+      final lastMod = _parseDavDate(lastModStr) ?? DateTime.now();
+      final created = _parseDavDate(createdStr);
+      final itemType = NextcloudItem.deduceType(name, isCollection, mimeType);
+      final validId = (fileId != null && fileId.isNotEmpty) ? fileId : name;
+
+      results.add(
+        NextcloudItem(
+          id: validId,
+          name: name,
+          path: itemPath,
+          type: itemType,
+          size: size,
+          lastModified: lastMod,
+          dateCreated: created,
+          isFavorite: true,
+          mimeType: mimeType,
+          previewUrl:
+              '$_cleanServerUrl/core/preview?fileId=$validId&x=500&y=500',
+          mountType: mountType,
+        ),
+      );
+    }
+
+    debugPrint(
+      '[Nextcloud DAV] Favorites SEARCH found ${results.length} items',
+    );
+    return results;
+  }
+
   /// Finds recently modified files across the whole account (folders
   /// excluded), newest first — same SEARCH-REPORT mechanism as
   /// [fetchAllMedia], just without the image/video mimetype filter.
@@ -989,6 +1153,43 @@ class NextcloudService {
     return response.statusCode == 204 || response.statusCode == 200;
   }
 
+  /// Shared MOVE/COPY request - WebDAV COPY is the same shape as the MOVE
+  /// [renameItem] uses, just a different verb and a caller-controlled
+  /// `Overwrite` rather than always forced off. Returns the raw HTTP status
+  /// rather than a bool so callers can tell a conflict (412 - only
+  /// possible when `overwrite` is false) apart from any other failure
+  /// without a separate existence-check request per item.
+  Future<int> _moveOrCopy(
+    String sourcePath,
+    String destPath, {
+    required bool copy,
+    required bool overwrite,
+  }) async {
+    var cleanSource = sourcePath.trim();
+    if (!cleanSource.startsWith('/')) cleanSource = '/$cleanSource';
+    var cleanDest = destPath.trim();
+    if (!cleanDest.startsWith('/')) cleanDest = '/$cleanDest';
+
+    final sourceUrl =
+        '$_cleanServerUrl/remote.php/dav/files/$username$cleanSource';
+    final destUrl = '$_cleanServerUrl/remote.php/dav/files/$username$cleanDest';
+    debugPrint(
+      '[Nextcloud DAV] ${copy ? 'Copying' : 'Moving'} $sourceUrl -> $destUrl',
+    );
+
+    final request = http.Request(copy ? 'COPY' : 'MOVE', Uri.parse(sourceUrl))
+      ..headers.addAll({
+        ..._headers,
+        'Destination': Uri.encodeFull(destUrl),
+        'Overwrite': overwrite ? 'T' : 'F',
+      });
+    final response = await http.Client().send(request);
+    debugPrint(
+      '[Nextcloud DAV] ${copy ? 'Copy' : 'Move'} status: ${response.statusCode}',
+    );
+    return response.statusCode;
+  }
+
   /// Renames (or moves within the same folder) an item via WebDAV MOVE.
   Future<bool> renameItem(String itemPath, String newName) async {
     var cleanPath = itemPath.trim();
@@ -997,20 +1198,75 @@ class NextcloudService {
     final segments = cleanPath.split('/')..removeLast();
     final destPath = '${segments.join('/')}/$newName';
 
-    final sourceUrl =
-        '$_cleanServerUrl/remote.php/dav/files/$username$cleanPath';
-    final destUrl = '$_cleanServerUrl/remote.php/dav/files/$username$destPath';
-    debugPrint('[Nextcloud DAV] Renaming $sourceUrl -> $destUrl');
+    final status = await _moveOrCopy(
+      cleanPath,
+      destPath,
+      copy: false,
+      overwrite: false,
+    );
+    return status == 201 || status == 204;
+  }
 
-    final request = http.Request('MOVE', Uri.parse(sourceUrl))
-      ..headers.addAll({
-        ..._headers,
-        'Destination': Uri.encodeFull(destUrl),
-        'Overwrite': 'F',
-      });
-    final response = await http.Client().send(request);
-    debugPrint('[Nextcloud DAV] Rename status: ${response.statusCode}');
-    return response.statusCode == 201 || response.statusCode == 204;
+  Future<int> _moveOrCopyToFolder(
+    String itemPath,
+    String destFolderPath, {
+    required bool copy,
+    required bool overwrite,
+    String? newName,
+  }) {
+    var cleanPath = itemPath.trim();
+    if (!cleanPath.startsWith('/')) cleanPath = '/$cleanPath';
+    final name = newName ?? cleanPath.split('/').last;
+
+    var cleanDestFolder = destFolderPath.trim();
+    if (!cleanDestFolder.startsWith('/')) cleanDestFolder = '/$cleanDestFolder';
+    if (cleanDestFolder.endsWith('/') && cleanDestFolder != '/') {
+      cleanDestFolder = cleanDestFolder.substring(
+        0,
+        cleanDestFolder.length - 1,
+      );
+    }
+    final destPath = cleanDestFolder == '/'
+        ? '/$name'
+        : '$cleanDestFolder/$name';
+    return _moveOrCopy(cleanPath, destPath, copy: copy, overwrite: overwrite);
+  }
+
+  /// Moves [itemPath] into [destFolderPath], keeping its current filename
+  /// unless [newName] is given (used to resolve a "keep both" conflict
+  /// with a renamed destination). Returns the raw HTTP status - 201/204
+  /// success, 412 means an item with the same name already exists there
+  /// ([overwrite] was false).
+  Future<int> moveItem(
+    String itemPath,
+    String destFolderPath, {
+    bool overwrite = false,
+    String? newName,
+  }) {
+    return _moveOrCopyToFolder(
+      itemPath,
+      destFolderPath,
+      copy: false,
+      overwrite: overwrite,
+      newName: newName,
+    );
+  }
+
+  /// Same as [moveItem] but duplicates the item instead of relocating it -
+  /// WebDAV COPY, recursive for folders by default just like MOVE.
+  Future<int> copyItem(
+    String itemPath,
+    String destFolderPath, {
+    bool overwrite = false,
+    String? newName,
+  }) {
+    return _moveOrCopyToFolder(
+      itemPath,
+      destFolderPath,
+      copy: true,
+      overwrite: overwrite,
+      newName: newName,
+    );
   }
 
   Future<bool> createFolder(String parentPath, String folderName) async {

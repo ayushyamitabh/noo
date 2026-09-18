@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../models/nextcloud_item.dart';
 import '../models/nextcloud_share.dart';
 import '../models/nextcloud_sharee.dart';
@@ -67,6 +70,8 @@ class _ShareSheetState extends State<ShareSheet> {
   List<NextcloudShare> _inherited = [];
   List<NextcloudSharee> _searchResults = [];
   bool _isSearching = false;
+  bool _isAddingEmail = false;
+  bool _isSharingFile = false;
   final _searchController = TextEditingController();
   final _emailController = TextEditingController();
 
@@ -141,6 +146,7 @@ class _ShareSheetState extends State<ShareSheet> {
   Future<void> _addEmailShare() async {
     final email = _emailController.text.trim();
     if (email.isEmpty) return;
+    setState(() => _isAddingEmail = true);
     final provider = context.read<ServerProvider>();
     final messenger = ScaffoldMessenger.of(context);
     final share = await provider.createShare(
@@ -150,6 +156,7 @@ class _ShareSheetState extends State<ShareSheet> {
     );
     if (!mounted) return;
     if (share == null) {
+      setState(() => _isAddingEmail = false);
       messenger.showSnackBar(
         const SnackBar(
           content: Text('Could not create email share'),
@@ -161,6 +168,7 @@ class _ShareSheetState extends State<ShareSheet> {
     setState(() {
       _shares = [..._shares, share];
       _emailController.clear();
+      _isAddingEmail = false;
     });
     messenger.showSnackBar(
       SnackBar(
@@ -215,6 +223,41 @@ class _ShareSheetState extends State<ShareSheet> {
         behavior: SnackBarBehavior.floating,
       ),
     );
+  }
+
+  /// Downloads the item to a scratch file and hands it to Android's native
+  /// "Share to..." sheet (`share_plus`) - a completely different action
+  /// from the rest of this sheet (which shares *within* Nextcloud, via
+  /// users/links) and the only one here that reads the file's actual
+  /// bytes.
+  Future<void> _shareFileDirectly() async {
+    final provider = context.read<ServerProvider>();
+    if (provider.service == null) return;
+    setState(() => _isSharingFile = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final tempPath = p.join(tempDir.path, widget.item.name);
+      await provider.service!.downloadToFile(widget.item.path, tempPath);
+      if (!mounted) return;
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(tempPath)],
+          fileNameOverrides: [widget.item.name],
+        ),
+      );
+    } catch (_) {
+      if (mounted) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Could not share the file'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSharingFile = false);
+    }
   }
 
   Widget _sectionHeader(String label) {
@@ -314,17 +357,43 @@ class _ShareSheetState extends State<ShareSheet> {
           item: widget.item,
           padding: const EdgeInsets.only(top: 12, bottom: 8),
         ),
-        const SizedBox(height: 8),
+        if (!widget.item.isFolder) ...[
+          const SizedBox(height: 4),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: _isSharingFile
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : const Icon(Icons.ios_share_rounded),
+            title: const Text('Share file directly'),
+            subtitle: const Text('Send the file itself via another app'),
+            onTap: _isSharingFile ? null : _shareFileDirectly,
+          ),
+          const SizedBox(height: 12),
+          const Divider(),
+        ],
+        const SizedBox(height: 12),
         _sectionHeader('Internal shares'),
         const SizedBox(height: 8),
         TextField(
           controller: _searchController,
           decoration: InputDecoration(
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 12,
+            ),
             hintText: 'Type names or teams',
             prefixIcon: const Icon(Icons.search_rounded),
             suffixIcon: _isSearching
                 ? const Padding(
-                    padding: EdgeInsets.all(14),
+                    padding: EdgeInsets.all(12),
                     child: SizedBox(
                       width: 16,
                       height: 16,
@@ -381,9 +450,25 @@ class _ShareSheetState extends State<ShareSheet> {
         TextField(
           controller: _emailController,
           keyboardType: TextInputType.emailAddress,
+          enabled: !_isAddingEmail,
           decoration: InputDecoration(
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 12,
+            ),
             hintText: 'Type an email',
             prefixIcon: const Icon(Icons.email_rounded),
+            suffixIcon: _isAddingEmail
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : null,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
             filled: true,
             fillColor: colorScheme.surfaceContainerLow,

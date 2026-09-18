@@ -2,50 +2,77 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
-import '../models/app_tab.dart';
+import '../models/move_copy_result.dart';
 import '../models/nextcloud_item.dart';
 import '../providers/server_provider.dart';
-import '../services/share_intent_service.dart';
-import '../services/upload_service.dart';
 import '../widgets/breadcrumbs.dart';
 import '../widgets/item_icon.dart';
-import '../widgets/marquee_title.dart';
 import '../widgets/more_tabs_button.dart';
+import '../widgets/move_copy_conflict_sheet.dart';
 import '../widgets/profile_avatar_button.dart';
 import '../widgets/segmented_icon_toggle.dart';
 import '../widgets/sort_menu_button.dart';
 import '../widgets/sticky_header_delegate.dart';
 import '../widgets/synced_header_scaffold.dart';
 
-/// Shown when another app shares one or more files to Noo (Android's
-/// "Share to..." sheet). Lets the user browse to a destination folder,
-/// mirroring the Files tab's own controls/filters/listing so this feels
-/// like the same browser rather than a stripped-down picker, then hands the
-/// actual prepare+upload off to [UploadService] - a real Android foreground
-/// service (see `ShareUploadService.kt`'s doc comment), not something this
-/// screen or even the app needs to stay open for. [files] only ever carry
-/// cheap Uri metadata (see [ShareIntentService]'s doc comment); that
-/// service is the only thing that ever reads their actual bytes.
-class ShareUploadView extends StatefulWidget {
-  final List<SharedFileRef> files;
+/// Destination-folder browser for moving/copying [items] (a multi-select
+/// batch from Files or Photos). Visually mirrors `ShareUploadView`'s
+/// browser (same chrome/controls/listing), but deliberately does **not**
+/// reuse `ServerProvider`'s shared `currentFolderPath`/`pathStack`/`items`
+/// navigation state the way that screen does - this is pushed mid-browsing
+/// session (the user was already looking at a specific Files-tab folder
+/// when they selected items and tapped Move/Copy), so clobbering that
+/// shared state here would strand the Files tab in whatever folder this
+/// picker last visited. Instead it owns its own local navigation state and
+/// fetches through `ServerProvider.fetchFolderListing`, a stateless
+/// pass-through that never touches shared fields - `ShareUploadView` gets
+/// away with the shared state precisely because it always resets to root
+/// and pops all the way to the app root afterward (a cold share-intent
+/// launch has no prior browsing session to preserve); that doesn't hold
+/// here.
+class MoveCopyDestinationPicker extends StatefulWidget {
+  final List<NextcloudItem> items;
+  final bool copy;
 
-  const ShareUploadView({super.key, required this.files});
+  const MoveCopyDestinationPicker({
+    super.key,
+    required this.items,
+    required this.copy,
+  });
+
+  /// Pushes the picker and returns the final [MoveCopyResult] (already
+  /// including any conflict resolution), or null if the user backed out
+  /// without confirming.
+  static Future<MoveCopyResult?> show(
+    BuildContext context,
+    List<NextcloudItem> items, {
+    required bool copy,
+  }) {
+    return Navigator.of(context).push<MoveCopyResult>(
+      MaterialPageRoute(
+        builder: (_) => MoveCopyDestinationPicker(items: items, copy: copy),
+      ),
+    );
+  }
 
   @override
-  State<ShareUploadView> createState() => _ShareUploadViewState();
+  State<MoveCopyDestinationPicker> createState() =>
+      _MoveCopyDestinationPickerState();
 }
 
-class _ShareUploadViewState extends State<ShareUploadView> {
+class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
   final ScrollController _scrollController = ScrollController();
+  List<String> _pathStack = const ['/'];
+  List<NextcloudItem> _rawItems = [];
+  bool _isLoading = true;
+  bool _isSubmitting = false;
+
+  String get _currentPath => _pathStack.last;
 
   @override
   void initState() {
     super.initState();
-    // Shared files have no relationship to wherever the user was last
-    // browsing, so start the destination picker fresh at the root.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) context.read<ServerProvider>().navigateToAbsoluteFolder('/');
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _fetch(_currentPath));
   }
 
   @override
@@ -54,33 +81,94 @@ class _ShareUploadViewState extends State<ShareUploadView> {
     super.dispose();
   }
 
-  Future<void> _uploadHere(ServerProvider provider) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final navigator = Navigator.of(context);
-    try {
-      await UploadService.startUpload(provider, widget.files);
-    } catch (e) {
-      messenger.showSnackBar(
+  Future<void> _fetch(String path) async {
+    setState(() => _isLoading = true);
+    final raw = await context.read<ServerProvider>().fetchFolderListing(path);
+    if (!mounted) return;
+    setState(() {
+      _rawItems = raw;
+      _isLoading = false;
+    });
+  }
+
+  void _navigateToFolder(String path) {
+    setState(() => _pathStack = [..._pathStack, path]);
+    _fetch(path);
+  }
+
+  void _navigateToPathIndex(int index) {
+    if (index < 0 || index >= _pathStack.length - 1) return;
+    setState(() => _pathStack = _pathStack.sublist(0, index + 1));
+    _fetch(_currentPath);
+  }
+
+  bool _navigateUp() {
+    if (_pathStack.length <= 1) return false;
+    setState(() => _pathStack = _pathStack.sublist(0, _pathStack.length - 1));
+    _fetch(_currentPath);
+    return true;
+  }
+
+  /// Client-side mirror of `ServerProvider`'s own authoritative check (see
+  /// `_isSelfOrDescendant`) - just for disabling the confirm button with an
+  /// explanation up front instead of letting the request round-trip and
+  /// fail.
+  bool _destinationIsInvalid() {
+    final dest = _currentPath.endsWith('/') ? _currentPath : '$_currentPath/';
+    for (final item in widget.items) {
+      if (!item.isFolder) continue;
+      final folder = item.path.endsWith('/') ? item.path : '${item.path}/';
+      if (dest == folder || dest.startsWith(folder)) return true;
+    }
+    return false;
+  }
+
+  Future<void> _confirm(ServerProvider provider) async {
+    setState(() => _isSubmitting = true);
+    final result = widget.copy
+        ? await provider.copyItems(widget.items, _currentPath)
+        : await provider.moveItems(widget.items, _currentPath);
+    if (!mounted) return;
+
+    if (result.blockedReason != null) {
+      setState(() => _isSubmitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Could not start upload: $e'),
+          content: Text(result.blockedReason!),
           behavior: SnackBarBehavior.floating,
         ),
       );
       return;
     }
 
-    provider.requestTab(AppTab.files);
-    navigator.popUntil((route) => route.isFirst);
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          widget.files.length == 1
-              ? 'Uploading ${widget.files.first.name} - see the notification for progress'
-              : 'Uploading ${widget.files.length} files - see the notification for progress',
-        ),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    var succeeded = result.succeeded;
+    var failed = result.failed;
+
+    if (result.conflicts.isNotEmpty) {
+      final choices = await MoveCopyConflictSheet.show(
+        context,
+        result.conflicts,
+      );
+      if (!mounted) return;
+      if (choices != null) {
+        final resolved = await provider.resolveConflicts(
+          result.conflicts,
+          _currentPath,
+          copy: widget.copy,
+          choices: choices,
+        );
+        succeeded += resolved.succeeded;
+        failed += resolved.failed;
+      }
+      // A dismissed sheet (choices == null) leaves those conflicts
+      // untouched at the source - same outcome as explicitly skipping
+      // every one, just without a network round-trip to get there.
+    }
+
+    if (!mounted) return;
+    Navigator.of(
+      context,
+    ).pop(MoveCopyResult(succeeded: succeeded, failed: failed));
   }
 
   Widget _buildControlsRow(ServerProvider provider) {
@@ -137,33 +225,6 @@ class _ShareUploadViewState extends State<ShareUploadView> {
             SegmentedIconGroup(
               children: [
                 ToggleIconButton(
-                  icon: Icons.select_all_rounded,
-                  isSelected: provider.filesTypeFilter == FilesTypeFilter.all,
-                  onTap: () => provider.setFilesTypeFilter(FilesTypeFilter.all),
-                  tooltip: 'Files & folders',
-                ),
-                ToggleIconButton(
-                  icon: Icons.insert_drive_file_outlined,
-                  isSelected:
-                      provider.filesTypeFilter == FilesTypeFilter.filesOnly,
-                  onTap: () =>
-                      provider.setFilesTypeFilter(FilesTypeFilter.filesOnly),
-                  tooltip: 'Files only',
-                ),
-                ToggleIconButton(
-                  icon: Icons.folder_outlined,
-                  isSelected:
-                      provider.filesTypeFilter == FilesTypeFilter.foldersOnly,
-                  onTap: () =>
-                      provider.setFilesTypeFilter(FilesTypeFilter.foldersOnly),
-                  tooltip: 'Folders only',
-                ),
-              ],
-            ),
-            const SizedBox(width: 8),
-            SegmentedIconGroup(
-              children: [
-                ToggleIconButton(
                   icon: Icons.view_list_rounded,
                   isSelected: !provider.isGridView,
                   onTap: () => provider.setGridView(false),
@@ -183,14 +244,11 @@ class _ShareUploadViewState extends State<ShareUploadView> {
     );
   }
 
-  // Only folders are valid upload destinations - files still show (so the
-  // listing matches what the Files tab itself would show for this folder)
-  // but are visually dimmed and inert rather than hidden outright.
-  Widget _buildListTile(
-    BuildContext context,
-    NextcloudItem item,
-    ServerProvider provider,
-  ) {
+  // Only folders are valid Move/Copy destinations - files still show (so
+  // the listing matches what the Files tab itself would show for this
+  // folder) but are visually dimmed and inert, same treatment as
+  // ShareUploadView's own destination browser.
+  Widget _buildListTile(NextcloudItem item, ServerProvider provider) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isFolder = item.isFolder;
@@ -204,9 +262,7 @@ class _ShareUploadViewState extends State<ShareUploadView> {
           child: Material(
             color: colorScheme.surfaceContainerLow,
             child: InkWell(
-              onTap: isFolder
-                  ? () => provider.navigateToFolder(item.path)
-                  : null,
+              onTap: isFolder ? () => _navigateToFolder(item.path) : null,
               child: Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -256,11 +312,7 @@ class _ShareUploadViewState extends State<ShareUploadView> {
     );
   }
 
-  Widget _buildGridCard(
-    BuildContext context,
-    NextcloudItem item,
-    ServerProvider provider,
-  ) {
+  Widget _buildGridCard(NextcloudItem item, ServerProvider provider) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isFolder = item.isFolder;
@@ -273,7 +325,7 @@ class _ShareUploadViewState extends State<ShareUploadView> {
         borderRadius: BorderRadius.circular(20),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: isFolder ? () => provider.navigateToFolder(item.path) : null,
+          onTap: isFolder ? () => _navigateToFolder(item.path) : null,
           child: Padding(
             padding: const EdgeInsets.all(14),
             child: Column(
@@ -328,16 +380,13 @@ class _ShareUploadViewState extends State<ShareUploadView> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final provider = context.watch<ServerProvider>();
-    final hasBreadcrumbs = provider.pathStack.length > 1;
-    final currentPath = provider.pathStack.last;
-    final currentLabel = currentPath == '/'
+    final hasBreadcrumbs = _pathStack.length > 1;
+    final currentLabel = _currentPath == '/'
         ? 'Home'
-        : currentPath.split('/').where((s) => s.isNotEmpty).last;
-    final items = provider.items;
+        : _currentPath.split('/').where((s) => s.isNotEmpty).last;
+    final items = provider.applyFilesDisplayPrefs(_rawItems);
+    final invalidDestination = _destinationIsInvalid();
 
-    // Mirrors FilesView's own controls-row + breadcrumbs sticky header
-    // exactly (padding, heights) so this reads as the same browser, just
-    // reached from a share intent instead of the Files tab.
     final controlsColumn = Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       child: Column(
@@ -349,8 +398,8 @@ class _ShareUploadViewState extends State<ShareUploadView> {
             SizedBox(
               height: 32,
               child: Breadcrumbs(
-                pathStack: provider.pathStack,
-                onTap: (index) => provider.navigateToPathIndex(index),
+                pathStack: _pathStack,
+                onTap: _navigateToPathIndex,
               ),
             ),
           ],
@@ -366,7 +415,7 @@ class _ShareUploadViewState extends State<ShareUploadView> {
           child: controlsColumn,
         ),
       ),
-      if (provider.isLoading)
+      if (_isLoading)
         const SliverFillRemaining(
           hasScrollBody: false,
           child: Center(child: CircularProgressIndicator()),
@@ -392,7 +441,7 @@ class _ShareUploadViewState extends State<ShareUploadView> {
               mainAxisSpacing: 12,
             ),
             delegate: SliverChildBuilderDelegate((context, index) {
-              return _buildGridCard(context, items[index], provider);
+              return _buildGridCard(items[index], provider);
             }, childCount: items.length),
           ),
         )
@@ -401,104 +450,75 @@ class _ShareUploadViewState extends State<ShareUploadView> {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate((context, index) {
-              return _buildListTile(context, items[index], provider);
+              return _buildListTile(items[index], provider);
             }, childCount: items.length),
           ),
         ),
-      // So the last row isn't hidden behind the bottom "Upload to..." bar.
       const SliverToBoxAdapter(child: SizedBox(height: 24)),
     ];
 
-    return Scaffold(
-      body: SyncedHeaderScaffold(
-        scrollController: _scrollController,
-        provider: provider,
-        // Same trailing actions as every other tab - no bespoke close
-        // button here, so the top chrome is identical regardless of how
-        // this screen was reached. Backing out is still the system
-        // back gesture/button, same as any other pushed screen.
-        actions: const [MoreTabsButton(), ProfileAvatarButton()],
-        contentSlivers: contentSlivers,
-      ),
-      // A rounded-top, elevated bar "peeking" up from the bottom edge - the
-      // uploading-file summary (marqueed if it doesn't fit on one line)
-      // sits directly above the destination button, both inside the one
-      // sheet, rather than the summary living up in the scrolling content
-      // far away from the action it describes.
-      bottomNavigationBar: Material(
-        color: colorScheme.surfaceContainerHigh,
-        elevation: 8,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    return PopScope(
+      canPop: _pathStack.length <= 1,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _navigateUp();
+      },
+      child: Scaffold(
+        body: SyncedHeaderScaffold(
+          scrollController: _scrollController,
+          provider: provider,
+          actions: const [MoreTabsButton(), ProfileAvatarButton()],
+          contentSlivers: contentSlivers,
         ),
-        clipBehavior: Clip.antiAlias,
-        child: SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Same pill/chip look and exact same duller background
-                // color as the filter toggles' shared background
-                // (SegmentedIconGroup's `surfaceContainerHigh`), so it reads
-                // as part of the same visual language rather than a new
-                // accent color. Sized to the text itself (like a real chip)
-                // up to the row's available width - MarqueeTitle needs a
-                // concrete (not just loose) width to know whether/how far
-                // to scroll, so this measures the text once up front rather
-                // than leaving the chip unconstrained.
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final uploadingText = widget.files.length == 1
-                        ? 'Uploading ${widget.files.first.name}'
-                        : 'Uploading ${widget.files.length} files';
-                    final chipTextStyle = theme.textTheme.titleSmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w700,
-                    );
-                    const horizontalPadding = 28.0;
-                    final painter = TextPainter(
-                      text: TextSpan(text: uploadingText, style: chipTextStyle),
-                      maxLines: 1,
-                      textDirection: Directionality.of(context),
-                    )..layout(maxWidth: double.infinity);
-                    final chipWidth = (painter.width + horizontalPadding).clamp(
-                      0.0,
-                      constraints.maxWidth,
-                    );
-
-                    return Container(
-                      width: chipWidth,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 8,
+        bottomNavigationBar: Material(
+          color: colorScheme.surfaceContainerHigh,
+          elevation: 8,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (invalidDestination) ...[
+                    Text(
+                      "Can't ${widget.copy ? 'copy' : 'move'} a folder into "
+                      "itself or one of its own subfolders",
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.error,
                       ),
-                      decoration: BoxDecoration(
-                        color: colorScheme.surfaceContainerHigh,
-                        borderRadius: BorderRadius.circular(20),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: invalidDestination || _isSubmitting
+                          ? null
+                          : () => _confirm(provider),
+                      icon: _isSubmitting
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Icon(
+                              widget.copy
+                                  ? Icons.copy_rounded
+                                  : Icons.drive_file_move_rounded,
+                            ),
+                      label: Text(
+                        '${widget.copy ? 'Copy' : 'Move'} ${widget.items.length} '
+                        'item(s) to $currentLabel',
                       ),
-                      child: SizedBox(
-                        height: 20,
-                        child: MarqueeTitle(
-                          text: uploadingText,
-                          style: chipTextStyle,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: () => _uploadHere(provider),
-                    icon: const Icon(Icons.upload_rounded),
-                    label: Text('Upload to $currentLabel'),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
