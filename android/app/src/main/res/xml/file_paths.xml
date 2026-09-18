@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Exposes only the app's own "picker" cache subfolder as content:// Uris -
+     used to hand a file back to another app that launched Noo as a
+     GET_CONTENT picker (see PickIntentService/MainActivity.kt). -->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <cache-path name="picker" path="picker/" />
+</paths>

@@ -5,6 +5,7 @@ import '../models/nextcloud_item.dart';
 import '../models/nextcloud_share.dart';
 import '../models/nextcloud_sharee.dart';
 import '../providers/server_provider.dart';
+import 'details/details_sheet.dart' show DetailsHeader;
 import 'gradual_bottom_sheet.dart';
 
 IconData _shareTypeIcon(ShareType type) {
@@ -217,12 +218,15 @@ class _ShareSheetState extends State<ShareSheet> {
   }
 
   Widget _sectionHeader(String label) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return Row(
       children: [
         Text(
           label,
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
         ),
         const SizedBox(width: 6),
         Icon(
@@ -301,17 +305,16 @@ class _ShareSheetState extends State<ShareSheet> {
 
     return ListView(
       controller: widget.scrollController,
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
       children: [
-        Text(
-          widget.item.name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-          ),
+        // Same icon/name/meta header as DetailsSheet, so this and its
+        // sibling per-item bottom sheet open on identical chrome - just a
+        // bare title `Text` here read as under-designed by comparison.
+        DetailsHeader(
+          item: widget.item,
+          padding: const EdgeInsets.only(top: 12, bottom: 8),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 8),
         _sectionHeader('Internal shares'),
         const SizedBox(height: 8),
         TextField(
@@ -380,7 +383,7 @@ class _ShareSheetState extends State<ShareSheet> {
           keyboardType: TextInputType.emailAddress,
           decoration: InputDecoration(
             hintText: 'Type an email',
-            prefixIcon: const Icon(Icons.email_outlined),
+            prefixIcon: const Icon(Icons.email_rounded),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
             filled: true,
             fillColor: colorScheme.surfaceContainerLow,

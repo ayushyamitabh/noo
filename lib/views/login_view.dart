@@ -47,6 +47,60 @@ class _LoginViewState extends State<LoginView> {
     );
   }
 
+  /// Resumes a saved account with one tap (see [ServerProvider.switchAccount]).
+  /// That can fail silently from the account's own perspective - most often
+  /// a stored app password that no longer works (revoked server-side, or
+  /// left over from before a since-fixed bug that deleted it too eagerly on
+  /// a plain network hiccup) - so this surfaces that as a SnackBar with a
+  /// silently failing every time - a delete button on the row itself (see
+  /// [_SavedAccountRow]) is the way out.
+  Future<void> _continueAsAccount(SavedAccount account) async {
+    final provider = context.read<ServerProvider>();
+    final success = await provider.switchAccount(account.id);
+    if (success || !mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text("Couldn't sign in as ${account.username}"),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+  }
+
+  /// Mirrors AccountView's `_AccountsCard._confirmRemove` - same
+  /// destructive-action gate, just reached from the login screen instead of
+  /// Settings.
+  Future<void> _confirmRemoveAccount(SavedAccount account) async {
+    final host = Uri.tryParse(account.serverUrl)?.host ?? account.serverUrl;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Remove Account'),
+          content: Text(
+            'Remove ${account.username} ($host)? You can add it again later.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(dialogContext).colorScheme.error,
+              ),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Remove'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true || !mounted) return;
+    await context.read<ServerProvider>().removeAccount(account.id);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -81,9 +135,21 @@ class _LoginViewState extends State<LoginView> {
       final url = provider.pendingLoginUrl!;
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!mounted) return;
-        await Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => LoginWebViewView(url: url)));
+        // A plain MaterialPageRoute's animated slide/fade transition can
+        // leave this screen fully black after popping back off of it - a
+        // known Android WebView-as-PlatformView compositing issue with the
+        // Impeller renderer (the platform view's surface isn't always torn
+        // down in sync with an animated route transition). An instant,
+        // non-animated route sidesteps it entirely; the close (X) button
+        // already reads like a immediate action, not something that needs
+        // a slide, so no UX is lost.
+        await Navigator.of(context).push(
+          PageRouteBuilder(
+            pageBuilder: (_, _, _) => LoginWebViewView(url: url),
+            transitionDuration: Duration.zero,
+            reverseTransitionDuration: Duration.zero,
+          ),
+        );
         _webViewPushed = false;
       });
     }
@@ -110,7 +176,8 @@ class _LoginViewState extends State<LoginView> {
                       provider.accounts.isNotEmpty) ...[
                     _SavedAccountsSection(
                       accounts: provider.accounts,
-                      onSelect: (account) => provider.switchAccount(account.id),
+                      onSelect: (account) => _continueAsAccount(account),
+                      onRemove: (account) => _confirmRemoveAccount(account),
                     ),
                     const SizedBox(height: 28),
                     Row(
@@ -329,8 +396,13 @@ class _ServerForm extends StatelessWidget {
 class _SavedAccountsSection extends StatelessWidget {
   final List<SavedAccount> accounts;
   final ValueChanged<SavedAccount> onSelect;
+  final ValueChanged<SavedAccount> onRemove;
 
-  const _SavedAccountsSection({required this.accounts, required this.onSelect});
+  const _SavedAccountsSection({
+    required this.accounts,
+    required this.onSelect,
+    required this.onRemove,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -358,6 +430,7 @@ class _SavedAccountsSection extends StatelessWidget {
                 _SavedAccountRow(
                   account: account,
                   onTap: () => onSelect(account),
+                  onRemove: () => onRemove(account),
                 ),
                 if (account != accounts.last)
                   const Divider(height: 1, indent: 16, endIndent: 16),
@@ -373,8 +446,13 @@ class _SavedAccountsSection extends StatelessWidget {
 class _SavedAccountRow extends StatelessWidget {
   final SavedAccount account;
   final VoidCallback onTap;
+  final VoidCallback onRemove;
 
-  const _SavedAccountRow({required this.account, required this.onTap});
+  const _SavedAccountRow({
+    required this.account,
+    required this.onTap,
+    required this.onRemove,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -397,7 +475,12 @@ class _SavedAccountRow extends StatelessWidget {
       ),
       title: Text(account.username),
       subtitle: Text(host),
-      trailing: const Icon(Icons.chevron_right_rounded),
+      trailing: IconButton(
+        icon: const Icon(Icons.close_rounded),
+        tooltip: 'Remove account',
+        visualDensity: VisualDensity.compact,
+        onPressed: onRemove,
+      ),
       onTap: onTap,
     );
   }

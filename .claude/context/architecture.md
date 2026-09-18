@@ -113,15 +113,42 @@ owns the app's share-intent listener (`ShareIntentService`, backed by
 hand-rolled native handling in `MainActivity.kt` - see `server.md` for why
 this isn't the `receive_sharing_intent` plugin): both `getInitialShare()`
 (cold start via another app's "Share to...") and `onNewShare` (already
-running) push `ShareUploadView`.
+running) push `ShareUploadView`. It similarly owns the pick-intent listener
+(`PickIntentService` - see `server.md` for the full "being picked by
+another app" story) that feeds `ServerProvider.pickRequest`; while
+`isPicking`, the visible tab list is overridden to just Files and Photos
+regardless of the user's own hidden/reordered tab settings, since those
+are the only two views that know how to handle a picking-mode tap and the
+only two that make sense as external "choose a file" sources.
 
-Five of the six tabs (all but Files) plus each tab's own controls share
+All six tabs, plus `ShareUploadView` (the share-to-upload destination
+picker, pushed rather than a tab - see below), share
 [`SyncedHeaderScaffold`](../../lib/widgets/synced_header_scaffold.dart) — a
 `CustomScrollView` with a pull-down "sync status" header (Google
 Photos-style) and a classic Material refresh spinner shown during a
-pull-triggered sync. `SearchView`, `AccountView` (Settings), the
-file-details sheet, the share sheet, and `ShareUploadView` (the
-share-to-upload destination picker) are pushed on top via
+pull-triggered sync. `ShareUploadView` mirrors the Files tab's own
+controls-row/breadcrumbs sticky header almost exactly, so arriving via
+another app's "Share to..." sheet still lands on the same top chrome
+instead of a plain `AppBar` - its `actions` are the exact same
+`[MoreTabsButton(), ProfileAvatarButton()]` every non-Files tab uses (kept
+uniform deliberately; backing out is the system back gesture/button, not a
+bespoke close icon in the app bar). Its bottom action - "Upload to
+{folder}" - and the uploading-file-name summary above it (single line,
+auto-scrolling via `MarqueeTitle` if it doesn't fit) live together in one
+rounded-top, elevated `Material` bar as `bottomNavigationBar`, reading as a
+sheet peeking up from the bottom edge rather than a plain flat bar.
+[`MarqueeTitle`](../../lib/widgets/marquee_title.dart) (`package:marquee`) is
+shared with `FileViewerScreen`'s title - falls back to a plain ellipsized
+`Text` when the content already fits, so short text never marquees.
+`SearchView`, `AccountView` (Settings), the file-details sheet, and the
+share sheet are pushed on top via
 `Navigator`/`showModalBottomSheet`/`showGradualBottomSheet` rather than
 being tabs. `ProfileAvatarButton` (top-right on every tab) opens Settings on
 tap and cycles between saved accounts on a vertical swipe.
+
+Files and Photos (the two tabs with multi-select) pass their selection
+toolbar into `SyncedHeaderScaffold`'s `selectionBar` param rather than
+rendering it as a second sliver app bar inside their own content: while
+non-null, it fully takes over the pinned top bar in place of the
+sync-status chip/`actions`/pull-to-reveal quota panel, so selecting reads
+as replacing the whole top chrome rather than adding a strip beneath it.

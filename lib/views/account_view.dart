@@ -102,8 +102,6 @@ class AccountView extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  const Divider(height: 1),
-                  const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -188,62 +186,35 @@ class AccountView extends StatelessWidget {
                   const Divider(height: 1),
                   const SizedBox(height: 16),
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () async {
-                            await provider.refreshData();
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Refreshed WebDAV data'),
-                                  behavior: SnackBarBehavior.floating,
-                                ),
-                              );
-                            }
-                          },
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                          child: const Text(
-                            'Refresh Cache',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 13),
-                          ),
-                        ),
+                      IconButton(
+                        icon: const Icon(Icons.refresh_rounded),
+                        tooltip: 'Refresh cached data',
+                        onPressed: () async {
+                          await provider.refreshData();
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Refreshed WebDAV data'),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        },
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: FilledButton(
-                          onPressed: () => _handleLogout(context, provider),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: colorScheme.errorContainer,
-                            foregroundColor: colorScheme.onErrorContainer,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                          child: const Text(
-                            'Logout',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 13),
-                          ),
-                        ),
+                      IconButton(
+                        icon: const Icon(Icons.logout_rounded),
+                        tooltip: 'Logout',
+                        color: Colors.orange.shade700,
+                        onPressed: () => _handleLogout(context, provider),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: FilledButton(
-                          onPressed: () =>
-                              _confirmRemoveActive(context, provider),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: colorScheme.error,
-                            foregroundColor: colorScheme.onError,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                          child: const Text(
-                            'Remove',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 13),
-                          ),
-                        ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline_rounded),
+                        tooltip: 'Remove account',
+                        color: colorScheme.error,
+                        onPressed: () =>
+                            _confirmRemoveActive(context, provider),
                       ),
                     ],
                   ),

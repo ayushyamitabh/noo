@@ -15,6 +15,13 @@ class MoreTabsButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = context.watch<ServerProvider>();
 
+    // While picking (another app's GET_CONTENT request), MainShellView
+    // already restricts the bottom nav to Files/Photos - this button would
+    // otherwise be the one remaining way to reach a tab that isn't a valid
+    // pick source (Trash, Shares, ...), so it hides entirely rather than
+    // just disabling.
+    if (provider.isPicking) return const SizedBox.shrink();
+
     return PopupMenuButton<AppTab>(
       icon: const Icon(Icons.apps_rounded),
       tooltip: 'More tabs',

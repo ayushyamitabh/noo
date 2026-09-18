@@ -73,13 +73,25 @@ class DetailsSheet extends StatelessWidget {
   }
 }
 
-/// Icon/name/size/date row shared by [DetailsSheet] and the media viewer's
+/// Icon/name/size/date row shared by [DetailsSheet], the media viewer's
 /// collapsed "peek" state (which shows just this, before the user drags the
-/// sheet open far enough to reveal the tabs).
+/// sheet open far enough to reveal the tabs), and [ShareSheet]'s own title
+/// (so every per-item bottom sheet opens on the same header instead of
+/// [ShareSheet] alone using a bare title `Text`).
 class DetailsHeader extends StatelessWidget {
   final NextcloudItem item;
 
-  const DetailsHeader({super.key, required this.item});
+  /// Defaults to this widget's own standalone inset ([DetailsSheet]); a
+  /// caller whose surrounding scroll view already applies horizontal
+  /// padding (e.g. [ShareSheet]'s `ListView`) should pass a padding with
+  /// zero left/right to avoid doubling it up.
+  final EdgeInsetsGeometry padding;
+
+  const DetailsHeader({
+    super.key,
+    required this.item,
+    this.padding = const EdgeInsets.fromLTRB(20, 12, 20, 8),
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -87,7 +99,7 @@ class DetailsHeader extends StatelessWidget {
     final colorScheme = theme.colorScheme;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+      padding: padding,
       child: Row(
         children: [
           Container(

@@ -97,10 +97,13 @@ class _FolderEnterAnimationState extends State<_FolderEnterAnimation>
   }
 }
 
-class _FilesViewState extends State<FilesView> {
+class _FilesViewState extends State<FilesView>
+    with SingleTickerProviderStateMixin {
   final Set<String> _selectedIds = {};
   int _lastPathDepth = 1;
   final ScrollController _controlsScrollController = ScrollController();
+  final ScrollController _selectionActionsScrollController = ScrollController();
+  final List<AnimationController> _scrollHintControllers = [];
 
   bool get _isSelecting => _selectedIds.isNotEmpty;
 
@@ -108,51 +111,118 @@ class _FilesViewState extends State<FilesView> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _playControlsScrollHint(),
+      (_) => _playScrollHint(_controlsScrollController),
     );
   }
 
-  /// A one-shot hint that the controls row scrolls: nudges it a little to
-  /// the right and back, once, right after it first appears - a motion cue
-  /// instead of a persistent widget (a chevron badge, an edge fade) sitting
-  /// on top of the actual controls the whole time. No-ops if there's
-  /// nothing to scroll (row already fits).
-  Future<void> _playControlsScrollHint() async {
+  /// A one-shot hint that a horizontally-scrollable row actually scrolls:
+  /// nudges it a little to the right and back, once - a motion cue instead
+  /// of a persistent widget (a chevron badge, an edge fade) sitting on top
+  /// of the actual controls the whole time. Shared by the controls row
+  /// (played once it first appears) and the selection actions row (played
+  /// the first time a selection starts, see `_toggleSelection`). No-ops if
+  /// there's nothing to scroll (row already fits).
+  Future<void> _playScrollHint(ScrollController scrollController) async {
     // The delay lets the row's first frame (and its actual layout/max
     // scroll extent) settle before nudging it, and reads more like a
     // deliberate hint than something that happens to fire on load.
     await Future.delayed(const Duration(milliseconds: 500));
-    if (!mounted || !_controlsScrollController.hasClients) return;
-    final maxExtent = _controlsScrollController.position.maxScrollExtent;
+    if (!mounted || !scrollController.hasClients) return;
+    final maxExtent = scrollController.position.maxScrollExtent;
     if (maxExtent <= 0) return;
-    await _controlsScrollController.animateTo(
-      maxExtent < 36 ? maxExtent : 36,
-      duration: const Duration(milliseconds: 320),
-      curve: Curves.easeOut,
+    final double peak = maxExtent < 36 ? maxExtent : 36;
+    // Driven as a single controller (rather than two chained animateTo
+    // calls) with mirrored ease-in-out halves, so the motion decelerates
+    // smoothly into the peak and back out instead of visibly changing
+    // pace where the two legs meet.
+    final controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
     );
-    if (!mounted || !_controlsScrollController.hasClients) return;
-    await _controlsScrollController.animateTo(
-      0,
-      duration: const Duration(milliseconds: 320),
-      curve: Curves.easeIn,
-    );
+    _scrollHintControllers.add(controller);
+    final hint = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(
+          begin: 0.0,
+          end: peak,
+        ).chain(CurveTween(curve: Curves.easeInOutSine)),
+        weight: 50,
+      ),
+      TweenSequenceItem(
+        tween: Tween(
+          begin: peak,
+          end: 0.0,
+        ).chain(CurveTween(curve: Curves.easeInOutSine)),
+        weight: 50,
+      ),
+    ]).animate(controller);
+    void onTick() {
+      if (scrollController.hasClients) {
+        scrollController.jumpTo(hint.value);
+      }
+    }
+
+    hint.addListener(onTick);
+    await controller.forward();
+    hint.removeListener(onTick);
+    _scrollHintControllers.remove(controller);
+    controller.dispose();
   }
 
   @override
   void dispose() {
+    for (final controller in _scrollHintControllers) {
+      controller.dispose();
+    }
     _controlsScrollController.dispose();
+    _selectionActionsScrollController.dispose();
     super.dispose();
   }
 
   void _toggleSelection(NextcloudItem item) {
     HapticFeedback.selectionClick();
+    final enteringSelection = _selectedIds.isEmpty;
     setState(() {
       if (!_selectedIds.remove(item.id)) _selectedIds.add(item.id);
     });
+    if (enteringSelection && _isSelecting) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _playScrollHint(_selectionActionsScrollController),
+      );
+    }
   }
 
   void _clearSelection() {
     setState(_selectedIds.clear);
+  }
+
+  /// Routes a tap on an item while Noo is acting as another app's picker:
+  /// folders are still browsable, a matching file either toggles selection
+  /// (multi-select requests) or immediately finishes the pick, and a
+  /// non-matching file (wrong mime type for the caller) is rejected.
+  void _handlePickTap(
+    BuildContext context,
+    ServerProvider provider,
+    NextcloudItem item,
+  ) {
+    if (item.isFolder) {
+      provider.navigateToFolder(item.path);
+      return;
+    }
+    if (!provider.itemMatchesPickFilter(item)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("This app can't accept this file type"),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    if (provider.pickRequest!.allowMultiple) {
+      _toggleSelection(item);
+    } else {
+      provider.confirmPick([item]);
+    }
   }
 
   /// The bulk actions shown in the sticky selection toolbar for the
@@ -161,6 +231,15 @@ class _FilesViewState extends State<FilesView> {
     ServerProvider provider,
     List<NextcloudItem> selected,
   ) {
+    if (provider.isPicking) {
+      return [
+        SelectionAction(
+          icon: Icons.check_rounded,
+          label: 'Use ${selected.length} item(s)',
+          onTap: () => provider.confirmPick(selected),
+        ),
+      ];
+    }
     return [
       SelectionAction(
         icon: selected.every((i) => i.isFavorite)
@@ -169,7 +248,6 @@ class _FilesViewState extends State<FilesView> {
         label: selected.every((i) => i.isFavorite)
             ? 'Remove from favorites'
             : 'Favorite',
-        color: Colors.red.shade400,
         onTap: () => _favoriteSelected(provider, selected),
       ),
       SelectionAction(
@@ -187,7 +265,6 @@ class _FilesViewState extends State<FilesView> {
       SelectionAction(
         icon: Icons.delete_outline_rounded,
         label: 'Delete',
-        color: Theme.of(context).colorScheme.error,
         onTap: () => _confirmDeleteSelected(context, provider, selected),
       ),
       if (selected.length == 1)
@@ -469,8 +546,9 @@ class _FilesViewState extends State<FilesView> {
     );
 
     final List<Widget> contentSlivers = [
-      // Sticky while browsing; once selecting, the toolbar below takes over
-      // the pinned slot and this is free to scroll away.
+      // Sticky while browsing; once selecting, the selection bar takes over
+      // the very top of the screen instead (see `selectionBar` below), so
+      // this is free to scroll away rather than staying pinned under it.
       SliverPersistentHeader(
         pinned: !_isSelecting,
         delegate: StickyHeaderDelegate(
@@ -478,56 +556,6 @@ class _FilesViewState extends State<FilesView> {
           child: controlsRow,
         ),
       ),
-      if (_isSelecting)
-        SliverAppBar(
-          pinned: true,
-          // This isn't the scroll view's topmost sliver - the Synced
-          // header above it already reserves status-bar space, so leaving
-          // this at its default `primary: true` double-reserves it too,
-          // showing up as a big empty gap above the toolbar.
-          primary: false,
-          automaticallyImplyLeading: false,
-          toolbarHeight: 48,
-          // No leading/actions slots - everything lives in `title`, wrapped
-          // in the exact same 16px horizontal Padding as the controls row
-          // above it, so the two rows' content lines up edge-to-edge
-          // instead of relying on SliverAppBar's own leadingWidth/actions
-          // insets (which don't match the controls row's).
-          titleSpacing: 0,
-          title: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.close_rounded, size: 20),
-                  tooltip: 'Cancel selection',
-                  onPressed: _clearSelection,
-                  visualDensity: VisualDensity.compact,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '${selectedItems.length} selected',
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                for (final action in _buildSelectionActions(
-                  provider,
-                  selectedItems,
-                ))
-                  IconButton(
-                    icon: Icon(action.icon, size: 20, color: action.color),
-                    tooltip: action.label,
-                    onPressed: action.onTap,
-                    visualDensity: VisualDensity.compact,
-                  ),
-              ],
-            ),
-          ),
-        ),
-
       // Files List / Grid
       if (provider.isLoading)
         const SliverFillRemaining(
@@ -669,7 +697,77 @@ class _FilesViewState extends State<FilesView> {
           const MoreTabsButton(),
           const ProfileAvatarButton(),
         ],
+        selectionBar: _isSelecting
+            ? _buildSelectionBar(context, theme, provider, selectedItems)
+            : null,
         contentSlivers: contentSlivers,
+      ),
+    );
+  }
+
+  /// Replaces the top bar entirely while selecting (see
+  /// `SyncedHeaderScaffold.selectionBar`) - a close button, the "N
+  /// selected" count, and the horizontally-scrollable bulk actions.
+  Widget _buildSelectionBar(
+    BuildContext context,
+    ThemeData theme,
+    ServerProvider provider,
+    List<NextcloudItem> selectedItems,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          SizedBox(
+            width: MediaQuery.of(context).size.width * 0.5,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 20),
+                    tooltip: 'Cancel selection',
+                    onPressed: _clearSelection,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${selectedItems.length} selected',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              controller: _selectionActionsScrollController,
+              scrollDirection: Axis.horizontal,
+              // Left-aligned (not anchored to the trailing edge) so the
+              // first action's left edge sits at a fixed spot - lining up
+              // with the controls row's own first icon directly below it -
+              // regardless of how many actions there are.
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final action in _buildSelectionActions(
+                    provider,
+                    selectedItems,
+                  ))
+                    IconButton(
+                      icon: Icon(action.icon, size: 20),
+                      tooltip: action.label,
+                      onPressed: action.onTap,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -795,7 +893,9 @@ class _FilesViewState extends State<FilesView> {
           : colorScheme.surfaceContainerLow,
       child: InkWell(
         onTap: () {
-          if (_isSelecting) {
+          if (provider.isPicking) {
+            _handlePickTap(context, provider, item);
+          } else if (_isSelecting) {
             _toggleSelection(item);
           } else if (item.isFolder) {
             provider.navigateToFolder(item.path);
@@ -803,7 +903,9 @@ class _FilesViewState extends State<FilesView> {
             _openFile(context, item, provider);
           }
         },
-        onLongPress: () => _toggleSelection(item),
+        onLongPress: provider.isPicking && !provider.pickRequest!.allowMultiple
+            ? null
+            : () => _toggleSelection(item),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
@@ -850,7 +952,7 @@ class _FilesViewState extends State<FilesView> {
       ),
     );
 
-    final content = _isSelecting
+    final content = _isSelecting || provider.isPicking
         ? card
         : SwipeableItem(
             itemKey: ValueKey('file-${item.id}'),
@@ -901,7 +1003,9 @@ class _FilesViewState extends State<FilesView> {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () {
-          if (_isSelecting) {
+          if (provider.isPicking) {
+            _handlePickTap(context, provider, item);
+          } else if (_isSelecting) {
             _toggleSelection(item);
           } else if (item.isFolder) {
             provider.navigateToFolder(item.path);
@@ -909,7 +1013,9 @@ class _FilesViewState extends State<FilesView> {
             _openFile(context, item, provider);
           }
         },
-        onLongPress: () => _toggleSelection(item),
+        onLongPress: provider.isPicking && !provider.pickRequest!.allowMultiple
+            ? null
+            : () => _toggleSelection(item),
         child: SelectableThumbnail(
           isSelected: isSelected,
           checkmarkSize: 32,

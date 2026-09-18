@@ -6,13 +6,11 @@ import 'package:flutter/material.dart';
 class SelectionAction {
   final IconData icon;
   final String label;
-  final Color? color;
   final VoidCallback onTap;
 
   const SelectionAction({
     required this.icon,
     required this.label,
     required this.onTap,
-    this.color,
   });
 }

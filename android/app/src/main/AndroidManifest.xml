@@ -49,11 +49,34 @@
                 <category android:name="android.intent.category.DEFAULT"/>
                 <data android:mimeType="*/*"/>
             </intent-filter>
+            <!-- Lets Noo be picked as a source ("Google Photos", "Files", ...)
+                 from another app's own file/photo picker chooser - handled by
+                 MainActivity.kt/PickIntentService, not a plugin. A single
+                 "*/*" filter matches any mimeType the caller requests
+                 (image/*, video/*, or a generic file pick). -->
+            <intent-filter>
+                <action android:name="android.intent.action.GET_CONTENT"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.OPENABLE"/>
+                <data android:mimeType="*/*"/>
+            </intent-filter>
         </activity>
         <service
             android:name=".ShareUploadService"
             android:exported="false"
             android:foregroundServiceType="dataSync"/>
+        <!-- Hands back the file(s) a caller picked via the GET_CONTENT filter
+             above - only the app's own cache/picker/ subfolder is exposed,
+             see file_paths.xml. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.picker.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"/>
+        </provider>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

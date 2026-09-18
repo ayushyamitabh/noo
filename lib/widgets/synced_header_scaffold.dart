@@ -41,6 +41,15 @@ class SyncedHeaderScaffold extends StatefulWidget {
   /// `provider.fetchTrash` for a tab backed by different data.
   final Future<void> Function()? onRefresh;
 
+  /// When non-null (a tab is mid-selection), this takes over the pinned top
+  /// bar entirely - replacing the sync-status chip, [actions], and the
+  /// pull-to-reveal quota panel - instead of appearing as a second app bar
+  /// further down in [contentSlivers]. Selection is a modal-ish state (you
+  /// came here to act on specific items), so it reads better as the one
+  /// thing at the very top than as a strip sandwiched under the normal
+  /// chrome.
+  final Widget? selectionBar;
+
   const SyncedHeaderScaffold({
     super.key,
     required this.scrollController,
@@ -48,6 +57,7 @@ class SyncedHeaderScaffold extends StatefulWidget {
     required this.actions,
     required this.contentSlivers,
     this.onRefresh,
+    this.selectionBar,
   });
 
   @override
@@ -175,22 +185,32 @@ class _SyncedHeaderScaffoldState extends State<SyncedHeaderScaffold> {
               slivers: [
                 SliverAppBar(
                   pinned: true,
-                  stretch: true,
-                  expandedHeight: _headerLocked ? 190 : kToolbarHeight,
+                  stretch: widget.selectionBar == null,
+                  expandedHeight: widget.selectionBar != null
+                      ? kToolbarHeight
+                      : (_headerLocked ? 190 : kToolbarHeight),
                   collapsedHeight: kToolbarHeight,
                   backgroundColor: colorScheme.surfaceContainer,
                   surfaceTintColor: colorScheme.surfaceContainer,
                   scrolledUnderElevation: 0,
                   automaticallyImplyLeading: false,
-                  leadingWidth: _headerLocked ? 56 : 160,
-                  leading: leadingWidget,
-                  actions: widget.actions,
-                  flexibleSpace: FlexibleSpaceBar(
-                    background: _SyncedStretchPanel(
-                      provider: provider,
-                      forceVisible: _headerLocked,
-                    ),
-                  ),
+                  leadingWidth: widget.selectionBar != null
+                      ? 0
+                      : (_headerLocked ? 56 : 160),
+                  leading: widget.selectionBar != null ? null : leadingWidget,
+                  titleSpacing: widget.selectionBar != null ? 0 : null,
+                  title: widget.selectionBar,
+                  actions: widget.selectionBar != null
+                      ? const []
+                      : widget.actions,
+                  flexibleSpace: widget.selectionBar != null
+                      ? null
+                      : FlexibleSpaceBar(
+                          background: _SyncedStretchPanel(
+                            provider: provider,
+                            forceVisible: _headerLocked,
+                          ),
+                        ),
                 ),
                 DecoratedSliver(
                   decoration: BoxDecoration(

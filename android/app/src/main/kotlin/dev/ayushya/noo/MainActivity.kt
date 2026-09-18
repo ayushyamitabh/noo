@@ -1,6 +1,7 @@
 package dev.ayushya.noo
 
 import android.Manifest
+import android.content.ClipData
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -10,11 +11,13 @@ import android.os.Looper
 import android.provider.OpenableColumns
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
 
 // FlutterFragmentActivity (not the default FlutterActivity) is required by
 // local_auth's Android implementation, which hosts its biometric/device
@@ -38,10 +41,17 @@ class MainActivity : FlutterFragmentActivity() {
     private val shareIntentChannelName = "dev.ayushya.noo/share_intent"
     private val newShareChannelName = "dev.ayushya.noo/share_intent/new"
     private val uploadServiceChannelName = "dev.ayushya.noo/upload_service"
+    private val pickIntentChannelName = "dev.ayushya.noo/pick_intent"
+    private val newPickChannelName = "dev.ayushya.noo/pick_intent/new"
     private val notificationPermissionRequestCode = 4202
+    // Lazy, not a field initializer - `packageName` reads through the
+    // Activity's base Context, which isn't attached yet while this class's
+    // fields are being constructed (crashes with an NPE if evaluated then).
+    private val pickerFileProviderAuthority by lazy { "$packageName.picker.fileprovider" }
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private var newShareSink: EventChannel.EventSink? = null
+    private var newPickSink: EventChannel.EventSink? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -73,6 +83,26 @@ class MainActivity : FlutterFragmentActivity() {
                     else -> result.notImplemented()
                 }
             }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, pickIntentChannelName)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "getPickRequest" -> result.success(extractPickRequest(intent))
+                    "finishPick" -> finishPick(call, result)
+                    "cancelPick" -> cancelPick(result)
+                    else -> result.notImplemented()
+                }
+            }
+
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, newPickChannelName)
+            .setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
+                    newPickSink = events
+                }
+                override fun onCancel(arguments: Any?) {
+                    newPickSink = null
+                }
+            })
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -81,6 +111,10 @@ class MainActivity : FlutterFragmentActivity() {
         val shared = extractShareMetadata(intent)
         if (shared.isNotEmpty()) {
             mainHandler.post { newShareSink?.success(shared) }
+        }
+        val pickRequest = extractPickRequest(intent)
+        if (pickRequest != null) {
+            mainHandler.post { newPickSink?.success(pickRequest) }
         }
     }
 
@@ -179,5 +213,74 @@ class MainActivity : FlutterFragmentActivity() {
         }
         ContextCompat.startForegroundService(this, serviceIntent)
         result.success(null)
+    }
+
+    /// Non-null only when this Activity was launched (or re-delivered a new
+    /// Intent) as another app's GET_CONTENT picker - the mimeType filter and
+    /// multi-select flag the caller asked for, plus a best-effort display
+    /// name for the calling app to show in the "picking mode" banner.
+    private fun extractPickRequest(intent: Intent): Map<String, Any?>? {
+        if (intent.action != Intent.ACTION_GET_CONTENT) return null
+        val mimeType = intent.type ?: "*/*"
+        val allowMultiple = intent.getBooleanExtra(Intent.EXTRA_ALLOW_MULTIPLE, false)
+        val callerPackage = callingPackage
+        val callerLabel = callerPackage?.let {
+            try {
+                val appInfo = packageManager.getApplicationInfo(it, 0)
+                packageManager.getApplicationLabel(appInfo).toString()
+            } catch (_: PackageManager.NameNotFoundException) {
+                it
+            }
+        }
+        return mapOf(
+            "mimeType" to mimeType,
+            "allowMultiple" to allowMultiple,
+            "callerLabel" to callerLabel,
+        )
+    }
+
+    /// Hands the already-downloaded local files (see PickIntentService/
+    /// ServerProvider.confirmPick - this Activity never touches the
+    /// Nextcloud server itself) back to the caller as content:// Uris
+    /// through this app's own FileProvider, then closes the picker.
+    private fun finishPick(call: MethodCall, result: MethodChannel.Result) {
+        val paths = call.argument<List<String>>("paths")
+        val mimeTypes = call.argument<List<String>>("mimeTypes") ?: emptyList()
+        if (paths.isNullOrEmpty()) {
+            result.error("no_files", "No files to return to the caller", null)
+            return
+        }
+
+        val uris = paths.map { path ->
+            FileProvider.getUriForFile(this, pickerFileProviderAuthority, File(path))
+        }
+        val resultIntent = Intent().apply {
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        // `Intent.setData()` and `.setType()` each silently null out the
+        // other field if called separately (Android framework behavior) -
+        // `setDataAndType` is the only way to have both survive on the same
+        // Intent, which every GET_CONTENT caller expects for `data`.
+        val firstMimeType = mimeTypes.getOrNull(0) ?: "*/*"
+        if (uris.size == 1) {
+            resultIntent.setDataAndType(uris[0], firstMimeType)
+        } else {
+            val clipMimeTypes = mimeTypes.ifEmpty { listOf("*/*") }.toTypedArray()
+            val clipData = ClipData("Noo picked files", clipMimeTypes, ClipData.Item(uris[0]))
+            for (i in 1 until uris.size) clipData.addItem(ClipData.Item(uris[i]))
+            resultIntent.clipData = clipData
+            // Some callers only read `data` even for a multi-item pick, so
+            // this still points at the first file as a fallback.
+            resultIntent.setDataAndType(uris[0], firstMimeType)
+        }
+        setResult(RESULT_OK, resultIntent)
+        result.success(null)
+        finish()
+    }
+
+    private fun cancelPick(result: MethodChannel.Result) {
+        setResult(RESULT_CANCELED)
+        result.success(null)
+        finish()
     }
 }

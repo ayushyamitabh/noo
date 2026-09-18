@@ -3,7 +3,6 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
-import 'package:marquee/marquee.dart';
 import 'package:open_file/open_file.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -14,6 +13,7 @@ import '../models/nextcloud_item.dart';
 import '../providers/server_provider.dart';
 import '../widgets/details/details_sheet.dart';
 import '../widgets/frosted_glass_container.dart';
+import '../widgets/marquee_title.dart';
 import '../widgets/seek_bar_painter.dart';
 import '../widgets/share_sheet.dart';
 
@@ -339,7 +339,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                             ),
                             const SizedBox(width: 4),
                             Expanded(
-                              child: _MarqueeTitle(
+                              child: MarqueeTitle(
                                 text: _currentItem.name,
                                 style: Theme.of(context).textTheme.titleSmall
                                     ?.copyWith(
@@ -558,53 +558,6 @@ class _ActionIconButton extends StatelessWidget {
           child: Icon(icon, color: fg, size: 22),
         ),
       ),
-    );
-  }
-}
-
-/// The media viewer's title: a plain, single-line ellipsized [Text] for
-/// names that fit, or an auto-scrolling [Marquee] for names too long for
-/// the available width - measured once via [TextPainter] rather than
-/// always marqueeing, so a short filename just sits still like normal.
-class _MarqueeTitle extends StatelessWidget {
-  final String text;
-  final TextStyle? style;
-
-  const _MarqueeTitle({required this.text, required this.style});
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final painter = TextPainter(
-          text: TextSpan(text: text, style: style),
-          maxLines: 1,
-          textDirection: Directionality.of(context),
-        )..layout(maxWidth: double.infinity);
-
-        if (painter.width <= constraints.maxWidth) {
-          return Text(
-            text,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: style,
-          );
-        }
-
-        return SizedBox(
-          height: painter.height,
-          child: Marquee(
-            text: text,
-            style: style,
-            blankSpace: 48,
-            velocity: 30,
-            startPadding: 0,
-            pauseAfterRound: const Duration(seconds: 1),
-            fadingEdgeStartFraction: 0.1,
-            fadingEdgeEndFraction: 0.15,
-          ),
-        );
-      },
     );
   }
 }

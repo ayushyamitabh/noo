@@ -42,8 +42,17 @@ class _LoginWebViewViewState extends State<LoginWebViewView> {
             if (mounted) setState(() => _pageLoading = false);
           },
         ),
-      )
-      ..loadRequest(widget.url);
+      );
+    // Android's WebView CookieManager is a single store shared/persisted
+    // across every WebView instance in the app, not scoped to this
+    // controller - without clearing it first, "Add Account" (or logging
+    // back in as a different user on the same server) would silently land
+    // on whichever account's Nextcloud session cookie is already there
+    // instead of prompting for credentials, defeating the point of
+    // starting a fresh Login Flow v2 at all.
+    WebViewCookieManager().clearCookies().then((_) {
+      if (mounted) _controller.loadRequest(widget.url);
+    });
   }
 
   void _cancel() {

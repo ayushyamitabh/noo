@@ -3,7 +3,9 @@ import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'models/app_tab.dart';
+import 'models/pick_request.dart';
 import 'providers/server_provider.dart';
+import 'services/pick_intent_service.dart';
 import 'services/share_intent_service.dart';
 import 'theme/app_theme.dart';
 import 'views/lock_screen_view.dart';
@@ -113,6 +115,7 @@ class _MainShellViewState extends State<MainShellView> {
   late AppTab _currentTab;
   late final Map<AppTab, ScrollController> _scrollControllers;
   StreamSubscription<List<SharedFileRef>>? _shareSub;
+  StreamSubscription<PickRequest>? _pickSub;
 
   @override
   void initState() {
@@ -133,6 +136,17 @@ class _MainShellViewState extends State<MainShellView> {
     // file's actual bytes, so a large shared file can't block startup.
     ShareIntentService.getInitialShare().then(_handleSharedFiles);
     _shareSub = ShareIntentService.onNewShare.listen(_handleSharedFiles);
+
+    // Same cold-start-vs-already-running split as the share intent above:
+    // another app may have launched Noo as its GET_CONTENT picker.
+    PickIntentService.getPickRequest().then((request) {
+      if (request != null && mounted) {
+        context.read<ServerProvider>().setPickRequest(request);
+      }
+    });
+    _pickSub = PickIntentService.onNewPickRequest.listen((request) {
+      if (mounted) context.read<ServerProvider>().setPickRequest(request);
+    });
   }
 
   void _handleSharedFiles(List<SharedFileRef> files) {
@@ -151,6 +165,7 @@ class _MainShellViewState extends State<MainShellView> {
       c.dispose();
     }
     _shareSub?.cancel();
+    _pickSub?.cancel();
     super.dispose();
   }
 
@@ -169,7 +184,16 @@ class _MainShellViewState extends State<MainShellView> {
       );
     }
 
-    final visible = provider.visibleTabs;
+    final pickRequest = provider.pickRequest;
+    // While acting as another app's picker, only Files and Photos make
+    // sense as browsable sources - Trash/Shares/Activity/Recent aren't
+    // real "pick a file from here" destinations, and only these two tabs'
+    // views even know how to handle picking-mode taps. This overrides the
+    // user's own hidden/reordered tab settings rather than respecting
+    // them, since picking is a separate mode from normal browsing.
+    final visible = pickRequest != null
+        ? [AppTab.files, AppTab.photos]
+        : provider.visibleTabs;
     final selectedTab = visible.contains(_currentTab)
         ? _currentTab
         : (visible.isNotEmpty ? visible.first : AppTab.files);
@@ -181,50 +205,91 @@ class _MainShellViewState extends State<MainShellView> {
         .map((tab) => FloatingNavItem(label: tab.label, icon: tab.icon))
         .toList();
 
-    return Scaffold(
-      body: Stack(
-        children: [
-          IndexedStack(
-            index: selectedIndex,
-            children: visible
-                .map((tab) => buildAppTabView(tab, _scrollControllers[tab]!))
-                .toList(),
-          ),
-          // Each tab now renders its own sticky selection toolbar inline
-          // (right under its sort/filter row) instead of this shell
-          // swapping in a shared floating bar - the bottom nav stays put
-          // and usable regardless of selection state.
-          FloatingBottomNavBar(
-            selectedIndex: selectedIndex,
-            items: navItems,
-            opacity: provider.bottomBarOpacity,
-            blurSigma: provider.bottomBarBlur,
-            onDestinationSelected: (index) {
-              final tappedTab = visible[index];
-              if (tappedTab == _currentTab) {
-                if (provider.tapTabToScrollTop) {
-                  final controller = _scrollControllers[tappedTab];
-                  if (controller != null && controller.hasClients) {
-                    controller.animateTo(
-                      0,
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOutCubic,
-                    );
+    return PopScope(
+      // While picking, system back cancels the pick (and tells the caller
+      // nothing was chosen) instead of exiting the app from under it -
+      // there's no Navigator route to pop at this, the root screen.
+      canPop: pickRequest == null,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && pickRequest != null) provider.cancelPick();
+      },
+      child: Scaffold(
+        body: Stack(
+          children: [
+            IndexedStack(
+              index: selectedIndex,
+              children: visible
+                  .map((tab) => buildAppTabView(tab, _scrollControllers[tab]!))
+                  .toList(),
+            ),
+            if (provider.isDownloadingForPick) const _PickingProgressOverlay(),
+            // Each tab now renders its own sticky selection toolbar inline
+            // (right under its sort/filter row) instead of this shell
+            // swapping in a shared floating bar - the bottom nav stays put
+            // and usable regardless of selection state.
+            FloatingBottomNavBar(
+              selectedIndex: selectedIndex,
+              items: navItems,
+              opacity: provider.bottomBarOpacity,
+              blurSigma: provider.bottomBarBlur,
+              onDestinationSelected: (index) {
+                final tappedTab = visible[index];
+                if (tappedTab == _currentTab) {
+                  if (provider.tapTabToScrollTop) {
+                    final controller = _scrollControllers[tappedTab];
+                    if (controller != null && controller.hasClients) {
+                      controller.animateTo(
+                        0,
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeOutCubic,
+                      );
+                    }
                   }
+                  return;
                 }
-                return;
-              }
-              setState(() {
-                _currentTab = tappedTab;
-              });
-            },
-            onSearchTap: () {
-              Navigator.of(
-                context,
-              ).push(MaterialPageRoute(builder: (_) => const SearchView()));
-            },
+                setState(() {
+                  _currentTab = tappedTab;
+                });
+              },
+              onSearchTap: () {
+                Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const SearchView()));
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Blocks interaction while the selected file(s) download to a local cache
+/// folder before being handed back to the caller (see
+/// `ServerProvider.confirmPick`) - can take a moment for a large file/video.
+class _PickingProgressOverlay extends StatelessWidget {
+  const _PickingProgressOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: ColoredBox(
+        color: Colors.black.withValues(alpha: 0.35),
+        child: const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Preparing file...'),
+                ],
+              ),
+            ),
           ),
-        ],
+        ),
       ),
     );
   }

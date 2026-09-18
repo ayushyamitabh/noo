@@ -26,6 +26,15 @@ via [`LoginFlowService`](../../lib/services/login_flow_service.dart):
    Chrome-autofill (Android's own system Autofill framework, e.g. a
    password manager, may still work in the WebView; Chrome's own
    saved-password autofill specifically cannot, since that's Chrome-only).
+   `LoginWebViewView` also clears cookies (`WebViewCookieManager().
+   clearCookies()`) before every load, not just once - Android's WebView
+   `CookieManager` is a single store shared/persisted across every WebView
+   instance in the app process, not scoped per-controller, so without this
+   a second/"Add Account" login silently reuses whichever account's
+   Nextcloud session cookie is already there instead of prompting for
+   credentials (the same class of bug the Custom-Tab-reuse issue above
+   was, just recurring one layer down once everything moved to the owned
+   WebView).
 3. `ServerProvider` polls `LoginFlowService.poll(pollEndpoint, token)` every
    2 seconds (`Timer.periodic`, see `_pollTimer`/`_pollTimeoutTimer` in
    `server_provider.dart`) until it gets a 200 with `server`/`loginName`/
@@ -118,6 +127,49 @@ rather than needing a rewrite for multi-account support.
   re-delivers an Intent to the same running service instance, which an
   `AtomicBoolean` the copy/upload loops poll) - there's no plumbing back to
   the Dart UI, by design, since the app may not even be running.
+
+## Being picked by other apps (photo/file picker)
+
+Noo can also be launched *by* another app as a `GET_CONTENT` picker (e.g.
+Google Drive/Instagram's "choose a file" flow), the reverse direction of
+"Share to Noo" above - hand-rolled the same way, not a plugin.
+
+- `MainActivity.kt` matches `ACTION_GET_CONTENT` (`OPENABLE`, any
+  mimeType - a single `*/*` filter, since Android matches it against
+  whatever the caller actually requested) alongside its existing
+  `ACTION_SEND`/`SEND_MULTIPLE` filters, and exposes the caller's requested
+  mimeType/multi-select flag/app label via the
+  `dev.ayushya.noo/pick_intent` method+event channel pair
+  ([`PickIntentService`](../../lib/services/pick_intent_service.dart)/
+  [`PickRequest`](../../lib/models/pick_request.dart)) - same
+  cold-start-vs-already-running split as the share-intent channels.
+- `ServerProvider.pickRequest`/`isPicking` drive picking mode app-wide once
+  `MainShellView` learns about a request at startup or via
+  `onNewPickRequest`. While picking, `MainShellView` restricts the visible
+  bottom-nav tabs to just Files and Photos (see `architecture.md`) -
+  `FilesView`/`PhotosView` route taps through
+  `itemMatchesPickFilter`/`confirmPick` instead of their normal
+  open/select behavior (folders still navigate; a mime-mismatched file is
+  rejected with a snackbar; matching files toggle-select or immediately
+  confirm depending on `PickRequest.allowMultiple`).
+- `ServerProvider.confirmPick` downloads the selected item(s) to a
+  `picker/` scratch subfolder in the app's cache dir (`downloadToFile`,
+  same as any other download) - each item into its own `picker/<item.id>/`
+  subfolder, keeping the on-disk filename as plain `item.name` rather than
+  prefixing it with the id to dodge collisions between same-named items;
+  the caller reads that on-disk name back as the display name, so
+  prefixing it there was a real bug (Drive showing e.g. `163332_photo.jpg`
+  instead of `photo.jpg`) - then hands the local paths to
+  `PickIntentService.finishPick`, which calls back into
+  `MainActivity.kt.finishPick`: it wraps each file in a `content://` Uri
+  via this app's own `FileProvider` (`${applicationId}.picker.fileprovider`,
+  scoped to just that cache subfolder - see `android/app/src/main/res/xml/
+  file_paths.xml`) and returns it to the caller via `setResult`. Single
+  file uses `setDataAndType` (never `.data =`/`.type =` as two separate
+  calls - each one silently nulls out the other field on a plain
+  `Intent`); multiple files use `ClipData`. `cancelPick` mirrors this for
+  backing out (system back while picking, or a picked-item mismatch) with
+  `RESULT_CANCELED` instead.
 
 ## Multi-account storage & session persistence
 

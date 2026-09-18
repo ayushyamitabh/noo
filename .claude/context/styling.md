@@ -42,6 +42,14 @@ widgets. Key points:
   `files_view.dart` and `share_upload_view.dart`'s destination picker).
   Extend this rather than re-deriving per-type icons/colors at a new call
   site.
+- [`DetailsHeader`](../../lib/widgets/details/details_sheet.dart) — the
+  icon-box/name/meta row every per-item bottom sheet opens on
+  (`DetailsSheet`, the media viewer's collapsed peek state, and
+  `ShareSheet`). Takes a `padding` override for callers whose own scroll
+  view already applies horizontal insets (`ShareSheet`'s `ListView`), so it
+  doesn't get doubled up. Reuse this instead of a bare title `Text` for any
+  new per-item sheet - a plain title reads as under-designed next to the
+  other sheets (a real instance: `ShareSheet` used to be just that).
 - [`FrostedGlassContainer`](../../lib/widgets/frosted_glass_container.dart) —
   the blurred/translucent pill background shared by all floating chrome
   (bottom nav bar, media-viewer top/bottom bars and video transport

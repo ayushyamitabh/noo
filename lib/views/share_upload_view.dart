@@ -9,9 +9,13 @@ import '../services/share_intent_service.dart';
 import '../services/upload_service.dart';
 import '../widgets/breadcrumbs.dart';
 import '../widgets/item_icon.dart';
+import '../widgets/marquee_title.dart';
+import '../widgets/more_tabs_button.dart';
+import '../widgets/profile_avatar_button.dart';
 import '../widgets/segmented_icon_toggle.dart';
 import '../widgets/sort_menu_button.dart';
-import '../widgets/synced_header_scaffold.dart' show formatBytes;
+import '../widgets/sticky_header_delegate.dart';
+import '../widgets/synced_header_scaffold.dart';
 
 /// Shown when another app shares one or more files to Noo (Android's
 /// "Share to..." sheet). Lets the user browse to a destination folder,
@@ -32,6 +36,8 @@ class ShareUploadView extends StatefulWidget {
 }
 
 class _ShareUploadViewState extends State<ShareUploadView> {
+  final ScrollController _scrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
@@ -40,6 +46,12 @@ class _ShareUploadViewState extends State<ShareUploadView> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) context.read<ServerProvider>().navigateToAbsoluteFolder('/');
     });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _uploadHere(ServerProvider provider) async {
@@ -332,74 +344,171 @@ class _ShareUploadViewState extends State<ShareUploadView> {
         : currentPath.split('/').where((s) => s.isNotEmpty).last;
     final items = provider.items;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          widget.files.length == 1
-              ? 'Upload ${widget.files.first.name}'
-              : 'Upload ${widget.files.length} files',
-        ),
-      ),
-      body: Column(
+    // Mirrors FilesView's own controls-row + breadcrumbs sticky header
+    // exactly (padding, heights) so this reads as the same browser, just
+    // reached from a share intent instead of the Files tab.
+    final controlsColumn = Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: _buildControlsRow(provider),
-          ),
-          if (hasBreadcrumbs)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          _buildControlsRow(provider),
+          if (hasBreadcrumbs) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 32,
               child: Breadcrumbs(
                 pathStack: provider.pathStack,
                 onTap: (index) => provider.navigateToPathIndex(index),
               ),
             ),
-          Expanded(
-            child: provider.isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : items.isEmpty
-                ? Center(
-                    child: Text(
-                      'Folder is empty',
-                      style: TextStyle(color: colorScheme.onSurfaceVariant),
-                    ),
-                  )
-                : provider.isGridView
-                ? GridView.builder(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 8,
-                    ),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          childAspectRatio: 1.1,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                        ),
-                    itemCount: items.length,
-                    itemBuilder: (context, index) =>
-                        _buildGridCard(context, items[index], provider),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 8,
-                    ),
-                    itemCount: items.length,
-                    itemBuilder: (context, index) =>
-                        _buildListTile(context, items[index], provider),
-                  ),
-          ),
+          ],
         ],
       ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: FilledButton.icon(
-            onPressed: () => _uploadHere(provider),
-            icon: const Icon(Icons.upload_rounded),
-            label: Text('Upload to $currentLabel'),
+    );
+
+    final contentSlivers = <Widget>[
+      SliverPersistentHeader(
+        pinned: true,
+        delegate: StickyHeaderDelegate(
+          height: hasBreadcrumbs ? 114 : 72,
+          child: controlsColumn,
+        ),
+      ),
+      if (provider.isLoading)
+        const SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(child: CircularProgressIndicator()),
+        )
+      else if (items.isEmpty)
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(
+            child: Text(
+              'Folder is empty',
+              style: TextStyle(color: colorScheme.onSurfaceVariant),
+            ),
+          ),
+        )
+      else if (provider.isGridView)
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              childAspectRatio: 1.1,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+            ),
+            delegate: SliverChildBuilderDelegate((context, index) {
+              return _buildGridCard(context, items[index], provider);
+            }, childCount: items.length),
+          ),
+        )
+      else
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate((context, index) {
+              return _buildListTile(context, items[index], provider);
+            }, childCount: items.length),
+          ),
+        ),
+      // So the last row isn't hidden behind the bottom "Upload to..." bar.
+      const SliverToBoxAdapter(child: SizedBox(height: 24)),
+    ];
+
+    return Scaffold(
+      body: SyncedHeaderScaffold(
+        scrollController: _scrollController,
+        provider: provider,
+        // Same trailing actions as every other tab - no bespoke close
+        // button here, so the top chrome is identical regardless of how
+        // this screen was reached. Backing out is still the system
+        // back gesture/button, same as any other pushed screen.
+        actions: const [MoreTabsButton(), ProfileAvatarButton()],
+        contentSlivers: contentSlivers,
+      ),
+      // A rounded-top, elevated bar "peeking" up from the bottom edge - the
+      // uploading-file summary (marqueed if it doesn't fit on one line)
+      // sits directly above the destination button, both inside the one
+      // sheet, rather than the summary living up in the scrolling content
+      // far away from the action it describes.
+      bottomNavigationBar: Material(
+        color: colorScheme.surfaceContainerHigh,
+        elevation: 8,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Same pill/chip look and exact same duller background
+                // color as the filter toggles' shared background
+                // (SegmentedIconGroup's `surfaceContainerHigh`), so it reads
+                // as part of the same visual language rather than a new
+                // accent color. Sized to the text itself (like a real chip)
+                // up to the row's available width - MarqueeTitle needs a
+                // concrete (not just loose) width to know whether/how far
+                // to scroll, so this measures the text once up front rather
+                // than leaving the chip unconstrained.
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final uploadingText = widget.files.length == 1
+                        ? 'Uploading ${widget.files.first.name}'
+                        : 'Uploading ${widget.files.length} files';
+                    final chipTextStyle = theme.textTheme.titleSmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w700,
+                    );
+                    const horizontalPadding = 28.0;
+                    final painter = TextPainter(
+                      text: TextSpan(text: uploadingText, style: chipTextStyle),
+                      maxLines: 1,
+                      textDirection: Directionality.of(context),
+                    )..layout(maxWidth: double.infinity);
+                    final chipWidth = (painter.width + horizontalPadding).clamp(
+                      0.0,
+                      constraints.maxWidth,
+                    );
+
+                    return Container(
+                      width: chipWidth,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHigh,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: SizedBox(
+                        height: 20,
+                        child: MarqueeTitle(
+                          text: uploadingText,
+                          style: chipTextStyle,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () => _uploadHere(provider),
+                    icon: const Icon(Icons.upload_rounded),
+                    label: Text('Upload to $currentLabel'),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

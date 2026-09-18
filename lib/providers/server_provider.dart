@@ -1,18 +1,23 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/app_tab.dart';
 import '../models/nextcloud_file_version.dart';
 import '../models/nextcloud_item.dart';
 import '../models/nextcloud_share.dart';
 import '../models/nextcloud_sharee.dart';
+import '../models/pick_request.dart';
 import '../models/saved_account.dart';
 import '../services/account_store.dart';
 import '../services/app_lock_service.dart';
 import '../services/login_flow_service.dart';
 import '../services/nextcloud_service.dart';
+import '../services/pick_intent_service.dart';
 import '../theme/app_theme.dart';
 
 enum LoginFlowStatus { idle, initiating, awaitingBrowser, error }
@@ -140,6 +145,12 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
   // (e.g. a search result landing on Files) - consumed and cleared by
   // MainShellView the next time it builds, not a persisted preference.
   AppTab? _requestedTab;
+
+  // Non-null while the app is acting as another app's GET_CONTENT picker
+  // (see PickIntentService/MainActivity.kt) - set at startup/onNewPickRequest
+  // in MainShellView, cleared once the pick is confirmed or cancelled.
+  PickRequest? _pickRequest;
+  bool _isDownloadingForPick = false;
   List<String> _pathStack = ['/'];
   bool _isGridView = false;
   bool _showFavoritesOnlyFiles = false;
@@ -295,6 +306,77 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   String get currentFolderPath => _currentFolderPath;
   AppTab? get requestedTab => _requestedTab;
+
+  PickRequest? get pickRequest => _pickRequest;
+  bool get isPicking => _pickRequest != null;
+  bool get isDownloadingForPick => _isDownloadingForPick;
+
+  /// Whether [item] can be handed back to the app that's currently picking
+  /// - always true for folders (still browsable), mime-filtered for files.
+  bool itemMatchesPickFilter(NextcloudItem item) {
+    if (item.isFolder) return true;
+    final request = _pickRequest;
+    return request == null || request.matches(item.mimeType);
+  }
+
+  /// Called once (from MainShellView) as soon as a pick request is known -
+  /// either the cold-start request or one that arrived via onNewPickRequest
+  /// while already running.
+  void setPickRequest(PickRequest request) {
+    _pickRequest = request;
+    notifyListeners();
+  }
+
+  /// Downloads each selected item to a scratch cache folder, then hands the
+  /// local paths back to the caller through PickIntentService, which closes
+  /// the picker Activity on success. Left in [_pickRequest] (i.e. picking
+  /// mode stays visually active) if the download fails partway, so the user
+  /// can see the error and retry rather than the screen finishing under
+  /// them with nothing returned to the caller.
+  Future<bool> confirmPick(List<NextcloudItem> items) async {
+    final service = _service;
+    if (_pickRequest == null || service == null || items.isEmpty) {
+      return false;
+    }
+    _isDownloadingForPick = true;
+    notifyListeners();
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final pickDir = Directory(p.join(tempDir.path, 'picker'));
+      final localPaths = <String>[];
+      final mimeTypes = <String>[];
+      for (final item in items) {
+        // Each item gets its own subfolder (keyed by id, not smashed into
+        // the filename) so two different items can share a plain file
+        // name without colliding, while the file on disk - and therefore
+        // the display name the caller sees via the content:// Uri
+        // MainActivity.kt hands back - stays exactly `item.name`.
+        final itemDir = Directory(p.join(pickDir.path, item.id));
+        await itemDir.create(recursive: true);
+        final localPath = p.join(itemDir.path, item.name);
+        await service.downloadToFile(item.path, localPath);
+        localPaths.add(localPath);
+        mimeTypes.add(item.mimeType ?? 'application/octet-stream');
+      }
+      await PickIntentService.finishPick(localPaths, mimeTypes);
+      _pickRequest = null;
+      return true;
+    } catch (_) {
+      return false;
+    } finally {
+      _isDownloadingForPick = false;
+      notifyListeners();
+    }
+  }
+
+  /// Backs out of picking mode entirely, telling the caller nothing was
+  /// picked and closing the picker Activity.
+  Future<void> cancelPick() async {
+    if (_pickRequest == null) return;
+    _pickRequest = null;
+    notifyListeners();
+    await PickIntentService.cancelPick();
+  }
 
   /// Asks the shell to switch its active bottom-nav tab to [tab] - e.g. so
   /// tapping a search result lands the user on the Files tab even if they
@@ -690,9 +772,17 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     } catch (e) {
       if (gen != _sessionGeneration) return false;
       _errorMessage = e.toString().replaceAll('Exception: ', '');
-      // The stored app password for this account no longer works - drop it
-      // so it doesn't keep silently failing on every future restore/switch.
-      await _accountStore.deletePassword(account.id);
+      // Only drop the stored password on an actual auth rejection (401) -
+      // NextcloudService.testConnection also throws for network-level
+      // failures (DNS, timeout, unreachable host), and those are transient:
+      // deleting a still-valid password on a dropped connection would
+      // permanently log the account out with no way back in short of
+      // Login Flow v2 again, since _activeAccountId is never cleared and
+      // switchAccount() no-ops when asked to "switch" to the account
+      // that's already (nominally) active.
+      if (_errorMessage?.contains('401') == true) {
+        await _accountStore.deletePassword(account.id);
+      }
     }
 
     if (gen != _sessionGeneration) return false;
@@ -908,15 +998,24 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     unawaited(fetchRecent());
   }
 
-  /// Switches to an already-saved account. No-op if it's already active or
-  /// unknown. Gated behind login lock when [lockAccountSwitching] is on.
-  Future<void> switchAccount(String accountId) async {
-    if (accountId == _activeAccountId) return;
-    if (!_accounts.any((a) => a.id == accountId)) return;
+  /// Switches to an already-saved account. No-op (returns true) if it's
+  /// already active and logged in; no-op (returns false) if unknown - but
+  /// if [accountId] is nominally "active" while [isLoggedIn] is false (a
+  /// session-restore that failed, e.g. transient network trouble at cold
+  /// start), this still retries rather than no-op, since that's exactly the
+  /// case LoginView's "Continue as" tile exists to recover from. Gated
+  /// behind login lock when [lockAccountSwitching] is on. Returns whether
+  /// the account ended up logged in, so callers (LoginView's saved-account
+  /// tile) can surface a failure - e.g. a stored app password that no
+  /// longer works and needs the account removed/re-added.
+  Future<bool> switchAccount(String accountId) async {
+    if (accountId == _activeAccountId && _isLoggedIn) return true;
+    if (!_accounts.any((a) => a.id == accountId)) return false;
     if (!await _passGate(_lockAccountSwitching, 'Unlock to switch accounts')) {
-      return;
+      return false;
     }
     await _activateAccount(accountId);
+    return _isLoggedIn;
   }
 
   Future<SavedAccount?> _cycleAccount(int direction) async {
