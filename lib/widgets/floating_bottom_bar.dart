@@ -61,57 +61,68 @@ class FloatingBottomNavBar extends StatelessWidget {
       blurSigma: blurSigma,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: List.generate(items.length, (index) {
-            final item = items[index];
-            final isSelected = selectedIndex == index;
+        // The selected item's label expands the pill, and with enough
+        // tabs visible that can outgrow the available width (the
+        // ConstrainedBox above caps it at 480, but the screen itself may
+        // be narrower) - wrapped in a scroll view rather than a plain Row
+        // so it degrades to a swipe instead of overflowing/clipping.
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: List.generate(items.length, (index) {
+              final item = items[index];
+              final isSelected = selectedIndex == index;
 
-            return InkWell(
-              onTap: () => onDestinationSelected(index),
-              borderRadius: BorderRadius.circular(26),
-              splashColor: colorScheme.primary.withValues(alpha: 0.12),
-              highlightColor: Colors.transparent,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                curve: Curves.easeInOutCubic,
-                padding: EdgeInsets.symmetric(
-                  horizontal: isSelected ? 16 : 12,
-                  vertical: 12,
-                ),
-                decoration: BoxDecoration(
-                  color: isSelected ? colorScheme.primary : Colors.transparent,
-                  borderRadius: BorderRadius.circular(26),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      item.icon,
-                      size: 22,
-                      color: isSelected
-                          ? colorScheme.onPrimary
-                          : colorScheme.onSurfaceVariant,
-                    ),
-                    if (isSelected) ...[
-                      const SizedBox(width: 8),
-                      Text(
-                        item.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: colorScheme.onPrimary,
-                          letterSpacing: 0.1,
-                        ),
+              return InkWell(
+                onTap: () => onDestinationSelected(index),
+                borderRadius: BorderRadius.circular(26),
+                splashColor: colorScheme.primary.withValues(alpha: 0.12),
+                highlightColor: Colors.transparent,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeInOutCubic,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isSelected ? 16 : 12,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? colorScheme.primary
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(26),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        item.icon,
+                        size: 22,
+                        color: isSelected
+                            ? colorScheme.onPrimary
+                            : colorScheme.onSurfaceVariant,
                       ),
+                      if (isSelected) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          item.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: colorScheme.onPrimary,
+                            letterSpacing: 0.1,
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-            );
-          }),
+              );
+            }),
+          ),
         ),
       ),
     );

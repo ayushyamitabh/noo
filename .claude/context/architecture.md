@@ -125,6 +125,19 @@ another app" story) that feeds `ServerProvider.pickRequest`; while
 regardless of the user's own hidden/reordered tab settings, since those
 are the only two views that know how to handle a picking-mode tap and the
 only two that make sense as external "choose a file" sources.
+`MainShellView` also fires a one-time notification-permission prompt on
+its first mount (`_maybeRequestNotificationPermission`, gated by a plain
+`shared_preferences` flag so it only ever asks once, not on every
+launch): a plain-language `AlertDialog` explaining why Noo wants it
+(upload/download progress notifications - see `ShareUploadService.kt`/
+`DownloadService.kt`) before the OS's own `permission_handler`-driven
+`Permission.notification.request()`, since the bare system prompt gives
+no context on its own.
+
+`FloatingBottomNavBar` (`widgets/floating_bottom_bar.dart`) wraps its
+pill's item row in a horizontal `SingleChildScrollView` rather than a
+plain `Row`, so a wide selected-item label plus several icon-only tabs
+scrolls instead of overflowing on narrower screens.
 
 All six tabs, plus `ShareUploadView` (the share-to-upload destination
 picker, pushed rather than a tab - see below), share
@@ -134,10 +147,11 @@ Photos-style) and a classic Material refresh spinner shown during a
 pull-triggered sync. `ShareUploadView` mirrors the Files tab's own
 controls-row/breadcrumbs sticky header almost exactly, so arriving via
 another app's "Share to..." sheet still lands on the same top chrome
-instead of a plain `AppBar` - its `actions` are the exact same
-`[MoreTabsButton(), ProfileAvatarButton()]` every non-Files tab uses (kept
-uniform deliberately; backing out is the system back gesture/button, not a
-bespoke close icon in the app bar). Its bottom action - "Upload to
+instead of a plain `AppBar` - its `actions` are `[ProfileAvatarButton()]`
+only (no `MoreTabsButton`: there's nowhere useful for it to go mid-upload,
+since jumping to another tab would abandon the destination picker);
+backing out is the system back gesture/button, not a bespoke close icon in
+the app bar. Its bottom action - "Upload to
 {folder}" - and the uploading-file-name summary above it (single line,
 auto-scrolling via `MarqueeTitle` if it doesn't fit) live together in one
 rounded-top, elevated `Material` bar as `bottomNavigationBar`, reading as a

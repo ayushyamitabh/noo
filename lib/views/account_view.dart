@@ -81,28 +81,6 @@ class AccountView extends StatelessWidget {
                   const Divider(height: 1),
                   const SizedBox(height: 16),
                   Row(
-                    children: [
-                      Icon(
-                        Icons.public_rounded,
-                        size: 18,
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          Uri.tryParse(provider.serverUrl)?.host ??
-                              provider.serverUrl,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
@@ -135,19 +113,33 @@ class AccountView extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Text(
-                      quota != null
-                          ? (quota.totalBytes > 0
-                                ? '${(quota.usagePercentage * 100).toStringAsFixed(1)}% used'
-                                : 'Unlimited storage')
-                          : '',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                        fontSize: 11,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          Uri.tryParse(provider.serverUrl)?.host ??
+                              provider.serverUrl,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                            fontSize: 11,
+                          ),
+                        ),
                       ),
-                    ),
+                      Text(
+                        quota != null
+                            ? (quota.totalBytes > 0
+                                  ? '${(quota.usagePercentage * 100).toStringAsFixed(1)}% used'
+                                  : 'Unlimited storage')
+                            : '',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
                   ),
                   if (quota != null && quota.groups.isNotEmpty) ...[
                     const SizedBox(height: 16),

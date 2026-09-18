@@ -55,6 +55,7 @@ dependencies:
   marquee: ^2.3.0
   local_auth: ^2.3.0
   webview_flutter: ^4.14.1
+  permission_handler: ^11.3.1
 
 dev_dependencies:
   flutter_test:

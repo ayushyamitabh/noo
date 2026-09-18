@@ -10,7 +10,6 @@ import '../services/upload_service.dart';
 import '../widgets/breadcrumbs.dart';
 import '../widgets/item_icon.dart';
 import '../widgets/marquee_title.dart';
-import '../widgets/more_tabs_button.dart';
 import '../widgets/profile_avatar_button.dart';
 import '../widgets/segmented_icon_toggle.dart';
 import '../widgets/sort_menu_button.dart';
@@ -413,11 +412,13 @@ class _ShareUploadViewState extends State<ShareUploadView> {
       body: SyncedHeaderScaffold(
         scrollController: _scrollController,
         provider: provider,
-        // Same trailing actions as every other tab - no bespoke close
-        // button here, so the top chrome is identical regardless of how
-        // this screen was reached. Backing out is still the system
-        // back gesture/button, same as any other pushed screen.
-        actions: const [MoreTabsButton(), ProfileAvatarButton()],
+        // Same trailing actions as every other tab except "More tabs" -
+        // there's nowhere useful for it to go while mid-upload (jumping to
+        // Trash/Shares/etc. would abandon this destination picker), so the
+        // top chrome is identical to every other tab minus that one entry.
+        // Backing out is still the system back gesture/button, same as any
+        // other pushed screen.
+        actions: const [ProfileAvatarButton()],
         contentSlivers: contentSlivers,
       ),
       // A rounded-top, elevated bar "peeking" up from the bottom edge - the

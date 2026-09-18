@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'models/app_tab.dart';
 import 'models/pick_request.dart';
 import 'providers/server_provider.dart';
@@ -147,6 +149,53 @@ class _MainShellViewState extends State<MainShellView> {
     _pickSub = PickIntentService.onNewPickRequest.listen((request) {
       if (mounted) context.read<ServerProvider>().setPickRequest(request);
     });
+
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _maybeRequestNotificationPermission(),
+    );
+  }
+
+  static const _prefNotificationPermissionAsked =
+      'notification_permission_asked';
+
+  // Asked once, on the app's first launch after login, rather than every
+  // time this shell mounts - a plain-language reason shown before the OS
+  // prompt (which just says "Noo would like to send you notifications"
+  // with no context) so the system dialog doesn't feel unexplained, since
+  // it's what shows upload/download progress for background transfers.
+  Future<void> _maybeRequestNotificationPermission() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_prefNotificationPermissionAsked) ?? false) return;
+    await prefs.setBool(_prefNotificationPermissionAsked, true);
+
+    final status = await Permission.notification.status;
+    if (status.isGranted || status.isPermanentlyDenied) return;
+    if (!mounted) return;
+
+    final shouldRequest = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Allow notifications?'),
+        content: const Text(
+          'Noo shows upload and download progress as a notification, so '
+          'you can track transfers that keep running in the background.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Allow'),
+          ),
+        ],
+      ),
+    );
+    if (shouldRequest == true) {
+      await Permission.notification.request();
+    }
   }
 
   void _handleSharedFiles(List<SharedFileRef> files) {
