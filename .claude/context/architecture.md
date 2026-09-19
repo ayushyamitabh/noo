@@ -54,10 +54,10 @@ There is exactly one `ChangeNotifier`: [`ServerProvider`](../../lib/providers/se
 - UI settings that persist across launches — split into **global** (theme
   mode, seed color, dynamic-color toggle, bottom-bar opacity/blur,
   tap-tab-to-scroll-top, seek bar style, tab order/visibility/default, swipe
-  actions, login lock — see below) and **per-account** (grid/list view,
-  favorites-only, show-hidden, storage scope, Photos sort, Files'
-  per-folder sort map, cache policy) — see `server.md` for exactly which is
-  which and why
+  actions, login lock, sync-on-cellular — see below) and **per-account**
+  (grid/list view, favorites-only, show-hidden, storage scope, Photos sort,
+  Files' per-folder sort map, cache policy, synced folders) — see
+  `server.md` for exactly which is which and why
 - **Login lock** (`loginLockEnabled`/`lockAccountSwitching`/
   `lockHiddenFiles`/`needsUnlock`): an app-wide PIN/biometric gate via
   `AppLockService` (a thin wrapper over `local_auth` — this app never

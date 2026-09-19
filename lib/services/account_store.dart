@@ -37,6 +37,8 @@ class AccountStore {
     'ui_files_type_filter',
     'ui_cache_policy',
     'ui_cache_interval_minutes',
+    'ui_synced_folders',
+    'ui_sync_everything',
   ];
 
   String accountPrefKey(String accountId, String baseKey) =>

@@ -236,9 +236,17 @@ class _ShareSheetState extends State<ShareSheet> {
     setState(() => _isSharingFile = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final tempDir = await getTemporaryDirectory();
-      final tempPath = p.join(tempDir.path, widget.item.name);
-      await provider.service!.downloadToFile(widget.item.path, tempPath);
+      // Already mirrored locally by device sync? Share that copy straight
+      // away instead of a fresh WebDAV fetch - see
+      // ServerProvider.localSyncedFilePath.
+      final tempPath =
+          await provider.localSyncedFilePath(widget.item) ??
+          await () async {
+            final tempDir = await getTemporaryDirectory();
+            final path = p.join(tempDir.path, widget.item.name);
+            await provider.service!.downloadToFile(widget.item.path, path);
+            return path;
+          }();
       if (!mounted) return;
       await SharePlus.instance.share(
         ShareParams(

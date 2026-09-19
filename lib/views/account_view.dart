@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../models/app_tab.dart';
 import '../models/saved_account.dart';
 import '../providers/server_provider.dart';
+import '../services/sync_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/frosted_glass_container.dart';
 import '../widgets/seek_bar_painter.dart';
@@ -235,6 +236,17 @@ class AccountView extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             const _SecurityCard(),
+            const SizedBox(height: 24),
+
+            // Device Sync Section
+            Text(
+              'Device Sync',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 10),
+            const _DeviceSyncCard(),
             const SizedBox(height: 24),
 
             // Material You Design Settings
@@ -715,6 +727,120 @@ class _SecurityCard extends StatelessWidget {
             onChanged: provider.loginLockEnabled
                 ? provider.setLockHiddenFiles
                 : null,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DeviceSyncCard extends StatefulWidget {
+  const _DeviceSyncCard();
+
+  @override
+  State<_DeviceSyncCard> createState() => _DeviceSyncCardState();
+}
+
+class _DeviceSyncCardState extends State<_DeviceSyncCard> {
+  bool _syncingNow = false;
+
+  Future<void> _syncNow(ServerProvider provider) async {
+    setState(() => _syncingNow = true);
+    try {
+      await SyncService.syncNow(provider);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not start sync: $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _syncingNow = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final provider = context.watch<ServerProvider>();
+    final folders = provider.syncedPaths;
+    final everything = provider.syncEverything;
+
+    return Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SwitchListTile(
+            secondary: const Icon(Icons.cloud_sync_rounded),
+            title: const Text('Sync everything'),
+            subtitle: const Text(
+              'Mirror the whole account instead of picking folders',
+            ),
+            value: everything,
+            onChanged: provider.setSyncEverything,
+          ),
+          const Divider(height: 1, indent: 16, endIndent: 16),
+          if (everything)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+              child: Text(
+                'Every folder in this account is being synced to this '
+                'device.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            )
+          else if (folders.isEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+              child: Text(
+                'No folders synced yet - select a folder in Files and use '
+                '"Sync to device" to mirror it here for offline access.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            )
+          else
+            for (final folder in folders) ...[
+              ListTile(
+                leading: const Icon(Icons.sync_rounded),
+                title: Text(folder),
+                trailing: IconButton(
+                  icon: const Icon(Icons.close_rounded),
+                  tooltip: 'Stop syncing',
+                  onPressed: () => provider.removeSyncedPath(folder),
+                ),
+              ),
+              const Divider(height: 1, indent: 16, endIndent: 16),
+            ],
+          SwitchListTile(
+            secondary: const Icon(Icons.signal_cellular_alt_rounded),
+            title: const Text('Sync on cellular'),
+            subtitle: const Text('Off = background sync only runs on Wi-Fi'),
+            value: provider.syncOnCellular,
+            onChanged: provider.setSyncOnCellular,
+          ),
+          const Divider(height: 1, indent: 16, endIndent: 16),
+          ListTile(
+            leading: _syncingNow
+                ? const Padding(
+                    padding: EdgeInsets.all(2),
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : const Icon(Icons.sync_rounded),
+            title: const Text('Sync now'),
+            enabled: (everything || folders.isNotEmpty) && !_syncingNow,
+            onTap: () => _syncNow(provider),
           ),
         ],
       ),

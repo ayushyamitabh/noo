@@ -14,11 +14,13 @@ import '../models/nextcloud_share.dart';
 import '../models/nextcloud_sharee.dart';
 import '../models/pick_request.dart';
 import '../models/saved_account.dart';
+import '../models/sync_status.dart';
 import '../services/account_store.dart';
 import '../services/app_lock_service.dart';
 import '../services/login_flow_service.dart';
 import '../services/nextcloud_service.dart';
 import '../services/pick_intent_service.dart';
+import '../services/sync_service.dart';
 import '../theme/app_theme.dart';
 
 enum LoginFlowStatus { idle, initiating, awaitingBrowser, error }
@@ -97,6 +99,9 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _prefLoginLockEnabled = 'ui_login_lock_enabled';
   static const _prefLockAccountSwitching = 'ui_lock_account_switching';
   static const _prefLockHiddenFiles = 'ui_lock_hidden_files';
+  static const _prefSyncedFolders = 'ui_synced_folders';
+  static const _prefSyncEverything = 'ui_sync_everything';
+  static const _prefSyncOnCellular = 'ui_sync_on_cellular';
 
   final Future<SharedPreferences> _prefsFuture =
       SharedPreferences.getInstance();
@@ -126,6 +131,23 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
   double _bottomBarOpacity = 0.55;
   double _bottomBarBlur = 28;
   bool _tapTabToScrollTop = true;
+
+  // Device sync - which remote paths (files or folders, per account) get
+  // mirrored locally by the native SyncWorker, and whether its periodic
+  // background runs are allowed on cellular (default Wi-Fi-only). See
+  // SyncEngine.kt/server.md.
+  List<String> _syncedPaths = [];
+  bool _syncEverything = false;
+  bool _syncOnCellular = false;
+
+  // Live device-sync status, pushed from SyncStatusBus.kt via
+  // SyncService.statusStream (see _subscribeToSyncStatus) - account-wide,
+  // not scoped to whatever folder is currently browsed.
+  bool _isSyncingNow = false;
+  Set<String> _syncingFileIds = {};
+  Set<String> _syncedFileIds = {};
+  List<SyncConflictInfo> _syncConflicts = [];
+  StreamSubscription<SyncStatusSnapshot>? _syncStatusSub;
 
   // App lock (PIN/biometric via the device's own credential, not our own
   // storage - see AppLockService). Global, not per-account: it guards
@@ -255,6 +277,7 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
   ServerProvider() {
     WidgetsBinding.instance.addObserver(this);
     _init();
+    _subscribeToSyncStatus();
   }
 
   Future<void> _init() async {
@@ -263,6 +286,29 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _accounts = _accountStore.loadAccounts(prefs);
     _activeAccountId = _accountStore.loadActiveAccountId(prefs);
     await Future.wait([_loadPreferences(), _restoreSession()]);
+  }
+
+  /// Live device-sync status for the rest of the app's lifetime (not
+  /// re-subscribed per account switch - each event carries its own
+  /// `accountId`, so events for an account that isn't currently active are
+  /// just ignored below). Seeded once via a one-shot snapshot right after
+  /// every successful login/account-switch instead (see
+  /// `_applyCredentialsForAccount`), since events only arrive on change.
+  void _subscribeToSyncStatus() {
+    _syncStatusSub = SyncService.statusStream.listen((snapshot) {
+      _applySyncStatus(snapshot);
+    });
+  }
+
+  void _applySyncStatus(SyncStatusSnapshot snapshot) {
+    if (snapshot.accountId != null && snapshot.accountId != _activeAccountId) {
+      return;
+    }
+    _isSyncingNow = snapshot.syncing;
+    _syncingFileIds = snapshot.syncingFileIds;
+    _syncedFileIds = snapshot.syncedFileIds;
+    _syncConflicts = snapshot.conflicts;
+    notifyListeners();
   }
 
   /// Starts/stops the periodic folder-listing refresh as the app leaves and
@@ -322,6 +368,29 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool get lockAccountSwitching => _lockAccountSwitching;
   bool get lockHiddenFiles => _lockHiddenFiles;
   bool get needsUnlock => _loginLockEnabled && !_isUnlocked;
+
+  List<String> get syncedPaths => List.unmodifiable(_syncedPaths);
+  bool get syncEverything => _syncEverything;
+  bool get syncOnCellular => _syncOnCellular;
+
+  bool get isSyncingNow => _isSyncingNow;
+  List<SyncConflictInfo> get syncConflicts => List.unmodifiable(_syncConflicts);
+
+  SyncHeaderStatus get syncHeaderStatus {
+    if (_syncConflicts.isNotEmpty) return SyncHeaderStatus.alert;
+    if (_isSyncingNow) return SyncHeaderStatus.syncing;
+    if (!_syncEverything && _syncedPaths.isEmpty) return SyncHeaderStatus.off;
+    return SyncHeaderStatus.done;
+  }
+
+  SyncItemStatus syncStatusFor(NextcloudItem item) {
+    if (_syncingFileIds.contains(item.id)) return SyncItemStatus.syncing;
+    if (_syncConflicts.any((c) => c.fileId == item.id)) {
+      return SyncItemStatus.conflict;
+    }
+    if (_syncedFileIds.contains(item.id)) return SyncItemStatus.synced;
+    return SyncItemStatus.none;
+  }
 
   String get currentFolderPath => _currentFolderPath;
   AppTab? get requestedTab => _requestedTab;
@@ -621,6 +690,7 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
           prefs.getBool(_prefLockAccountSwitching) ?? _lockAccountSwitching;
       _lockHiddenFiles =
           prefs.getBool(_prefLockHiddenFiles) ?? _lockHiddenFiles;
+      _syncOnCellular = prefs.getBool(_prefSyncOnCellular) ?? _syncOnCellular;
       _applyAccountPrefs(prefs, _activeAccountId);
 
       final savedOrderNames = prefs.getStringList(_prefTabOrder);
@@ -709,6 +779,8 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
       _photosSortAscending = true;
       _cachePolicy = CachePolicy.never;
       _cacheIntervalMinutes = 5;
+      _syncedPaths = [];
+      _syncEverything = false;
       return;
     }
 
@@ -767,6 +839,19 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
       orElse: () => CachePolicy.never,
     );
     _cacheIntervalMinutes = prefs.getInt(k(_prefCacheIntervalMinutes)) ?? 5;
+
+    final syncedFoldersJson = prefs.getString(k(_prefSyncedFolders));
+    if (syncedFoldersJson != null) {
+      try {
+        _syncedPaths = (jsonDecode(syncedFoldersJson) as List).cast<String>();
+      } catch (e) {
+        debugPrint('[ServerProvider] Synced folders restore failed: $e');
+        _syncedPaths = [];
+      }
+    } else {
+      _syncedPaths = [];
+    }
+    _syncEverything = prefs.getBool(k(_prefSyncEverything)) ?? false;
   }
 
   /// Verifies [appPassword] for [account] and, on success, makes it the
@@ -806,6 +891,8 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
         if (gen != _sessionGeneration) return false;
         _isLoading = false;
         notifyListeners();
+        unawaited(SyncService.reschedule(this));
+        unawaited(SyncService.getStatus().then(_applySyncStatus));
         return true;
       }
     } catch (e) {
@@ -1131,7 +1218,12 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     final prefs = await _prefsFuture;
     await _accountStore.saveActiveAccountId(prefs, null);
     _applyAccountPrefs(prefs, null);
+    _isSyncingNow = false;
+    _syncingFileIds = {};
+    _syncedFileIds = {};
+    _syncConflicts = [];
     notifyListeners();
+    unawaited(SyncService.cancel());
   }
 
   /// Ends the active session but keeps this account saved - unlike
@@ -1471,6 +1563,93 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _folderSortAscending[_currentFolderPath] = !filesSortAscending;
     notifyListeners();
     _persistFolderSort();
+  }
+
+  void _persistSyncedPaths() {
+    _persistAccountPref(
+      _prefSyncedFolders,
+      (p, key) => p.setString(key, jsonEncode(_syncedPaths)),
+    );
+  }
+
+  bool isPathSynced(String path) => _syncedPaths.contains(path);
+
+  void addSyncedPath(String path) {
+    if (_syncedPaths.contains(path)) return;
+    _syncedPaths = [..._syncedPaths, path];
+    notifyListeners();
+    _persistSyncedPaths();
+    unawaited(SyncService.reschedule(this));
+  }
+
+  void removeSyncedPath(String path) {
+    if (!_syncedPaths.contains(path)) return;
+    _syncedPaths = _syncedPaths.where((f) => f != path).toList();
+    notifyListeners();
+    _persistSyncedPaths();
+    unawaited(SyncService.reschedule(this));
+  }
+
+  void setSyncEverything(bool value) {
+    if (_syncEverything == value) return;
+    _syncEverything = value;
+    notifyListeners();
+    _persistAccountPref(_prefSyncEverything, (p, key) => p.setBool(key, value));
+    unawaited(SyncService.reschedule(this));
+  }
+
+  void setSyncOnCellular(bool value) {
+    if (_syncOnCellular == value) return;
+    _syncOnCellular = value;
+    notifyListeners();
+    _prefsFuture.then((p) => p.setBool(_prefSyncOnCellular, value));
+    unawaited(SyncService.reschedule(this));
+  }
+
+  /// In-app conflict resolution (the sync header's "Keep local"/"Use
+  /// server" buttons) - see `SyncService.resolveConflict`'s doc comment
+  /// for why this shares the exact same native path the notification
+  /// actions use.
+  Future<void> resolveSyncConflict(
+    SyncConflictInfo conflict, {
+    required bool useLocal,
+  }) {
+    return SyncService.resolveConflict(
+      this,
+      conflict,
+      useLocal ? 'local' : 'server',
+    );
+  }
+
+  /// The local mirror path for [item] if it falls under a synced folder
+  /// *and* has actually been synced down already - a pure function of the
+  /// remote path once a folder's marked synced (mirrors
+  /// `SyncEngine.kt#syncRoot`'s `<externalFilesDir>/sync/<accountId>/...`
+  /// layout exactly), so this never needs to read the native sync-state
+  /// SharedPreferences from Dart. Callers (Share/Download) use this to
+  /// skip a fresh WebDAV fetch when a local copy already exists.
+  Future<String?> localSyncedFilePath(NextcloudItem item) async {
+    final id = activeAccountId;
+    if (id == null) return null;
+    final itemPath = item.path.endsWith('/')
+        ? item.path.substring(0, item.path.length - 1)
+        : item.path;
+    final isSynced =
+        _syncEverything ||
+        _syncedPaths.any((folder) {
+          final f = folder.endsWith('/')
+              ? folder.substring(0, folder.length - 1)
+              : folder;
+          return itemPath == f || itemPath.startsWith('$f/');
+        });
+    if (!isSynced) return null;
+    final base = await getExternalStorageDirectory();
+    if (base == null) return null;
+    final relPath = item.path.startsWith('/')
+        ? item.path.substring(1)
+        : item.path;
+    final file = File(p.join(base.path, 'sync', id, relPath));
+    return file.existsSync() ? file.path : null;
   }
 
   void setTabOrder(List<AppTab> order) {
@@ -2154,6 +2333,7 @@ class ServerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _pollTimer?.cancel();
     _pollTimeoutTimer?.cancel();
     _cacheRefreshTimer?.cancel();
+    _syncStatusSub?.cancel();
     super.dispose();
   }
 }

@@ -84,6 +84,18 @@ kotlin {
     }
 }
 
+dependencies {
+    // Device sync's periodic/one-off background jobs (SyncWorker,
+    // ConflictResolveWorker) - see their doc comments for why this is
+    // plain WorkManager rather than a Dart-side background-task plugin.
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
+    // PROPFIND (WebDAV directory listing) - Android's HttpURLConnection
+    // hard-rejects any method outside {OPTIONS,GET,HEAD,POST,PUT,DELETE,
+    // TRACE,PATCH} (ProtocolException), unlike plain OpenJDK. OkHttp has
+    // no such whitelist. See SyncEngine.kt.
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+}
+
 flutter {
     source = "../.."
 }

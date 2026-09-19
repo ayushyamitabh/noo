@@ -63,7 +63,17 @@ widgets. Key points:
 - [`SyncedHeaderScaffold`](../../lib/widgets/synced_header_scaffold.dart) —
   the pull-to-sync `CustomScrollView` header shared by 5 of the 6 tabs (see
   `architecture.md`); also where the pull-to-refresh gesture thresholds and
-  the classic Material refresh spinner live.
+  the classic Material refresh spinner live. Its persistent chip/panel
+  (icon + "Sync off"/"Syncing…"/"Synced"/"Sync issue") reflects device-sync
+  status (`ServerProvider.syncHeaderStatus`), not the WebDAV-refresh
+  loading state the pull gesture itself triggers - that has its own,
+  separate floating spinner bubble, so nothing was lost by handing the
+  persistent text/icon over.
+- [`SyncStatusBadge`](../../lib/widgets/sync_status_badge.dart) — the small
+  corner badge over a thumbnail showing per-item device-sync status
+  (`cloud_done`/`sync`, nothing for not-synced/conflict); used in Files'
+  list and grid tiles today. Reuse this rather than a new ad hoc badge if
+  another view starts showing sync status per item.
 - [`SeekBarPainter`/`SeekBarPreview`](../../lib/widgets/seek_bar_painter.dart)
   — the four `MediaProgressBarStyle` presets (Default/Wavy/Slim/Squiggly)
   for the video player's seek bar, plus a perpetually-animated

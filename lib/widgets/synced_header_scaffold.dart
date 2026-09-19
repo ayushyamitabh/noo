@@ -1,6 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import '../models/nextcloud_item.dart';
+import '../models/sync_status.dart';
 import '../providers/server_provider.dart';
+
+/// Icon/label for the persistent header chip/panel - reflects device-sync
+/// status (see `ServerProvider.syncHeaderStatus`), not the WebDAV
+/// directory-listing refresh the pull gesture itself triggers (that has
+/// its own, separate floating spinner bubble - see
+/// `_SyncedHeaderScaffoldState`'s `_isRefreshing`).
+(IconData, String) _syncHeaderDisplay(SyncHeaderStatus status) {
+  return switch (status) {
+    SyncHeaderStatus.off => (Icons.cloud_off_rounded, 'Sync off'),
+    SyncHeaderStatus.syncing => (Icons.cloud_sync_rounded, 'Syncing…'),
+    SyncHeaderStatus.done => (Icons.cloud_done_rounded, 'Synced'),
+    SyncHeaderStatus.alert => (Symbols.cloud_alert_rounded, 'Sync issue'),
+  };
+}
 
 String formatBytes(int bytes) {
   if (bytes <= 0) return '0 B';
@@ -188,7 +204,9 @@ class _SyncedHeaderScaffoldState extends State<SyncedHeaderScaffold> {
                   stretch: widget.selectionBar == null,
                   expandedHeight: widget.selectionBar != null
                       ? kToolbarHeight
-                      : (_headerLocked ? 190 : kToolbarHeight),
+                      : (_headerLocked
+                            ? 190.0 + provider.syncConflicts.length * 52.0
+                            : kToolbarHeight),
                   collapsedHeight: kToolbarHeight,
                   backgroundColor: colorScheme.surfaceContainer,
                   surfaceTintColor: colorScheme.surfaceContainer,
@@ -278,7 +296,11 @@ class _SyncStatusChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final quota = provider.quota;
+    final status = provider.syncHeaderStatus;
+    final (icon, label) = _syncHeaderDisplay(status);
+    final iconColor = status == SyncHeaderStatus.alert
+        ? colorScheme.error
+        : colorScheme.primary;
 
     return Padding(
       padding: const EdgeInsets.only(left: 12),
@@ -293,16 +315,10 @@ class _SyncStatusChip extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  provider.isLoading
-                      ? Icons.cloud_sync_rounded
-                      : Icons.cloud_done_outlined,
-                  color: colorScheme.primary,
-                  size: 18,
-                ),
+                Icon(icon, color: iconColor, size: 18),
                 const SizedBox(width: 6),
                 Text(
-                  quota != null ? formatQuota(quota) : 'Sync',
+                  label,
                   style: theme.textTheme.labelMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
@@ -348,6 +364,9 @@ class _SyncedStretchPanel extends StatelessWidget {
         // before the 100px lock threshold.
         final progress = forceVisible ? 1.0 : (stretch / 50).clamp(0.0, 1.0);
         final quota = provider.quota;
+        final status = provider.syncHeaderStatus;
+        final (_, statusLabel) = _syncHeaderDisplay(status);
+        final conflicts = provider.syncConflicts;
 
         return Stack(
           children: [
@@ -365,7 +384,7 @@ class _SyncedStretchPanel extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        provider.isLoading ? 'Syncing…' : 'Synced',
+                        statusLabel,
                         style: theme.textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
@@ -414,6 +433,17 @@ class _SyncedStretchPanel extends StatelessWidget {
                           ],
                         ),
                       ),
+                      if (conflicts.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        for (final conflict in conflicts)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: _SyncConflictRow(
+                              conflict: conflict,
+                              provider: provider,
+                            ),
+                          ),
+                      ],
                     ],
                   ),
                 ),
@@ -421,6 +451,96 @@ class _SyncedStretchPanel extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+/// One row in the locked-open panel's conflicts section - a file that
+/// changed both locally and on the server since the last sync, with the
+/// same two resolutions the sync-conflict notification offers (see
+/// `SyncWorker.notifyConflicts`/`ConflictResolveWorker` on the native
+/// side), just triggered in-app instead.
+class _SyncConflictRow extends StatefulWidget {
+  final SyncConflictInfo conflict;
+  final ServerProvider provider;
+
+  const _SyncConflictRow({required this.conflict, required this.provider});
+
+  @override
+  State<_SyncConflictRow> createState() => _SyncConflictRowState();
+}
+
+class _SyncConflictRowState extends State<_SyncConflictRow> {
+  bool _resolving = false;
+
+  Future<void> _resolve(bool useLocal) async {
+    setState(() => _resolving = true);
+    try {
+      await widget.provider.resolveSyncConflict(
+        widget.conflict,
+        useLocal: useLocal,
+      );
+    } catch (_) {
+      if (mounted) setState(() => _resolving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: colorScheme.errorContainer.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Icon(Symbols.cloud_alert_rounded, color: colorScheme.error, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              widget.conflict.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          if (_resolving)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            )
+          else ...[
+            TextButton(
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              onPressed: () => _resolve(true),
+              child: const Text('Keep local'),
+            ),
+            TextButton(
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              onPressed: () => _resolve(false),
+              child: const Text('Use server'),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

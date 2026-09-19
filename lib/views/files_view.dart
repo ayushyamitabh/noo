@@ -1,8 +1,10 @@
 import 'package:file_picker/file_picker.dart';
+import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/nextcloud_item.dart';
@@ -21,6 +23,7 @@ import '../widgets/share_sheet.dart';
 import '../widgets/sort_menu_button.dart';
 import '../widgets/sticky_header_delegate.dart';
 import '../widgets/swipeable_item.dart';
+import '../widgets/sync_status_badge.dart';
 import '../widgets/synced_header_scaffold.dart';
 import 'file_viewer_screen.dart';
 import 'move_copy_destination_picker.dart';
@@ -283,6 +286,18 @@ class _FilesViewState extends State<FilesView>
           icon: Icons.drive_file_rename_outline_rounded,
           label: 'Rename',
           onTap: () => _renameItem(provider, selected.single),
+        ),
+      if (selected.length == 1)
+        SelectionAction(
+          icon: provider.isPathSynced(selected.single.path)
+              ? Icons.sync_rounded
+              : Icons.sync_outlined,
+          label: provider.isPathSynced(selected.single.path)
+              ? 'Stop syncing to device'
+              : 'Sync to device',
+          onTap: () => provider.isPathSynced(selected.single.path)
+              ? provider.removeSyncedPath(selected.single.path)
+              : provider.addSyncedPath(selected.single.path),
         ),
       if (selected.length == 1)
         SelectionAction(
@@ -803,6 +818,46 @@ class _FilesViewState extends State<FilesView>
     if (files.isEmpty) return;
 
     final messenger = ScaffoldMessenger.of(context);
+
+    // Already mirrored locally by device sync (every selected file, not
+    // just some)? Save straight from the local copy instead of a fresh
+    // network fetch through DownloadService - see
+    // ServerProvider.localSyncedFilePath.
+    final localPaths = await Future.wait(
+      files.map(provider.localSyncedFilePath),
+    );
+    if (localPaths.every((path) => path != null)) {
+      try {
+        for (var i = 0; i < files.length; i++) {
+          final ext = p.extension(files[i].name).replaceFirst('.', '');
+          final baseName = p.basenameWithoutExtension(files[i].name);
+          await FileSaver.instance.saveFile(
+            name: baseName,
+            filePath: localPaths[i]!,
+            ext: ext,
+          );
+        }
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              files.length == 1
+                  ? 'Downloaded ${files.first.name}'
+                  : 'Downloaded ${files.length} files',
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } catch (e) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Could not save file(s): $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    }
+
     try {
       await DownloadService.startDownload(provider, files);
       messenger.showSnackBar(
@@ -930,17 +985,29 @@ class _FilesViewState extends State<FilesView>
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
             children: [
-              SelectableThumbnail(
-                isSelected: isSelected,
-                size: 44,
-                checkmarkSize: 24,
-                child: ItemThumbnail(
-                  item: item,
-                  provider: provider,
-                  size: 44,
-                  borderRadius: 12,
-                  iconSize: 22,
-                ),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  SelectableThumbnail(
+                    isSelected: isSelected,
+                    size: 44,
+                    checkmarkSize: 24,
+                    child: ItemThumbnail(
+                      item: item,
+                      provider: provider,
+                      size: 44,
+                      borderRadius: 12,
+                      iconSize: 22,
+                    ),
+                  ),
+                  Positioned(
+                    right: -2,
+                    bottom: -2,
+                    child: SyncStatusBadge(
+                      status: provider.syncStatusFor(item),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -1036,12 +1103,21 @@ class _FilesViewState extends State<FilesView>
         onLongPress: provider.isPicking && !provider.pickRequest!.allowMultiple
             ? null
             : () => _toggleSelection(item),
-        child: SelectableThumbnail(
-          isSelected: isSelected,
-          checkmarkSize: 32,
-          child: isMedia
-              ? _buildMediaGridContent(context, item, provider)
-              : _buildPlainGridContent(context, item),
+        child: Stack(
+          children: [
+            SelectableThumbnail(
+              isSelected: isSelected,
+              checkmarkSize: 32,
+              child: isMedia
+                  ? _buildMediaGridContent(context, item, provider)
+                  : _buildPlainGridContent(context, item),
+            ),
+            Positioned(
+              right: 6,
+              bottom: 6,
+              child: SyncStatusBadge(status: provider.syncStatusFor(item)),
+            ),
+          ],
         ),
       ),
     );

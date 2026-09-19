@@ -76,6 +76,13 @@
             android:name=".DownloadService"
             android:exported="false"
             android:foregroundServiceType="dataSync"/>
+        <!-- The "Keep local"/"Use server" actions on a sync-conflict
+             notification (SyncWorker/SyncEngine) - must be a manifest-
+             registered receiver, not a runtime-registered one, since it
+             needs to work even when the app process isn't running. -->
+        <receiver
+            android:name=".SyncConflictReceiver"
+            android:exported="false"/>
         <!-- Hands back the file(s) a caller picked via the GET_CONTENT filter
              above - only the app's own cache/picker/ subfolder is exposed,
              see file_paths.xml. -->

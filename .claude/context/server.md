@@ -157,12 +157,12 @@ rather than needing a rewrite for multi-account support.
   (`views/move_copy_destination_picker.dart`) is covered in
   `architecture.md`, including why it can't reuse the Files tab's shared
   navigation state the way `ShareUploadView` does.
-- **Uploads** (`uploadFileFromPath(folderPath, fileName, localFilePath,
-  {onProgress})`) stream the local file via `Dio().put()` with an explicit
-  `Content-Length` and `onSendProgress`, mirroring the download path. The
-  `ServerProvider` wrapper always uploads into `_currentFolderPath` — the
-  share-to-upload flow (`ShareUploadView`) gets a caller-chosen destination
-  by navigating there first (`navigateToAbsoluteFolder`), then uploading.
+- **Uploads**: there's no more in-app-only upload path - `NextcloudService`/
+  `ServerProvider.uploadFileFromPath` were removed once the Files tab's "+"
+  → "Upload File" was unified with the share-to-upload flow (below). Every
+  upload, however it's triggered, now goes through `ShareUploadView`
+  (caller-chosen destination via `navigateToAbsoluteFolder`, then
+  `UploadService`/`ShareUploadService.kt`).
 - **Receiving a shared file from another app**: hand-rolled in
   `MainActivity.kt` (Android `ACTION_SEND`/`ACTION_SEND_MULTIPLE`,
   `android:launchMode` `singleTask` in the manifest so a second share while
@@ -245,6 +245,151 @@ Google Drive/Instagram's "choose a file" flow), the reverse direction of
   `Intent`); multiple files use `ClipData`. `cancelPick` mirrors this for
   backing out (system back while picking, or a picked-item mismatch) with
   `RESULT_CANCELED` instead.
+
+## Device sync
+
+Mirrors selected folders to app-private local storage
+(`getExternalFilesDir(null)/sync/<accountId>/...` - wiped on uninstall, no
+extra storage permission needed) and keeps them updated in the background,
+even with the app fully closed. Same rationale as the upload/download
+services for going native instead of a Dart background-task plugin (see
+above): a periodic job has to run without the Flutter engine loaded, and a
+notification action has to resolve without launching the UI. Rather than
+add `workmanager` (whose Dart `callbackDispatcher` spins up a second,
+minimal Flutter engine that has to re-register every plugin it touches),
+the whole engine is plain Kotlin using Android's WorkManager directly.
+
+- [`SyncEngine.kt`](../../android/app/src/main/kotlin/dev/ayushya/noo/SyncEngine.kt)
+  holds the shared primitives, reused by both workers below: a Depth-1 (or
+  Depth-0, for refreshing one item) PROPFIND (`propfindChildren`/
+  `propfindSelf`) requesting `d:getetag` alongside the usual props - unlike
+  every PROPFIND in `nextcloud_service.dart`, which never requests it
+  (`etag` is a dead field on `NextcloudItem` today); plain
+  `HttpURLConnection` GET/PUT (`downloadFile`/`uploadFile`, same style as
+  `DownloadService.kt`/`ShareUploadService.kt`); and `diffFolder`, which
+  compares one folder's freshly-walked manifest against the persisted
+  per-account sync-state map (native `SharedPreferences`, JSON keyed by
+  `oc:fileid` - stable across renames/moves, unlike `path`) to decide, per
+  file: download (new, or server `etag` changed), upload (local file's
+  mtime/size changed and the server didn't), delete locally (missing
+  server-side, unchanged locally), respect a local deletion (file's gone
+  and the server didn't change either - don't recreate it), or flag a
+  **conflict** (both changed since the last recorded state).
+- [`SyncWorker.kt`](../../android/app/src/main/kotlin/dev/ayushya/noo/SyncWorker.kt)
+  (`CoroutineWorker`) is both the periodic job and the one-off "Sync now":
+  for each configured path, `propfindSelf`s it first to check whether it's
+  a file or a folder - a folder gets the full recursive
+  `walkRemoteTree`, a file is diffed directly as a one-item list (nothing
+  else about `diffFolder`/download/upload/delete cares whether its entries
+  came from a walk or a single lookup, so single-file sync needed no engine
+  changes, just this one branch) - applies `diffFolder`'s decisions, then
+  posts a summary notification (files updated/uploaded/removed) and, for
+  any conflicts, one notification per file with two actions.
+- **Live status reaches Dart via a push channel, not polling** -
+  [`SyncStatusBus.kt`](../../android/app/src/main/kotlin/dev/ayushya/noo/SyncStatusBus.kt)
+  is a plain in-process pub/sub (no IPC needed - the workers and
+  `MainActivity` share one process) that `SyncWorker`/`ConflictResolveWorker`
+  publish into (syncing started/stopped, which `fileId`s are mid-transfer
+  right now, new/resolved conflicts) and `MainActivity.kt`'s
+  `dev.ayushya.noo/sync_service/status` `EventChannel` forwards to Dart,
+  same pattern as the share/pick-intent channels. It deliberately does
+  *not* track "which files are already synced" itself - that's read fresh
+  from `SyncEngine`'s durable per-account state map
+  (`SyncEngine.loadState(accountId).keys`) each time a snapshot is built,
+  so there's one source of truth for "synced" instead of two that could
+  drift. `SyncService.getStatus()` (one-shot, seeds `ServerProvider` right
+  after login/account-switch) and `SyncService.statusStream` (live) both
+  return the same snapshot shape. `ServerProvider.syncHeaderStatus`
+  (off/syncing/done/alert - drives `SyncedHeaderScaffold`'s persistent
+  chip/panel, replacing what used to be the WebDAV-refresh-loading
+  indicator there) and `syncStatusFor(item)` (none/syncing/synced/conflict
+  - drives the small corner badge on Files' tiles, `SyncStatusBadge`) are
+  both computed from this state, not fetched per-item.
+- **In-app conflict resolution reuses the exact same enqueue path as the
+  notification actions** - `ConflictResolveWorker.enqueue(...)` is a
+  shared companion function; `SyncConflictReceiver` (the notification
+  action) and `MainActivity.kt`'s `resolveConflict` MethodChannel method
+  (the sync header's "Keep local"/"Use server" buttons,
+  `ServerProvider.resolveSyncConflict`) both just call it, so there's one
+  resolution code path regardless of which surface triggered it.
+- **Conflicts are never auto-resolved.** The notification's "Keep local"/
+  "Use server" actions are `PendingIntent.getBroadcast`s (same shape as the
+  Cancel action on upload/download notifications, just broadcast instead of
+  service-targeted) to
+  [`SyncConflictReceiver`](../../android/app/src/main/kotlin/dev/ayushya/noo/SyncConflictReceiver.kt)
+  - a manifest-registered `BroadcastReceiver` (works even with the app
+  process dead) that can't itself block on network, so it just dismisses
+  the notification and enqueues a one-shot
+  [`ConflictResolveWorker`](../../android/app/src/main/kotlin/dev/ayushya/noo/ConflictResolveWorker.kt)
+  to actually push the local copy up or pull the server copy down and
+  refresh that file's recorded state.
+- `MainActivity.kt`'s `dev.ayushya.noo/sync_service` channel
+  (`reschedule`/`cancel`/`syncNow`) is the only bridge from Dart: a periodic
+  `WorkRequest`'s input `Data` and `Constraints` are fixed at enqueue time,
+  so changing the synced-folder list, the active account, or the Wi-Fi-only
+  setting means cancelling and re-enqueueing, not updating in place.
+  [`SyncService`](../../lib/services/sync_service.dart) (Dart) wraps this -
+  `ServerProvider` calls `reschedule` after every successful login/account
+  switch and every synced-folder/`syncOnCellular` change, and `cancel` on
+  logout/last-account-removed. The network constraint is
+  `NetworkType.UNMETERED` by default (`!syncOnCellular`, Wi-Fi only) or
+  `NetworkType.CONNECTED` if the user's opted into cellular sync.
+- Synced-path list (`ServerProvider.syncedPaths` - files or folders, not
+  just folders despite the name of the underlying pref/native `Data` key,
+  which stayed `ui_synced_folders`/`folders` to avoid a storage-key
+  migration for a rename) follows the standard per-account-pref pattern
+  (JSON-encoded string list, in `AccountStore.perAccountPrefKeys`); so does
+  `syncEverything` (`ui_sync_everything`, per account) - when on,
+  `SyncService` sends `['/']` as the path list instead of `syncedPaths`,
+  mirroring the whole account rather than requiring per-item opt-in.
+  `syncOnCellular` is a plain global pref. All three are managed from
+  Settings → Device Sync (a "Sync everything" switch, the path list with
+  remove buttons - hidden while "Sync everything" is on - the cellular
+  toggle, and a manual "Sync now"); individual files or folders are
+  additionally toggled from Files' selection toolbar ("Sync to device",
+  single-selection, either item type).
+- **`android/app/proguard-rules.pro` exists specifically for this feature,
+  and keeps `androidx.work.**` wholesale rather than naming individual
+  classes.** Flutter's own Gradle plugin auto-enables R8 minification for
+  release builds (`FlutterPlugin.kt` sets `isMinifyEnabled = true`
+  unconditionally for the `release` build type, and auto-wires this exact
+  file if it exists - nothing in this project's own `build.gradle.kts`
+  opts into it), which broke device sync on real-device testing **twice**
+  in a row: first `WorkDatabase` (WorkManager locates its bundled Room
+  database by reflecting off the abstract database class's own,
+  possibly-renamed, name), then - after narrowly keeping just that class -
+  `OverwritingInputMerger` (WorkManager's default input merger, also
+  reflection-instantiated) broke the exact same way and silently ate every
+  `enqueueUniqueWork` call, including "Sync now", with zero indication
+  beyond a `WM-InputMerger` `NoSuchMethodException` in logcat - no crash,
+  no Dart-visible error, just a folder that stayed empty. R8's member-level
+  shrinking strips whatever a class's *reflection-only* callers don't
+  reference directly, even when the class itself survives a plain `-keep
+  class` with no wildcard, and WorkManager reflects into more of its own
+  internals than any one test pass is likely to exercise - hence the
+  wholesale keep instead of chasing individual classes one crash at a
+  time. If adding another native background component reached only via
+  reflection (not a manifest-declared component, which AGP already keeps
+  automatically), don't assume default AndroidX consumer rules cover it -
+  verify on an actual release build, not just `flutter analyze`/a debug
+  build, since minification only applies to release.
+- **Files land under `Android/data/<package>/files/sync/...`
+  (`getExternalFilesDir`), which no third-party file manager can browse
+  without root** - Android's scoped storage sandboxes that whole directory
+  tree from other apps by design, same as any app-private storage. This
+  surprised real-device testing (a file manager app logged "Can't read
+  directory ... trying su" and came up empty even though the sync had
+  actually worked) - it's expected, not a bug. Confirm synced files
+  landed via `adb shell run-as`/a rooted shell, not a regular file
+  manager UI.
+- **Already-synced files skip the network** in two places:
+  `ServerProvider.localSyncedFilePath(item)` is a pure function of the
+  remote path (mirrors `SyncEngine.kt`'s `syncRoot` layout exactly, so Dart
+  never needs to read the native sync-state `SharedPreferences`) that
+  returns the local mirror path if it exists on disk. `ShareSheet`'s "Share
+  file directly" and `FilesView._downloadSelected` (only when *every*
+  selected file is already synced - a mixed selection still goes through
+  the normal `DownloadService` batch) both check it first.
 
 ## Multi-account storage & session persistence
 

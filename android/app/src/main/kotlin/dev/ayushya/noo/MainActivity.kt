@@ -12,12 +12,22 @@ import android.provider.OpenableColumns
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.workDataOf
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import org.json.JSONArray
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 // FlutterFragmentActivity (not the default FlutterActivity) is required by
 // local_auth's Android implementation, which hosts its biometric/device
@@ -44,6 +54,8 @@ class MainActivity : FlutterFragmentActivity() {
     private val downloadServiceChannelName = "dev.ayushya.noo/download_service"
     private val pickIntentChannelName = "dev.ayushya.noo/pick_intent"
     private val newPickChannelName = "dev.ayushya.noo/pick_intent/new"
+    private val syncServiceChannelName = "dev.ayushya.noo/sync_service"
+    private val syncStatusChannelName = "dev.ayushya.noo/sync_service/status"
     private val notificationPermissionRequestCode = 4202
     // Lazy, not a field initializer - `packageName` reads through the
     // Activity's base Context, which isn't attached yet while this class's
@@ -53,6 +65,7 @@ class MainActivity : FlutterFragmentActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var newShareSink: EventChannel.EventSink? = null
     private var newPickSink: EventChannel.EventSink? = null
+    private var syncStatusListener: ((SyncStatusBus.Status) -> Unit)? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -114,6 +127,74 @@ class MainActivity : FlutterFragmentActivity() {
                     newPickSink = null
                 }
             })
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, syncServiceChannelName)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "reschedule" -> rescheduleSyncWork(call, result)
+                    "cancel" -> cancelSyncWork(result)
+                    "syncNow" -> syncNow(call, result)
+                    "getSyncStatus" -> result.success(syncStatusMap(SyncStatusBus.snapshot()))
+                    "resolveConflict" -> resolveConflict(call, result)
+                    else -> result.notImplemented()
+                }
+            }
+
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, syncStatusChannelName)
+            .setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
+                    val listener: (SyncStatusBus.Status) -> Unit = { status ->
+                        mainHandler.post { events.success(syncStatusMap(status)) }
+                    }
+                    syncStatusListener = listener
+                    SyncStatusBus.subscribe(listener)
+                }
+                override fun onCancel(arguments: Any?) {
+                    syncStatusListener?.let { SyncStatusBus.unsubscribe(it) }
+                    syncStatusListener = null
+                }
+            })
+    }
+
+    private fun syncStatusMap(status: SyncStatusBus.Status): Map<String, Any?> {
+        val syncedFileIds = status.accountId?.let {
+            SyncEngine.loadState(applicationContext, it).keys.toList()
+        } ?: emptyList()
+        return mapOf(
+            "accountId" to status.accountId,
+            "syncing" to status.syncing,
+            "syncingFileIds" to status.syncingFileIds.toList(),
+            "syncedFileIds" to syncedFileIds,
+            "conflicts" to status.conflicts.map {
+                mapOf(
+                    "accountId" to it.accountId,
+                    "fileId" to it.fileId,
+                    "remotePath" to it.remotePath,
+                    "relPath" to it.relPath,
+                    "name" to it.name,
+                )
+            },
+        )
+    }
+
+    /// In-app conflict resolution (the header's "Keep local"/"Use server"
+    /// buttons) - shares [ConflictResolveWorker.enqueue] with
+    /// [SyncConflictReceiver], the only other caller, so there's one
+    /// resolution code path regardless of whether it's triggered from a
+    /// notification or from inside the app.
+    private fun resolveConflict(call: MethodCall, result: MethodChannel.Result) {
+        ConflictResolveWorker.enqueue(
+            this,
+            accountId = call.argument<String>("accountId"),
+            serverUrl = call.argument<String>("serverUrl"),
+            username = call.argument<String>("username"),
+            authHeader = call.argument<String>("authHeader"),
+            fileId = call.argument<String>("fileId"),
+            remotePath = call.argument<String>("remotePath"),
+            relPath = call.argument<String>("relPath"),
+            resolution = call.argument<String>("resolution"),
+        )
+        result.success(null)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -259,6 +340,85 @@ class MainActivity : FlutterFragmentActivity() {
             putExtra(DownloadService.EXTRA_AUTH_HEADER, authHeader)
         }
         ContextCompat.startForegroundService(this, serviceIntent)
+        result.success(null)
+    }
+
+    /// Shared arg-parsing for `reschedule`/`syncNow` - both need the same
+    /// account/credentials/folder-list shape, just enqueue differently.
+    private fun syncWorkData(call: MethodCall): androidx.work.Data? {
+        val accountId = call.argument<String>("accountId")
+        val serverUrl = call.argument<String>("serverUrl")
+        val username = call.argument<String>("username")
+        val authHeader = call.argument<String>("authHeader")
+        val foldersJson = call.argument<String>("folders")
+        if (accountId == null || serverUrl == null || username == null ||
+            authHeader == null || foldersJson == null
+        ) {
+            return null
+        }
+        return workDataOf(
+            SyncWorker.KEY_ACCOUNT_ID to accountId,
+            SyncWorker.KEY_SERVER_URL to serverUrl,
+            SyncWorker.KEY_USERNAME to username,
+            SyncWorker.KEY_AUTH_HEADER to authHeader,
+            SyncWorker.KEY_FOLDERS to foldersJson,
+        )
+    }
+
+    /// Re-enqueues (or cancels, if the folder list is now empty) the
+    /// periodic device-sync job - called from Dart whenever the synced-
+    /// folder list, active account, or Wi-Fi-only setting changes, since a
+    /// periodic WorkRequest's input Data/constraints are fixed at enqueue
+    /// time and can only be changed by cancelling and re-enqueueing.
+    private fun rescheduleSyncWork(call: MethodCall, result: MethodChannel.Result) {
+        val data = syncWorkData(call)
+        val foldersJson = call.argument<String>("folders")
+        val wifiOnly = call.argument<Boolean>("wifiOnly") ?: true
+        val workManager = WorkManager.getInstance(this)
+
+        if (data == null || foldersJson == null || JSONArray(foldersJson).length() == 0) {
+            workManager.cancelUniqueWork(SyncWorker.UNIQUE_PERIODIC_NAME)
+            result.success(null)
+            return
+        }
+
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
+            .build()
+        // 1 hour is WorkManager's own practical floor for a "battery-
+        // friendly" cadence well above its hard 15-minute minimum; there's
+        // no per-user interval setting for this in v1.
+        val request = PeriodicWorkRequestBuilder<SyncWorker>(1, TimeUnit.HOURS)
+            .setInputData(data)
+            .setConstraints(constraints)
+            .build()
+        workManager.enqueueUniquePeriodicWork(
+            SyncWorker.UNIQUE_PERIODIC_NAME,
+            ExistingPeriodicWorkPolicy.UPDATE,
+            request,
+        )
+        result.success(null)
+    }
+
+    private fun cancelSyncWork(result: MethodChannel.Result) {
+        WorkManager.getInstance(this).cancelUniqueWork(SyncWorker.UNIQUE_PERIODIC_NAME)
+        result.success(null)
+    }
+
+    /// One-off immediate run (Settings' "Sync now"), independent of the
+    /// periodic schedule.
+    private fun syncNow(call: MethodCall, result: MethodChannel.Result) {
+        val data = syncWorkData(call)
+        if (data == null) {
+            result.error("bad_args", "Missing required sync arguments", null)
+            return
+        }
+        val request = OneTimeWorkRequestBuilder<SyncWorker>().setInputData(data).build()
+        WorkManager.getInstance(this).enqueueUniqueWork(
+            SyncWorker.UNIQUE_ONE_OFF_NAME,
+            ExistingWorkPolicy.REPLACE,
+            request,
+        )
         result.success(null)
     }
 
