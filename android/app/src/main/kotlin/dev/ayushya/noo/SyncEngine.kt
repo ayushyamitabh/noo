@@ -356,6 +356,35 @@ object SyncEngine {
         return actions
     }
 
+    /**
+     * Deletes [path]'s local mirror (a single file, or a whole folder's
+     * worth of files) and removes its entries from the persisted sync-state
+     * map, called when the user turns sync off for that path - without
+     * clearing the state too, a later re-add would see the (now missing)
+     * local file as "deleted, server unchanged" and skip re-downloading it
+     * (see [diffFolder]'s `!localExists && !serverChanged` branch) instead
+     * of pulling it back down.
+     */
+    fun removeLocalSync(context: Context, accountId: String, path: String) {
+        val root = syncRoot(context, accountId)
+        val state = loadState(context, accountId).toMutableMap()
+
+        var cleanPath = path.trim()
+        if (cleanPath.startsWith("/")) cleanPath = cleanPath.substring(1)
+        cleanPath = cleanPath.trimEnd('/')
+        val prefix = if (cleanPath.isEmpty()) "" else "$cleanPath/"
+
+        val toRemove = state.filterValues { s ->
+            s.relPath == cleanPath || (prefix.isNotEmpty() && s.relPath.startsWith(prefix))
+        }.keys
+        for (fileId in toRemove) state.remove(fileId)
+        saveState(context, accountId, state)
+
+        val target = if (cleanPath.isEmpty()) root else File(root, cleanPath)
+        if (target.exists()) target.deleteRecursively()
+        Log.d(TAG, "removeLocalSync($path) -> removed ${toRemove.size} state entries")
+    }
+
     fun folderIsSyncedUnder(itemPath: String, syncedFolders: List<String>): String? {
         val normalizedItem = itemPath.trimEnd('/')
         for (folder in syncedFolders) {

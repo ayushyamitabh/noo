@@ -63,12 +63,17 @@ widgets. Key points:
 - [`SyncedHeaderScaffold`](../../lib/widgets/synced_header_scaffold.dart) —
   the pull-to-sync `CustomScrollView` header shared by 5 of the 6 tabs (see
   `architecture.md`); also where the pull-to-refresh gesture thresholds and
-  the classic Material refresh spinner live. Its persistent chip/panel
+  the classic Material refresh spinner live. Its persistent compact chip
   (icon + "Sync off"/"Syncing…"/"Synced"/"Sync issue") reflects device-sync
   status (`SyncStatusController.syncHeaderStatus`), not the WebDAV-refresh
   loading state the pull gesture itself triggers - that has its own,
   separate floating spinner bubble, so nothing was lost by handing the
-  persistent text/icon over.
+  persistent text/icon over. The expanded panel's headline is a separate,
+  more detailed string (`_syncSummary` in `synced_header_scaffold.dart`) -
+  actual folder/item counts ("2 folders & 5 items synced") rather than
+  just repeating the chip's generic label, which would otherwise read
+  "Synced" even when a folder's just been added and nothing's downloaded
+  yet.
 - [`SyncStatusBadge`](../../lib/widgets/sync_status_badge.dart) — the small
   corner badge over a thumbnail showing per-item device-sync status
   (`cloud_done`/`sync`, nothing for not-synced/conflict); used in Files'

@@ -292,18 +292,15 @@ class _FilesViewState extends State<FilesView>
           label: 'Rename',
           onTap: () => _renameItem(selected.single),
         ),
-      if (selected.length == 1)
-        SelectionAction(
-          icon: sync.isPathSynced(selected.single.path)
-              ? Icons.sync_rounded
-              : Icons.sync_outlined,
-          label: sync.isPathSynced(selected.single.path)
-              ? 'Stop syncing to device'
-              : 'Sync to device',
-          onTap: () => sync.isPathSynced(selected.single.path)
-              ? sync.removeSyncedPath(selected.single.path)
-              : sync.addSyncedPath(selected.single.path),
-        ),
+      SelectionAction(
+        icon: selected.every((i) => sync.isPathSynced(i.path))
+            ? Icons.sync_rounded
+            : Icons.sync_outlined,
+        label: selected.every((i) => sync.isPathSynced(i.path))
+            ? 'Stop syncing to device'
+            : 'Sync to device',
+        onTap: () => _toggleSyncSelected(context, sync, selected),
+      ),
       if (selected.length == 1)
         SelectionAction(
           icon: Icons.info_outline_rounded,
@@ -805,6 +802,40 @@ class _FilesViewState extends State<FilesView>
       }
     }
     _clearSelection();
+  }
+
+  /// Toggles device sync for every selected item at once - if they're all
+  /// already synced this stops syncing all of them (and deletes their local
+  /// mirrors, see `SyncStatusController.removeSyncedPath`), otherwise it
+  /// starts syncing whichever ones aren't synced yet.
+  void _toggleSyncSelected(
+    BuildContext context,
+    SyncStatusController sync,
+    List<NextcloudItem> items,
+  ) {
+    final allSynced = items.every((i) => sync.isPathSynced(i.path));
+    if (allSynced) {
+      for (final item in items) {
+        sync.removeSyncedPath(item.path);
+      }
+    } else {
+      for (final item in items) {
+        if (!sync.isPathSynced(item.path)) {
+          sync.addSyncedPath(item.path, isFolder: item.isFolder);
+        }
+      }
+    }
+    _clearSelection();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          allSynced
+              ? 'Removed ${items.length} item(s) from device sync'
+              : 'Syncing ${items.length} item(s) to this device',
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   /// Hands the whole batch off to `DownloadService.kt` (see its doc

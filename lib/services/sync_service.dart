@@ -149,6 +149,23 @@ class SyncService {
     });
   }
 
+  /// Deletes [path]'s local mirror and its recorded sync state - called
+  /// when the user turns sync off for a path, so the on-device copy
+  /// actually goes away instead of just stopping future updates. See
+  /// `SyncEngine.removeLocalSync`'s doc comment for why the state also has
+  /// to be cleared, not just the files.
+  static Future<void> removeLocalSync(
+    SessionController session,
+    String path,
+  ) async {
+    final accountId = session.activeAccountId;
+    if (accountId == null) return;
+    await _channel.invokeMethod('removeLocalSync', {
+      'accountId': accountId,
+      'path': path,
+    });
+  }
+
   /// The deterministic local mirror path for [remoteItemPath] under
   /// account [accountId] - mirrors `SyncEngine.kt#syncRoot`'s
   /// `<externalFilesDir>/sync/<accountId>/...` layout exactly, so this

@@ -306,7 +306,15 @@ the whole engine is plain Kotlin using Android's WorkManager directly.
   chip/panel, replacing what used to be the WebDAV-refresh-loading
   indicator there) and `syncStatusFor(item)` (none/syncing/synced/conflict
   - drives the small corner badge on Files' tiles, `SyncStatusBadge`) are
-  both computed from this state, not fetched per-item.
+  both computed from this state, not fetched per-item. Folders never get
+  their own entry in the native state map (`diffFolder` only ever tracks
+  individual files - `if (entry.isFolder) continue`), so `syncStatusFor`
+  derives a folder's badge differently than a file's: `synced` once the
+  folder's own path (or an ancestor of it) is in sync scope
+  (`_isPathInSyncScope`, shared with `localSyncedFilePath`), `syncing`
+  while any sync pass is running, `conflict` if a pending conflict's
+  `remotePath` falls under it - not from `syncedFileIds`, which only ever
+  contains individual files.
 - **In-app conflict resolution reuses the exact same enqueue path as the
   notification actions** - `ConflictResolveWorker.enqueue(...)` is a
   shared companion function; `SyncConflictReceiver` (the notification
@@ -326,31 +334,48 @@ the whole engine is plain Kotlin using Android's WorkManager directly.
   to actually push the local copy up or pull the server copy down and
   refresh that file's recorded state.
 - `MainActivity.kt`'s `dev.ayushya.noo/sync_service` channel
-  (`reschedule`/`cancel`/`syncNow`) is the only bridge from Dart: a periodic
-  `WorkRequest`'s input `Data` and `Constraints` are fixed at enqueue time,
-  so changing the synced-folder list, the active account, or the Wi-Fi-only
-  setting means cancelling and re-enqueueing, not updating in place.
-  [`SyncService`](../../lib/services/sync_service.dart) (Dart) wraps this -
-  `SyncStatusController` calls `SyncService.reschedule` after every
-  successful login/account switch and every synced-folder/`syncOnCellular`
-  change, and `SyncService.cancel` on logout/last-account-removed. The
-  network constraint is `NetworkType.UNMETERED` by default
+  (`reschedule`/`cancel`/`syncNow`/`removeLocalSync`) is the only bridge
+  from Dart: a periodic `WorkRequest`'s input `Data` and `Constraints` are
+  fixed at enqueue time, so changing the synced-folder list, the active
+  account, or the Wi-Fi-only setting means cancelling and re-enqueueing,
+  not updating in place. [`SyncService`](../../lib/services/sync_service.dart)
+  (Dart) wraps this - `SyncStatusController` calls `SyncService.reschedule`
+  after every successful login/account switch and every synced-folder/
+  `syncOnCellular` change, and `SyncService.cancel` on logout/last-account-
+  removed. The network constraint is `NetworkType.UNMETERED` by default
   (`!syncOnCellular`, Wi-Fi only) or `NetworkType.CONNECTED` if the user's
-  opted into cellular sync.
+  opted into cellular sync. Turning sync off for a path
+  (`SyncStatusController.removeSyncedPath`) also calls
+  `SyncService.removeLocalSync`, which runs `SyncEngine.removeLocalSync` on
+  a background thread (deletes the local mirror files under that path
+  *and* their entries in the native sync-state map - clearing state too,
+  not just the files, matters because a bare "file's gone but the server
+  hasn't changed" without a state reset reads as a user-initiated local
+  deletion to `diffFolder`, so a later re-add wouldn't re-download
+  anything).
 - Synced-path list (`SyncStatusController.syncedPaths` - files or folders, not
   just folders despite the name of the underlying pref/native `Data` key,
   which stayed `ui_synced_folders`/`folders` to avoid a storage-key
   migration for a rename) follows the standard per-account-pref pattern
-  (JSON-encoded string list, in `AccountStore.perAccountPrefKeys`); so does
-  `syncEverything` (`ui_sync_everything`, per account) - when on,
-  `SyncService` sends `['/']` as the path list instead of `syncedPaths`,
-  mirroring the whole account rather than requiring per-item opt-in.
-  `syncOnCellular` is a plain global pref. All three are managed from
+  (JSON-encoded string list, in `AccountStore.perAccountPrefKeys`); a
+  parallel `_syncedPathTypes` map (path -> isFolder, `ui_synced_folder_types`)
+  tracks which of those paths are folders vs individual files for the sync
+  header's folder/item counts, defaulting missing entries to folder (the
+  common case, and what any path added before this map existed will look
+  like). `syncEverything` (`ui_sync_everything`, per account) works the
+  same way - when on, `SyncService` sends `['/']` as the path list instead
+  of `syncedPaths`, mirroring the whole account rather than requiring
+  per-item opt-in. `syncOnCellular` is a plain global pref. All three are
+  managed from
   Settings → Device Sync (a "Sync everything" switch, the path list with
   remove buttons - hidden while "Sync everything" is on - the cellular
   toggle, and a manual "Sync now"); individual files or folders are
   additionally toggled from Files' selection toolbar ("Sync to device",
-  single-selection, either item type).
+  works over the whole selection at once - either item type, folders or
+  files - not just a single item; the action reads as "stop syncing" only
+  once every selected item is already synced, otherwise it syncs whichever
+  ones aren't yet, and either direction ends with a confirmation
+  SnackBar).
 - **`android/app/proguard-rules.pro` exists specifically for this feature,
   and keeps `androidx.work.**` wholesale rather than naming individual
   classes.** Flutter's own Gradle plugin auto-enables R8 minification for

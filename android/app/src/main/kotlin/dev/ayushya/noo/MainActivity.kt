@@ -136,6 +136,7 @@ class MainActivity : FlutterFragmentActivity() {
                     "syncNow" -> syncNow(call, result)
                     "getSyncStatus" -> result.success(syncStatusMap(SyncStatusBus.snapshot()))
                     "resolveConflict" -> resolveConflict(call, result)
+                    "removeLocalSync" -> removeLocalSync(call, result)
                     else -> result.notImplemented()
                 }
             }
@@ -403,6 +404,24 @@ class MainActivity : FlutterFragmentActivity() {
     private fun cancelSyncWork(result: MethodChannel.Result) {
         WorkManager.getInstance(this).cancelUniqueWork(SyncWorker.UNIQUE_PERIODIC_NAME)
         result.success(null)
+    }
+
+    /// Deletes a path's local mirror once the user turns sync off for it -
+    /// see [SyncEngine.removeLocalSync]. Runs off the main thread since it
+    /// walks/deletes a directory tree; `result.success` is posted back via
+    /// [mainHandler] since MethodChannel results must be delivered on the
+    /// platform thread.
+    private fun removeLocalSync(call: MethodCall, result: MethodChannel.Result) {
+        val accountId = call.argument<String>("accountId")
+        val path = call.argument<String>("path")
+        if (accountId == null || path == null) {
+            result.error("bad_args", "Missing required arguments", null)
+            return
+        }
+        Thread {
+            SyncEngine.removeLocalSync(applicationContext, accountId, path)
+            mainHandler.post { result.success(null) }
+        }.start()
     }
 
     /// One-off immediate run (Settings' "Sync now"), independent of the

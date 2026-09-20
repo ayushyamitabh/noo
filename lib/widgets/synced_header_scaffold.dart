@@ -21,6 +21,27 @@ import '../providers/sync_status_controller.dart';
   };
 }
 
+/// The expanded sync panel's headline - actual folder/item counts instead
+/// of just repeating the compact chip's generic "Synced" label, which reads
+/// as true even when nothing has actually finished syncing yet (e.g. right
+/// after adding a folder, before the first pass completes).
+String _syncSummary(SyncStatusController sync) {
+  if (sync.syncConflicts.isNotEmpty) return 'Sync issue';
+  if (sync.isSyncingNow) return 'Syncing…';
+  final items = sync.syncedItemCount;
+  if (sync.syncEverything) {
+    return items > 0 ? '$items item${items == 1 ? '' : 's'} synced' : 'Sync off';
+  }
+  final folders = sync.syncedFolderCount;
+  if (folders == 0) return 'Sync off';
+  final folderWord = folders == 1 ? 'folder' : 'folders';
+  if (items == 0) {
+    return '$folders $folderWord selected — nothing synced yet';
+  }
+  final itemWord = items == 1 ? 'item' : 'items';
+  return '$folders $folderWord & $items $itemWord synced';
+}
+
 String formatBytes(int bytes) {
   if (bytes <= 0) return '0 B';
   if (bytes < 1024) return '$bytes B';
@@ -361,8 +382,7 @@ class _SyncedStretchPanel extends StatelessWidget {
         // Reaches 1.0 (title fully hidden) at 50px of pull — comfortably
         // before the 100px lock threshold.
         final progress = forceVisible ? 1.0 : (stretch / 50).clamp(0.0, 1.0);
-        final status = syncStatus.syncHeaderStatus;
-        final (_, statusLabel) = _syncHeaderDisplay(status);
+        final statusLabel = _syncSummary(syncStatus);
         final conflicts = syncStatus.syncConflicts;
 
         return Stack(

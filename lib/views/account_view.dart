@@ -823,7 +823,15 @@ class _DeviceSyncCardState extends State<_DeviceSyncCard> {
                 trailing: IconButton(
                   icon: const Icon(Icons.close_rounded),
                   tooltip: 'Stop syncing',
-                  onPressed: () => sync.removeSyncedPath(folder),
+                  onPressed: () {
+                    sync.removeSyncedPath(folder);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Removed from device sync'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
                 ),
               ),
               const Divider(height: 1, indent: 16, endIndent: 16),
