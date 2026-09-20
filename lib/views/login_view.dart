@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/saved_account.dart';
-import '../providers/server_provider.dart';
+import '../providers/session_controller.dart';
 import 'login_webview_view.dart';
 
 class LoginView extends StatefulWidget {
@@ -28,7 +28,7 @@ class _LoginViewState extends State<LoginView> {
   void initState() {
     super.initState();
     if (widget.isAddingAccount) {
-      _originalActiveAccountId = context.read<ServerProvider>().activeAccountId;
+      _originalActiveAccountId = context.read<SessionController>().activeAccountId;
     }
   }
 
@@ -41,13 +41,13 @@ class _LoginViewState extends State<LoginView> {
   void _handleContinue() {
     if (!_formKey.currentState!.validate()) return;
     FocusScope.of(context).unfocus();
-    context.read<ServerProvider>().startLoginFlow(
+    context.read<SessionController>().startLoginFlow(
       _urlController.text.trim(),
       addAccount: widget.isAddingAccount,
     );
   }
 
-  /// Resumes a saved account with one tap (see [ServerProvider.switchAccount]).
+  /// Resumes a saved account with one tap (see [SessionController.switchAccount]).
   /// That can fail silently from the account's own perspective - most often
   /// a stored app password that no longer works (revoked server-side, or
   /// left over from before a since-fixed bug that deleted it too eagerly on
@@ -55,8 +55,8 @@ class _LoginViewState extends State<LoginView> {
   /// silently failing every time - a delete button on the row itself (see
   /// [_SavedAccountRow]) is the way out.
   Future<void> _continueAsAccount(SavedAccount account) async {
-    final provider = context.read<ServerProvider>();
-    final success = await provider.switchAccount(account.id);
+    final session = context.read<SessionController>();
+    final success = await session.switchAccount(account.id);
     if (success || !mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -98,25 +98,25 @@ class _LoginViewState extends State<LoginView> {
       },
     );
     if (confirmed != true || !mounted) return;
-    await context.read<ServerProvider>().removeAccount(account.id);
+    await context.read<SessionController>().removeAccount(account.id);
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final provider = context.watch<ServerProvider>();
+    final session = context.watch<SessionController>();
 
     final isAwaitingBrowser =
-        provider.loginFlowStatus == LoginFlowStatus.awaitingBrowser;
-    final isInitiating = provider.loginFlowStatus == LoginFlowStatus.initiating;
+        session.loginFlowStatus == LoginFlowStatus.awaitingBrowser;
+    final isInitiating = session.loginFlowStatus == LoginFlowStatus.initiating;
 
     // A new/refreshed account has just become active - pop back to
     // Settings rather than leaving this form sitting on top of it.
     if (widget.isAddingAccount &&
         !_popped &&
-        provider.loginFlowStatus == LoginFlowStatus.idle &&
-        provider.activeAccountId != _originalActiveAccountId) {
+        session.loginFlowStatus == LoginFlowStatus.idle &&
+        session.activeAccountId != _originalActiveAccountId) {
       _popped = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) Navigator.of(context).pop();
@@ -125,14 +125,14 @@ class _LoginViewState extends State<LoginView> {
 
     // Every login (first account or an additional one) shows its login
     // page in LoginWebViewView, a real screen this app owns - see
-    // ServerProvider.startLoginFlow's doc comment for why. Push it the
+    // SessionController.startLoginFlow's doc comment for why. Push it the
     // moment there's a URL to show; _webViewPushed resets once that route
     // pops (cancelled or done) so a retry after cancelling pushes it again.
     if (!_webViewPushed &&
         isAwaitingBrowser &&
-        provider.pendingLoginUrl != null) {
+        session.pendingLoginUrl != null) {
       _webViewPushed = true;
-      final url = provider.pendingLoginUrl!;
+      final url = session.pendingLoginUrl!;
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!mounted) return;
         // A plain MaterialPageRoute's animated slide/fade transition can
@@ -173,9 +173,9 @@ class _LoginViewState extends State<LoginView> {
                   // from here with one tap - no need to repeat
                   // Login Flow v2.
                   if (!widget.isAddingAccount &&
-                      provider.accounts.isNotEmpty) ...[
+                      session.accounts.isNotEmpty) ...[
                     _SavedAccountsSection(
-                      accounts: provider.accounts,
+                      accounts: session.accounts,
                       onSelect: (account) => _continueAsAccount(account),
                       onRemove: (account) => _confirmRemoveAccount(account),
                     ),
@@ -201,10 +201,10 @@ class _LoginViewState extends State<LoginView> {
                     formKey: _formKey,
                     urlController: _urlController,
                     isLoading:
-                        isInitiating || provider.isLoading || isAwaitingBrowser,
+                        isInitiating || session.isLoading || isAwaitingBrowser,
                     errorMessage:
-                        provider.loginFlowStatus == LoginFlowStatus.error
-                        ? provider.errorMessage
+                        session.loginFlowStatus == LoginFlowStatus.error
+                        ? session.errorMessage
                         : null,
                     onContinue: _handleContinue,
                     theme: theme,
@@ -226,9 +226,9 @@ class _LoginViewState extends State<LoginView> {
     // gone - this view could never be popped before "add account" existed,
     // so that case wasn't reachable until now.
     return PopScope(
-      canPop: provider.loginFlowStatus != LoginFlowStatus.awaitingBrowser,
+      canPop: session.loginFlowStatus != LoginFlowStatus.awaitingBrowser,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) provider.cancelLoginFlow();
+        if (!didPop) session.cancelLoginFlow();
       },
       child: body,
     );
@@ -392,7 +392,7 @@ class _ServerForm extends StatelessWidget {
 }
 
 /// Saved accounts a logout left recoverable - tapping one resumes it via
-/// [ServerProvider.switchAccount] instead of repeating Login Flow v2.
+/// [SessionController.switchAccount] instead of repeating Login Flow v2.
 class _SavedAccountsSection extends StatelessWidget {
   final List<SavedAccount> accounts;
   final ValueChanged<SavedAccount> onSelect;

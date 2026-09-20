@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/app_tab.dart';
-import '../providers/server_provider.dart';
+import '../providers/pick_controller.dart';
+import '../providers/settings_controller.dart';
 import 'app_tab_view_builder.dart';
 
 /// Opens a tab that's currently hidden from the bottom nav bar as its own
@@ -13,23 +14,24 @@ class MoreTabsButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<ServerProvider>();
+    final pick = context.watch<PickController>();
+    final settings = context.watch<SettingsController>();
 
     // While picking (another app's GET_CONTENT request), MainShellView
     // already restricts the bottom nav to Files/Photos - this button would
     // otherwise be the one remaining way to reach a tab that isn't a valid
     // pick source (Trash, Shares, ...), so it hides entirely rather than
     // just disabling.
-    if (provider.isPicking) return const SizedBox.shrink();
+    if (pick.isPicking) return const SizedBox.shrink();
 
     return PopupMenuButton<AppTab>(
       icon: const Icon(Icons.apps_rounded),
       tooltip: 'More tabs',
-      enabled: provider.hiddenTabs.isNotEmpty,
+      enabled: settings.hiddenTabs.isNotEmpty,
       onSelected: (tab) => _openHiddenTab(context, tab),
       itemBuilder: (context) => [
-        for (final tab in provider.tabOrder.where(
-          (t) => provider.hiddenTabs.contains(t),
+        for (final tab in settings.tabOrder.where(
+          (t) => settings.hiddenTabs.contains(t),
         ))
           PopupMenuItem(
             value: tab,

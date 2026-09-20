@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/app_tab.dart';
 import '../models/saved_account.dart';
-import '../providers/server_provider.dart';
+import '../providers/files_controller.dart';
+import '../providers/session_controller.dart';
+import '../providers/settings_controller.dart';
+import '../providers/sync_status_controller.dart';
 import '../services/sync_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/frosted_glass_container.dart';
@@ -17,8 +20,10 @@ class AccountView extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final provider = context.watch<ServerProvider>();
-    final quota = provider.quota;
+    final session = context.watch<SessionController>();
+    final settings = context.watch<SettingsController>();
+    final files = context.watch<FilesController>();
+    final quota = files.quota;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
@@ -46,7 +51,7 @@ class AccountView extends StatelessWidget {
                         radius: 28,
                         backgroundColor: colorScheme.primary,
                         child: Text(
-                          (quota?.userName ?? provider.username)
+                          (quota?.userName ?? session.username)
                               .substring(0, 1)
                               .toUpperCase(),
                           style: theme.textTheme.headlineSmall?.copyWith(
@@ -61,14 +66,14 @@ class AccountView extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              quota?.userName ?? provider.username,
+                              quota?.userName ?? session.username,
                               style: theme.textTheme.titleMedium?.copyWith(
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              quota?.email ?? provider.username,
+                              quota?.email ?? session.username,
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: colorScheme.onSurfaceVariant,
                               ),
@@ -119,8 +124,8 @@ class AccountView extends StatelessWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          Uri.tryParse(provider.serverUrl)?.host ??
-                              provider.serverUrl,
+                          Uri.tryParse(session.serverUrl)?.host ??
+                              session.serverUrl,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.bodySmall?.copyWith(
@@ -185,7 +190,7 @@ class AccountView extends StatelessWidget {
                         icon: const Icon(Icons.refresh_rounded),
                         tooltip: 'Refresh cached data',
                         onPressed: () async {
-                          await provider.refreshData();
+                          await files.refreshData();
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
@@ -200,14 +205,14 @@ class AccountView extends StatelessWidget {
                         icon: const Icon(Icons.logout_rounded),
                         tooltip: 'Logout',
                         color: Colors.orange.shade700,
-                        onPressed: () => _handleLogout(context, provider),
+                        onPressed: () => _handleLogout(context, session),
                       ),
                       IconButton(
                         icon: const Icon(Icons.delete_outline_rounded),
                         tooltip: 'Remove account',
                         color: colorScheme.error,
                         onPressed: () =>
-                            _confirmRemoveActive(context, provider),
+                            _confirmRemoveActive(context, session),
                       ),
                     ],
                   ),
@@ -271,7 +276,7 @@ class AccountView extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      provider.useDynamicColor
+                      settings.useDynamicColor
                           ? 'Matching your wallpaper'
                           : 'Custom color',
                       style: theme.textTheme.bodySmall?.copyWith(
@@ -283,8 +288,8 @@ class AccountView extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
                         _AccentSwatch(
-                          isSelected: provider.useDynamicColor,
-                          onTap: () => provider.setUseDynamicColor(true),
+                          isSelected: settings.useDynamicColor,
+                          onTap: () => settings.setUseDynamicColor(true),
                           borderColor: colorScheme.onSurface,
                           background: colorScheme.surfaceContainerHighest,
                           child: Icon(
@@ -295,11 +300,11 @@ class AccountView extends StatelessWidget {
                         ),
                         ...AppTheme.seedColors.map((color) {
                           final isSelected =
-                              !provider.useDynamicColor &&
-                              provider.seedColor == color;
+                              !settings.useDynamicColor &&
+                              settings.seedColor == color;
                           return _AccentSwatch(
                             isSelected: isSelected,
-                            onTap: () => provider.setSeedColor(color),
+                            onTap: () => settings.setSeedColor(color),
                             borderColor: colorScheme.onSurface,
                             background: color,
                             child: isSelected
@@ -343,9 +348,9 @@ class AccountView extends StatelessWidget {
                             label: Text('Dark'),
                           ),
                         ],
-                        selected: {provider.themeMode},
+                        selected: {settings.themeMode},
                         onSelectionChanged: (set) =>
-                            provider.setThemeMode(set.first),
+                            settings.setThemeMode(set.first),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -355,8 +360,8 @@ class AccountView extends StatelessWidget {
                       subtitle: const Text(
                         'Use pure black backgrounds in dark mode',
                       ),
-                      value: provider.amoledDark,
-                      onChanged: provider.setAmoledDark,
+                      value: settings.amoledDark,
+                      onChanged: settings.setAmoledDark,
                     ),
                   ],
                 ),
@@ -380,8 +385,8 @@ class AccountView extends StatelessWidget {
                 subtitle: const Text(
                   'Tapping the current bottom bar tab scrolls its list back to the top',
                 ),
-                value: provider.tapTabToScrollTop,
-                onChanged: provider.setTapTabToScrollTop,
+                value: settings.tapTabToScrollTop,
+                onChanged: settings.setTapTabToScrollTop,
               ),
             ),
             const SizedBox(height: 24),
@@ -462,24 +467,24 @@ class AccountView extends StatelessWidget {
     );
   }
 
-  /// Logout keeps the account saved (see [ServerProvider.logout]) so it's
-  /// harmless/reversible from a one-tap resume on the login screen -
+  /// Logout keeps the account saved (see [SessionController.logout]) so
+  /// it's harmless/reversible from a one-tap resume on the login screen -
   /// doesn't need a confirmation dialog the way [_confirmRemoveActive] does.
   Future<void> _handleLogout(
     BuildContext context,
-    ServerProvider provider,
+    SessionController session,
   ) async {
     final navigator = Navigator.of(context);
-    await provider.logout();
+    await session.logout();
     navigator.popUntil((route) => route.isFirst);
   }
 
   Future<void> _confirmRemoveActive(
     BuildContext context,
-    ServerProvider provider,
+    SessionController session,
   ) async {
-    final host = Uri.tryParse(provider.serverUrl)?.host ?? provider.serverUrl;
-    final hasOtherAccounts = provider.accounts.length > 1;
+    final host = Uri.tryParse(session.serverUrl)?.host ?? session.serverUrl;
+    final hasOtherAccounts = session.accounts.length > 1;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
@@ -487,8 +492,8 @@ class AccountView extends StatelessWidget {
           title: const Text('Remove Account'),
           content: Text(
             hasOtherAccounts
-                ? 'Remove ${provider.username} ($host)? Another saved account will become active.'
-                : 'Remove ${provider.username} ($host)? You can add it again later.',
+                ? 'Remove ${session.username} ($host)? Another saved account will become active.'
+                : 'Remove ${session.username} ($host)? You can add it again later.',
           ),
           actions: [
             TextButton(
@@ -507,15 +512,15 @@ class AccountView extends StatelessWidget {
       },
     );
     if (confirmed != true) return;
-    final id = provider.activeAccountId;
+    final id = session.activeAccountId;
     if (id == null) return;
     if (!context.mounted) return;
     final navigator = Navigator.of(context);
-    await provider.removeAccount(id);
+    await session.removeAccount(id);
     // Only pop back to the root route if that was the last account and the
     // session actually ended - if it fell back to another saved account,
     // Settings just keeps showing (now for that account) instead.
-    if (!provider.isLoggedIn) {
+    if (!session.isLoggedIn) {
       navigator.popUntil((route) => route.isFirst);
     }
   }
@@ -529,10 +534,10 @@ class _AccountsCard extends StatelessWidget {
 
   Future<void> _confirmRemove(
     BuildContext context,
-    ServerProvider provider,
+    SessionController session,
     SavedAccount account,
   ) async {
-    final isActive = account.id == provider.activeAccountId;
+    final isActive = account.id == session.activeAccountId;
     final host = Uri.tryParse(account.serverUrl)?.host ?? account.serverUrl;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -540,7 +545,7 @@ class _AccountsCard extends StatelessWidget {
         return AlertDialog(
           title: const Text('Remove Account'),
           content: Text(
-            isActive && provider.accounts.length > 1
+            isActive && session.accounts.length > 1
                 ? 'Remove ${account.username} ($host)? Another saved account will become active.'
                 : 'Remove ${account.username} ($host)? You can add it again later.',
           ),
@@ -563,13 +568,13 @@ class _AccountsCard extends StatelessWidget {
     if (confirmed == true) {
       if (!context.mounted) return;
       final navigator = Navigator.of(context);
-      await provider.removeAccount(account.id);
+      await session.removeAccount(account.id);
       // Only when this was the last saved account does isLoggedIn drop to
       // false and main.dart swap the root route to LoginView underneath -
       // pop back to it then, rather than leaving Settings stranded on top.
       // Removing a non-active account, or falling back to another one,
       // both keep the user logged in, so Settings should just stay put.
-      if (!provider.isLoggedIn) {
+      if (!session.isLoggedIn) {
         navigator.popUntil((route) => route.isFirst);
       }
     }
@@ -577,8 +582,8 @@ class _AccountsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<ServerProvider>();
-    final accounts = provider.accounts;
+    final session = context.watch<SessionController>();
+    final accounts = session.accounts;
 
     return Card(
       child: Column(
@@ -586,11 +591,11 @@ class _AccountsCard extends StatelessWidget {
           for (final account in accounts) ...[
             _AccountRow(
               account: account,
-              isActive: account.id == provider.activeAccountId,
-              onTap: account.id == provider.activeAccountId
+              isActive: account.id == session.activeAccountId,
+              onTap: account.id == session.activeAccountId
                   ? null
-                  : () => provider.switchAccount(account.id),
-              onRemove: () => _confirmRemove(context, provider, account),
+                  : () => session.switchAccount(account.id),
+              onRemove: () => _confirmRemove(context, session, account),
             ),
             const Divider(height: 1, indent: 16, endIndent: 16),
           ],
@@ -671,12 +676,12 @@ class _SecurityCard extends StatelessWidget {
 
   Future<void> _handleLoginLockChanged(
     BuildContext context,
-    ServerProvider provider,
+    SessionController session,
     bool value,
   ) async {
     final success = value
-        ? await provider.setupLoginLock()
-        : await provider.disableLoginLock();
+        ? await session.setupLoginLock()
+        : await session.disableLoginLock();
     if (!success && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -693,7 +698,7 @@ class _SecurityCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<ServerProvider>();
+    final session = context.watch<SessionController>();
 
     return Card(
       child: Column(
@@ -704,18 +709,18 @@ class _SecurityCard extends StatelessWidget {
             subtitle: const Text(
               "Require this device's PIN or biometric to open Noo",
             ),
-            value: provider.loginLockEnabled,
+            value: session.loginLockEnabled,
             onChanged: (value) =>
-                _handleLoginLockChanged(context, provider, value),
+                _handleLoginLockChanged(context, session, value),
           ),
           const Divider(height: 1, indent: 16, endIndent: 16),
           SwitchListTile(
             secondary: const Icon(Icons.swap_horiz_rounded),
             title: const Text('Lock account switching'),
             subtitle: const Text('Unlock to switch between saved accounts'),
-            value: provider.lockAccountSwitching,
-            onChanged: provider.loginLockEnabled
-                ? provider.setLockAccountSwitching
+            value: session.lockAccountSwitching,
+            onChanged: session.loginLockEnabled
+                ? session.setLockAccountSwitching
                 : null,
           ),
           const Divider(height: 1, indent: 16, endIndent: 16),
@@ -723,9 +728,9 @@ class _SecurityCard extends StatelessWidget {
             secondary: const Icon(Icons.visibility_off_rounded),
             title: const Text('Lock hidden files'),
             subtitle: const Text('Unlock to reveal hidden files and folders'),
-            value: provider.lockHiddenFiles,
-            onChanged: provider.loginLockEnabled
-                ? provider.setLockHiddenFiles
+            value: session.lockHiddenFiles,
+            onChanged: session.loginLockEnabled
+                ? session.setLockHiddenFiles
                 : null,
           ),
         ],
@@ -744,10 +749,13 @@ class _DeviceSyncCard extends StatefulWidget {
 class _DeviceSyncCardState extends State<_DeviceSyncCard> {
   bool _syncingNow = false;
 
-  Future<void> _syncNow(ServerProvider provider) async {
+  Future<void> _syncNow(
+    SessionController session,
+    SyncStatusController sync,
+  ) async {
     setState(() => _syncingNow = true);
     try {
-      await SyncService.syncNow(provider);
+      await SyncService.syncNow(session, sync);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -766,9 +774,10 @@ class _DeviceSyncCardState extends State<_DeviceSyncCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final provider = context.watch<ServerProvider>();
-    final folders = provider.syncedPaths;
-    final everything = provider.syncEverything;
+    final session = context.watch<SessionController>();
+    final sync = context.watch<SyncStatusController>();
+    final folders = sync.syncedPaths;
+    final everything = sync.syncEverything;
 
     return Card(
       child: Column(
@@ -781,7 +790,7 @@ class _DeviceSyncCardState extends State<_DeviceSyncCard> {
               'Mirror the whole account instead of picking folders',
             ),
             value: everything,
-            onChanged: provider.setSyncEverything,
+            onChanged: sync.setSyncEverything,
           ),
           const Divider(height: 1, indent: 16, endIndent: 16),
           if (everything)
@@ -814,7 +823,7 @@ class _DeviceSyncCardState extends State<_DeviceSyncCard> {
                 trailing: IconButton(
                   icon: const Icon(Icons.close_rounded),
                   tooltip: 'Stop syncing',
-                  onPressed: () => provider.removeSyncedPath(folder),
+                  onPressed: () => sync.removeSyncedPath(folder),
                 ),
               ),
               const Divider(height: 1, indent: 16, endIndent: 16),
@@ -823,8 +832,8 @@ class _DeviceSyncCardState extends State<_DeviceSyncCard> {
             secondary: const Icon(Icons.signal_cellular_alt_rounded),
             title: const Text('Sync on cellular'),
             subtitle: const Text('Off = background sync only runs on Wi-Fi'),
-            value: provider.syncOnCellular,
-            onChanged: provider.setSyncOnCellular,
+            value: sync.syncOnCellular,
+            onChanged: sync.setSyncOnCellular,
           ),
           const Divider(height: 1, indent: 16, endIndent: 16),
           ListTile(
@@ -840,7 +849,7 @@ class _DeviceSyncCardState extends State<_DeviceSyncCard> {
                 : const Icon(Icons.sync_rounded),
             title: const Text('Sync now'),
             enabled: (everything || folders.isNotEmpty) && !_syncingNow,
-            onTap: () => _syncNow(provider),
+            onTap: () => _syncNow(session, sync),
           ),
         ],
       ),
@@ -857,9 +866,9 @@ class _BottomBarAppearanceCard extends StatefulWidget {
 }
 
 class _BottomBarAppearanceCardState extends State<_BottomBarAppearanceCard> {
-  // Mirrors the provider values locally so the slider thumb and the live
+  // Mirrors the controller values locally so the slider thumb and the live
   // preview track the drag gesture on every frame. Driving them straight off
-  // `provider.bottomBar*` instead would tie the slider's own responsiveness
+  // `settings.bottomBar*` instead would tie the slider's own responsiveness
   // to a full Provider-wide rebuild — including the expensive BackdropFilter
   // blur in the preview — which can't keep up with fast drag ticks and makes
   // the thumb appear stuck until the next unrelated rebuild.
@@ -870,9 +879,9 @@ class _BottomBarAppearanceCardState extends State<_BottomBarAppearanceCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final provider = context.watch<ServerProvider>();
-    final opacity = _opacity ?? provider.bottomBarOpacity;
-    final blur = _blur ?? provider.bottomBarBlur;
+    final settings = context.watch<SettingsController>();
+    final opacity = _opacity ?? settings.bottomBarOpacity;
+    final blur = _blur ?? settings.bottomBarBlur;
 
     return Card(
       child: Padding(
@@ -974,7 +983,7 @@ class _BottomBarAppearanceCardState extends State<_BottomBarAppearanceCard> {
               min: 0.1,
               max: 1.0,
               onChanged: (value) => setState(() => _opacity = value),
-              onChangeEnd: provider.setBottomBarOpacity,
+              onChangeEnd: settings.setBottomBarOpacity,
             ),
 
             Row(
@@ -994,7 +1003,7 @@ class _BottomBarAppearanceCardState extends State<_BottomBarAppearanceCard> {
               min: 0,
               max: 40,
               onChanged: (value) => setState(() => _blur = value),
-              onChangeEnd: provider.setBottomBarBlur,
+              onChangeEnd: settings.setBottomBarBlur,
             ),
           ],
         ),
@@ -1075,7 +1084,7 @@ class _SwipeActionsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final provider = context.watch<ServerProvider>();
+    final settings = context.watch<SettingsController>();
 
     return Card(
       child: Padding(
@@ -1086,16 +1095,16 @@ class _SwipeActionsCard extends StatelessWidget {
               context,
               theme,
               label: 'Swipe right',
-              value: provider.swipeRightAction,
-              onChanged: provider.setSwipeRightAction,
+              value: settings.swipeRightAction,
+              onChanged: settings.setSwipeRightAction,
             ),
             const Divider(height: 1),
             _buildRow(
               context,
               theme,
               label: 'Swipe left',
-              value: provider.swipeLeftAction,
-              onChanged: provider.setSwipeLeftAction,
+              value: settings.swipeLeftAction,
+              onChanged: settings.setSwipeLeftAction,
             ),
           ],
         ),
@@ -1157,21 +1166,21 @@ class _MediaPlayerCard extends StatelessWidget {
 
   Future<void> _openPicker(
     BuildContext context,
-    ServerProvider provider,
+    SettingsController settings,
   ) async {
     final selected = await showDialog<MediaProgressBarStyle>(
       context: context,
       builder: (_) =>
-          _SeekBarStyleDialog(current: provider.mediaProgressBarStyle),
+          _SeekBarStyleDialog(current: settings.mediaProgressBarStyle),
     );
-    if (selected != null) provider.setMediaProgressBarStyle(selected);
+    if (selected != null) settings.setMediaProgressBarStyle(selected);
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final provider = context.watch<ServerProvider>();
+    final settings = context.watch<SettingsController>();
 
     return Card(
       child: ListTile(
@@ -1182,17 +1191,17 @@ class _MediaPlayerCard extends StatelessWidget {
             fontWeight: FontWeight.w600,
           ),
         ),
-        subtitle: Text(_seekBarStyleLabel(provider.mediaProgressBarStyle)),
+        subtitle: Text(_seekBarStyleLabel(settings.mediaProgressBarStyle)),
         trailing: SizedBox(
           width: 64,
           height: 24,
           child: SeekBarPreview(
-            style: provider.mediaProgressBarStyle,
+            style: settings.mediaProgressBarStyle,
             playedColor: colorScheme.primary,
             trackColor: colorScheme.outlineVariant,
           ),
         ),
-        onTap: () => _openPicker(context, provider),
+        onTap: () => _openPicker(context, settings),
       ),
     );
   }
@@ -1354,7 +1363,7 @@ class _CacheSettingsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final provider = context.watch<ServerProvider>();
+    final files = context.watch<FilesController>();
 
     return Card(
       child: Padding(
@@ -1362,9 +1371,9 @@ class _CacheSettingsCard extends StatelessWidget {
         child: Column(
           children: [
             RadioGroup<CachePolicy>(
-              groupValue: provider.cachePolicy,
+              groupValue: files.cachePolicy,
               onChanged: (value) {
-                if (value != null) provider.setCachePolicy(value);
+                if (value != null) files.setCachePolicy(value);
               },
               child: Column(
                 children: [
@@ -1377,7 +1386,7 @@ class _CacheSettingsCard extends StatelessWidget {
                 ],
               ),
             ),
-            if (provider.cachePolicy == CachePolicy.interval)
+            if (files.cachePolicy == CachePolicy.interval)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                 child: Column(
@@ -1392,7 +1401,7 @@ class _CacheSettingsCard extends StatelessWidget {
                           style: theme.textTheme.bodyMedium,
                         ),
                         Text(
-                          '${provider.cacheIntervalMinutes} min',
+                          '${files.cacheIntervalMinutes} min',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: colorScheme.onSurfaceVariant,
                           ),
@@ -1400,13 +1409,13 @@ class _CacheSettingsCard extends StatelessWidget {
                       ],
                     ),
                     Slider(
-                      value: provider.cacheIntervalMinutes.toDouble(),
+                      value: files.cacheIntervalMinutes.toDouble(),
                       min: 1,
                       max: 60,
                       divisions: 59,
-                      label: '${provider.cacheIntervalMinutes} min',
+                      label: '${files.cacheIntervalMinutes} min',
                       onChanged: (value) =>
-                          provider.setCacheIntervalMinutes(value.round()),
+                          files.setCacheIntervalMinutes(value.round()),
                     ),
                   ],
                 ),
@@ -1423,7 +1432,7 @@ class _TabSettingsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<ServerProvider>();
+    final settings = context.watch<SettingsController>();
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -1431,20 +1440,20 @@ class _TabSettingsCard extends StatelessWidget {
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         onReorderItem: (oldIndex, newIndex) {
-          final order = List<AppTab>.from(provider.tabOrder);
+          final order = List<AppTab>.from(settings.tabOrder);
           final tab = order.removeAt(oldIndex);
           order.insert(newIndex, tab);
-          provider.setTabOrder(order);
+          settings.setTabOrder(order);
         },
         children: [
-          for (final tab in provider.tabOrder)
+          for (final tab in settings.tabOrder)
             _TabConfigRow(
               key: ValueKey(tab),
               tab: tab,
-              isVisible: !provider.hiddenTabs.contains(tab),
-              isDefault: provider.defaultTab == tab,
+              isVisible: !settings.hiddenTabs.contains(tab),
+              isDefault: settings.defaultTab == tab,
               onVisibilityChanged: (value) {
-                final error = provider.setTabHidden(tab, !value);
+                final error = settings.setTabHidden(tab, !value);
                 if (error != null && context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
@@ -1454,7 +1463,7 @@ class _TabSettingsCard extends StatelessWidget {
                   );
                 }
               },
-              onSetDefault: () => provider.setDefaultTab(tab),
+              onSetDefault: () => settings.setDefaultTab(tab),
             ),
         ],
       ),

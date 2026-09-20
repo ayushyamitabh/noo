@@ -35,9 +35,9 @@ via [`LoginFlowService`](../../lib/services/login_flow_service.dart):
    credentials (the same class of bug the Custom-Tab-reuse issue above
    was, just recurring one layer down once everything moved to the owned
    WebView).
-3. `ServerProvider` polls `LoginFlowService.poll(pollEndpoint, token)` every
+3. `SessionController` polls `LoginFlowService.poll(pollEndpoint, token)` every
    2 seconds (`Timer.periodic`, see `_pollTimer`/`_pollTimeoutTimer` in
-   `server_provider.dart`) until it gets a 200 with `server`/`loginName`/
+   `session_controller.dart`) until it gets a 200 with `server`/`loginName`/
    `appPassword`, a non-404 error, or a 10-minute timeout. A single dropped
    connection mid-poll (`http.ClientException`) is swallowed and retried on
    the next tick rather than aborting the whole flow.
@@ -62,7 +62,7 @@ below.
 [`NextcloudService`](../../lib/services/nextcloud_service.dart) is the
 client for an authenticated session — constructed with `serverUrl` +
 `username` + the app password, one instance per login (held as
-`ServerProvider.service`, recreated on every login/switch/logout). It's
+`SessionController.service`, recreated on every login/switch/logout). It's
 effectively stateless per-instance (three final fields, headers rebuilt per
 request), which is what makes it trivial to have one saved per account
 rather than needing a rewrite for multi-account support.
@@ -80,22 +80,24 @@ rather than needing a rewrite for multi-account support.
   for the Favorites tab) is WebDAV instead - the same `SEARCH` mechanism
   `fetchAllMedia`/`fetchRecentFiles` use, filtered by `oc:favorite` instead
   of mimetype/date. Favorites is a real tab
-  (`views/favorites_view.dart`/`ServerProvider.favoriteItems`/
-  `fetchAllFavorites`/`_allFavorites`), not a filter toggle scoped to
+  (`views/favorites_view.dart`/`FavoritesController.items`/
+  `fetchAll`/`_allFavorites`), not a filter toggle scoped to
   whatever folder the Files tab happens to be browsing (that's what it
   used to be - see the note below on why that didn't work). It shares
   Files' own sort/hidden/storage-scope/grid-list display prefs
   (`applyFilesDisplayPrefs`, also used by the Move/Copy destination
   picker) rather than a separate parallel settings dimension. Tapping a
   favorited folder switches to the Files tab, navigated there
-  (`navigateToAbsoluteFolder` + `requestTab`); a favorited file opens
-  directly from the Favorites tab itself. `deleteItem`/`renameItem`/move/
-  copy all re-sync `_allFavorites` afterward via `_syncFavoritesIfLoaded`
-  (only once Favorites has actually been opened this session, tracked by
-  `_favoritesEverFetched`, so those actions don't pay for an extra request
-  on every edit for an account that's never visited the tab) since none of
-  them know how to patch `_allFavorites` in place the way
-  `toggleItemFavorite` does (added/removed/updated by id, right inline).
+  (`FilesController.navigateToAbsoluteFolder` +
+  `SettingsController.requestTab`); a favorited file opens directly from
+  the Favorites tab itself. `ItemOperations.deleteItem`/`renameItem`/move/
+  copy all re-sync `FavoritesController._allFavorites` afterward via
+  `FavoritesController.syncIfLoaded` (only once Favorites has actually been
+  opened this session, tracked by `_everFetched`, so those actions don't
+  pay for an extra request on every edit for an account that's never
+  visited the tab) since none of them know how to patch `_allFavorites` in
+  place the way `ItemOperations.toggleItemFavorite` does (added/removed/
+  updated by id, right inline via `FavoritesController.applyFavoriteToggle`).
   **Note**: this used to be a "favorites-only" filter toggle on the Files
   tab's controls row instead of its own tab, filtering the currently
   browsed folder's `_items`. That had two real bugs in sequence: first,
@@ -144,9 +146,9 @@ rather than needing a rewrite for multi-account support.
   for a folder ("collection"), so no extra `Depth` header is needed. They
   return the raw HTTP status rather than a bool: `412 Precondition Failed`
   is WebDAV's standard signal for "something's already there" when
-  `Overwrite: F`, which is exactly the conflict `ServerProvider.moveItems`/
+  `Overwrite: F`, which is exactly the conflict `ItemOperations.moveItems`/
   `copyItems` need to detect without a separate existence-check request
-  per item. `ServerProvider` attempts every item in the batch first,
+  per item. `ItemOperations` attempts every item in the batch first,
   collects conflicts into `MoveCopyResult.conflicts`
   (`models/move_copy_result.dart`), and only then shows one summary
   (`MoveCopyConflictSheet`) instead of prompting per conflict as they're
@@ -157,11 +159,11 @@ rather than needing a rewrite for multi-account support.
   (`views/move_copy_destination_picker.dart`) is covered in
   `architecture.md`, including why it can't reuse the Files tab's shared
   navigation state the way `ShareUploadView` does.
-- **Uploads**: there's no more in-app-only upload path - `NextcloudService`/
-  `ServerProvider.uploadFileFromPath` were removed once the Files tab's "+"
-  → "Upload File" was unified with the share-to-upload flow (below). Every
-  upload, however it's triggered, now goes through `ShareUploadView`
-  (caller-chosen destination via `navigateToAbsoluteFolder`, then
+- **Uploads**: there's no more in-app-only upload path - `NextcloudService`'s
+  own `uploadFileFromPath` was removed once the Files tab's "+" → "Upload
+  File" was unified with the share-to-upload flow (below). Every upload,
+  however it's triggered, now goes through `ShareUploadView` (caller-chosen
+  destination via `FilesController.navigateToAbsoluteFolder`, then
   `UploadService`/`ShareUploadService.kt`).
 - **Receiving a shared file from another app**: hand-rolled in
   `MainActivity.kt` (Android `ACTION_SEND`/`ACTION_SEND_MULTIPLE`,
@@ -178,7 +180,7 @@ rather than needing a rewrite for multi-account support.
   story. The fix: `getInitialShare`/`onNewShare` only ever query cheap Uri
   metadata (name/size/mime, not content) so `ShareUploadView`'s destination
   picker - which mirrors the Files tab's own controls/filters/listing,
-  reusing the same `ServerProvider` fields and `widgets/item_icon.dart` -
+  reusing the same `FilesController` fields and `widgets/item_icon.dart` -
   always appears instantly regardless of file size.
 - **Uploading a shared file**: once the user picks a destination in
   `ShareUploadView`, [`UploadService`](../../lib/services/upload_service.dart)
@@ -218,7 +220,7 @@ Google Drive/Instagram's "choose a file" flow), the reverse direction of
   ([`PickIntentService`](../../lib/services/pick_intent_service.dart)/
   [`PickRequest`](../../lib/models/pick_request.dart)) - same
   cold-start-vs-already-running split as the share-intent channels.
-- `ServerProvider.pickRequest`/`isPicking` drive picking mode app-wide once
+- `PickController.pickRequest`/`isPicking` drive picking mode app-wide once
   `MainShellView` learns about a request at startup or via
   `onNewPickRequest`. While picking, `MainShellView` restricts the visible
   bottom-nav tabs to just Files and Photos (see `architecture.md`) -
@@ -227,7 +229,7 @@ Google Drive/Instagram's "choose a file" flow), the reverse direction of
   open/select behavior (folders still navigate; a mime-mismatched file is
   rejected with a snackbar; matching files toggle-select or immediately
   confirm depending on `PickRequest.allowMultiple`).
-- `ServerProvider.confirmPick` downloads the selected item(s) to a
+- `PickController.confirmPick` downloads the selected item(s) to a
   `picker/` scratch subfolder in the app's cache dir (`downloadToFile`,
   same as any other download) - each item into its own `picker/<item.id>/`
   subfolder, keeping the on-disk filename as plain `item.name` rather than
@@ -297,9 +299,9 @@ the whole engine is plain Kotlin using Android's WorkManager directly.
   from `SyncEngine`'s durable per-account state map
   (`SyncEngine.loadState(accountId).keys`) each time a snapshot is built,
   so there's one source of truth for "synced" instead of two that could
-  drift. `SyncService.getStatus()` (one-shot, seeds `ServerProvider` right
-  after login/account-switch) and `SyncService.statusStream` (live) both
-  return the same snapshot shape. `ServerProvider.syncHeaderStatus`
+  drift. `SyncService.getStatus()` (one-shot, seeds `SyncStatusController`
+  right after login/account-switch) and `SyncService.statusStream` (live)
+  both return the same snapshot shape. `SyncStatusController.syncHeaderStatus`
   (off/syncing/done/alert - drives `SyncedHeaderScaffold`'s persistent
   chip/panel, replacing what used to be the WebDAV-refresh-loading
   indicator there) and `syncStatusFor(item)` (none/syncing/synced/conflict
@@ -310,8 +312,8 @@ the whole engine is plain Kotlin using Android's WorkManager directly.
   shared companion function; `SyncConflictReceiver` (the notification
   action) and `MainActivity.kt`'s `resolveConflict` MethodChannel method
   (the sync header's "Keep local"/"Use server" buttons,
-  `ServerProvider.resolveSyncConflict`) both just call it, so there's one
-  resolution code path regardless of which surface triggered it.
+  `SyncStatusController.resolveSyncConflict`) both just call it, so there's
+  one resolution code path regardless of which surface triggered it.
 - **Conflicts are never auto-resolved.** The notification's "Keep local"/
   "Use server" actions are `PendingIntent.getBroadcast`s (same shape as the
   Cancel action on upload/download notifications, just broadcast instead of
@@ -329,12 +331,13 @@ the whole engine is plain Kotlin using Android's WorkManager directly.
   so changing the synced-folder list, the active account, or the Wi-Fi-only
   setting means cancelling and re-enqueueing, not updating in place.
   [`SyncService`](../../lib/services/sync_service.dart) (Dart) wraps this -
-  `ServerProvider` calls `reschedule` after every successful login/account
-  switch and every synced-folder/`syncOnCellular` change, and `cancel` on
-  logout/last-account-removed. The network constraint is
-  `NetworkType.UNMETERED` by default (`!syncOnCellular`, Wi-Fi only) or
-  `NetworkType.CONNECTED` if the user's opted into cellular sync.
-- Synced-path list (`ServerProvider.syncedPaths` - files or folders, not
+  `SyncStatusController` calls `SyncService.reschedule` after every
+  successful login/account switch and every synced-folder/`syncOnCellular`
+  change, and `SyncService.cancel` on logout/last-account-removed. The
+  network constraint is `NetworkType.UNMETERED` by default
+  (`!syncOnCellular`, Wi-Fi only) or `NetworkType.CONNECTED` if the user's
+  opted into cellular sync.
+- Synced-path list (`SyncStatusController.syncedPaths` - files or folders, not
   just folders despite the name of the underlying pref/native `Data` key,
   which stayed `ui_synced_folders`/`folders` to avoid a storage-key
   migration for a rename) follows the standard per-account-pref pattern
@@ -383,7 +386,7 @@ the whole engine is plain Kotlin using Android's WorkManager directly.
   landed via `adb shell run-as`/a rooted shell, not a regular file
   manager UI.
 - **Already-synced files skip the network** in two places:
-  `ServerProvider.localSyncedFilePath(item)` is a pure function of the
+  `SyncStatusController.localSyncedFilePath(item)` is a pure function of the
   remote path (mirrors `SyncEngine.kt`'s `syncRoot` layout exactly, so Dart
   never needs to read the native sync-state `SharedPreferences`) that
   returns the local mirror path if it exists on disk. `ShareSheet`'s "Share
@@ -394,7 +397,7 @@ the whole engine is plain Kotlin using Android's WorkManager directly.
 ## Multi-account storage & session persistence
 
 [`AccountStore`](../../lib/services/account_store.dart) owns everything
-account-identity-related; `ServerProvider` owns everything about which
+account-identity-related; `SessionController` owns everything about which
 account is *currently* live (see `architecture.md`).
 
 - **Per-account secrets**: one `flutter_secure_storage` key per account,
@@ -413,26 +416,36 @@ account is *currently* live (see `architecture.md`).
   storage scope, show-hidden ×2, Photos sort field/ascending, Files'
   per-folder sort map, cache policy/interval — the full list is
   `AccountStore.perAccountPrefKeys`) are namespaced `acct_<accountId>_<key>`
-  and reloaded on every switch via `ServerProvider._applyAccountPrefs`.
+  and owned by whichever controller that domain belongs to (e.g.
+  `FilesController` for grid/list/storage-scope/sort,
+  `PhotosController` for Photos' own sort/filter). Each reloads its own
+  slice in its `_onAccountActivated` listener, registered via
+  `SessionController.addAccountActivatedListener` in its constructor -
+  there's no longer one central method that reloads every domain's prefs at
+  once; `SessionController` just fires the notification, and every sibling
+  controller reacts independently.
 - **Legacy migration**: `AccountStore.migrateLegacyIfNeeded` runs once ever
   (guarded by the `account_migration_v1_done` flag), turning a pre-multi-
   account install's 3 flat secure-storage keys + flat browsing prefs into
   the first saved (and active) account, so upgrading users are never logged
   out. Never assume the legacy keys are gone — always check the migration
   flag rather than the keys' absence.
-- On startup, `ServerProvider._init()` awaits the migration, loads the
-  account list + active id, then `_restoreSession()` looks up the active
-  account's password and calls `_applyCredentialsForAccount` (the renamed,
-  generation-guarded, account-aware version of what used to be
-  `_applyCredentials`) to rebuild the session without re-hitting the login
-  flow.
+- On startup, `SessionController`'s constructor awaits the migration, loads
+  the account list + active id, then `_restoreSession()` looks up the
+  active account's password and calls `_applyCredentialsForAccount`
+  (generation-guarded, account-aware) to rebuild the session without
+  re-hitting the login flow - firing `_notifyAccountActivated()` on
+  success, which is what triggers every sibling controller's own initial
+  fetch.
 - **Switching accounts** (`switchAccount`/`cycleToNextAccount`/
   `cycleToPreviousAccount`/`removeAccount`'s fallback, plus landing on a
   freshly-added account) all funnel through the single `_activateAccount`
-  engine: bump `_sessionGeneration`, cancel any pending login flow, clear
-  every content field *without* ever setting `isLoggedIn` false (that's the
-  detail that keeps `main.dart`'s root routing from bouncing through
-  `LoginView` mid-switch), reload the target account's prefs, then verify
+  engine: bump `sessionGeneration`, cancel any pending login flow, call
+  `_notifyAccountCleared()` (every sibling controller's registered
+  `addAccountClearedListener` callback resets that controller's own state)
+  *without* ever setting `isLoggedIn` false (that's the detail that keeps
+  `main.dart`'s root routing from bouncing through `LoginView` mid-switch),
+  then verify
   its credentials and refetch everything. This is a full teardown-and-reload
   every time — there is deliberately no simultaneous multi-account state or
   background sync; only one account's content is ever live.
@@ -454,7 +467,7 @@ account is *currently* live (see `architecture.md`).
     that's actually destructive/irreversible - UI call sites (`AccountView`)
     gate it behind a confirmation dialog; `logout()` doesn't need one.
   - Any UI code that calls either and might have ended the session should
-    check `!provider.isLoggedIn` afterward and `Navigator.popUntil((r) =>
+    check `!session.isLoggedIn` afterward and `Navigator.popUntil((r) =>
     r.isFirst)` if so — otherwise a screen pushed on top (Settings) is left
     stranded over a root route that's silently swapped to `LoginView`
     underneath it. Don't pop unconditionally — removing a *non-active*
@@ -470,7 +483,7 @@ app. [`AppLockService`](../../lib/services/app_lock_service.dart) wraps
 `authenticate()` always delegates to whatever the OS already has configured
 (biometric, or device PIN/pattern/password as fallback, via
 `biometricOnly: false`). Never build a custom in-app PIN screen for this —
-extend `AppLockService`/the `ServerProvider` gates described in
+extend `AppLockService`/the `SessionController` gates described in
 `architecture.md` instead.
 
 **Android native requirements** (both already done, keep them if you touch

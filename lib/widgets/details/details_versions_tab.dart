@@ -6,7 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import '../../models/nextcloud_file_version.dart';
 import '../../models/nextcloud_item.dart';
-import '../../providers/server_provider.dart';
+import '../../providers/item_operations.dart';
 import '../synced_header_scaffold.dart' show formatBytes;
 
 /// File version history — a synthetic "Current version" row (from the
@@ -27,8 +27,8 @@ class _DetailsVersionsTabState extends State<DetailsVersionsTab> {
   List<NextcloudFileVersion> _versions = [];
 
   Future<void> _load() async {
-    final provider = context.read<ServerProvider>();
-    final result = await provider.fetchFileVersions(widget.item);
+    final ops = context.read<ItemOperations>();
+    final result = await ops.fetchFileVersions(widget.item);
     if (!mounted) return;
     setState(() {
       _versions = result;
@@ -37,9 +37,9 @@ class _DetailsVersionsTabState extends State<DetailsVersionsTab> {
   }
 
   Future<void> _restore(NextcloudFileVersion version) async {
-    final provider = context.read<ServerProvider>();
+    final ops = context.read<ItemOperations>();
     final messenger = ScaffoldMessenger.of(context);
-    final success = await provider.restoreFileVersion(
+    final success = await ops.restoreFileVersion(
       widget.item,
       version.versionLabel,
     );
@@ -56,7 +56,7 @@ class _DetailsVersionsTabState extends State<DetailsVersionsTab> {
   }
 
   Future<void> _download(NextcloudFileVersion version) async {
-    final provider = context.read<ServerProvider>();
+    final ops = context.read<ItemOperations>();
     final messenger = ScaffoldMessenger.of(context);
     try {
       final tempDir = await getTemporaryDirectory();
@@ -64,7 +64,7 @@ class _DetailsVersionsTabState extends State<DetailsVersionsTab> {
         tempDir.path,
         '${version.versionLabel}_${widget.item.name}',
       );
-      final success = await provider.downloadVersion(
+      final success = await ops.downloadVersion(
         widget.item,
         version.versionLabel,
         tempPath,

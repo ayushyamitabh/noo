@@ -3,7 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/nextcloud_item.dart';
 import '../models/nextcloud_share.dart';
-import '../providers/server_provider.dart';
+import '../providers/shares_controller.dart';
 import '../widgets/more_tabs_button.dart';
 import '../widgets/profile_avatar_button.dart';
 import '../widgets/synced_header_scaffold.dart';
@@ -60,16 +60,16 @@ class _SharesViewState extends State<SharesView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final provider = context.watch<ServerProvider>();
+    final sharesController = context.watch<SharesController>();
 
     if (!_requested) {
       _requested = true;
       WidgetsBinding.instance.addPostFrameCallback(
-        (_) => provider.fetchShares(),
+        (_) => sharesController.fetchAll(),
       );
     }
 
-    final shares = provider.shares;
+    final shares = sharesController.shares;
 
     final List<Widget> contentSlivers = [
       SliverToBoxAdapter(
@@ -80,19 +80,20 @@ class _SharesViewState extends State<SharesView> {
               ButtonSegment(value: false, label: Text('Shared by me')),
               ButtonSegment(value: true, label: Text('Shared with me')),
             ],
-            selected: {provider.sharesWithMe},
-            onSelectionChanged: (set) => provider.setSharesWithMe(set.first),
+            selected: {sharesController.sharedWithMe},
+            onSelectionChanged: (set) =>
+                sharesController.setSharedWithMe(set.first),
           ),
         ),
       ),
       const SliverToBoxAdapter(child: SizedBox(height: 8)),
 
-      if (provider.isSharesLoading && shares.isEmpty)
+      if (sharesController.isLoading && shares.isEmpty)
         const SliverFillRemaining(
           hasScrollBody: false,
           child: Center(child: CircularProgressIndicator()),
         )
-      else if (provider.sharesErrorMessage != null)
+      else if (sharesController.errorMessage != null)
         SliverFillRemaining(
           hasScrollBody: false,
           child: Center(
@@ -116,7 +117,7 @@ class _SharesViewState extends State<SharesView> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    provider.sharesErrorMessage!,
+                    sharesController.errorMessage!,
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: colorScheme.onSurfaceVariant,
@@ -124,7 +125,7 @@ class _SharesViewState extends State<SharesView> {
                   ),
                   const SizedBox(height: 20),
                   FilledButton.icon(
-                    onPressed: provider.fetchShares,
+                    onPressed: sharesController.fetchAll,
                     icon: const Icon(Icons.refresh_rounded),
                     label: const Text('Retry'),
                   ),
@@ -147,7 +148,7 @@ class _SharesViewState extends State<SharesView> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  provider.sharesWithMe
+                  sharesController.sharedWithMe
                       ? 'Nothing has been shared with you'
                       : 'You haven\'t shared anything yet',
                   style: theme.textTheme.titleMedium?.copyWith(
@@ -164,7 +165,7 @@ class _SharesViewState extends State<SharesView> {
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate((context, index) {
               final share = shares[index];
-              return _buildShareTile(context, share, provider);
+              return _buildShareTile(context, share);
             }, childCount: shares.length),
           ),
         ),
@@ -175,18 +176,13 @@ class _SharesViewState extends State<SharesView> {
 
     return SyncedHeaderScaffold(
       scrollController: widget.scrollController,
-      provider: provider,
       actions: const [MoreTabsButton(), ProfileAvatarButton()],
-      onRefresh: provider.fetchShares,
+      onRefresh: sharesController.fetchAll,
       contentSlivers: contentSlivers,
     );
   }
 
-  Widget _buildShareTile(
-    BuildContext context,
-    NextcloudShare share,
-    ServerProvider provider,
-  ) {
+  Widget _buildShareTile(BuildContext context, NextcloudShare share) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final iconColor = colorScheme.primary;
@@ -260,7 +256,7 @@ class _SharesViewState extends State<SharesView> {
               IconButton(
                 icon: Icon(Icons.link_off_rounded, color: colorScheme.error),
                 tooltip: share.sharedWithMe ? 'Remove' : 'Unshare',
-                onPressed: () => _confirmUnshare(context, provider, share),
+                onPressed: () => _confirmUnshare(context, share),
               ),
             ],
           ),
@@ -271,7 +267,6 @@ class _SharesViewState extends State<SharesView> {
 
   Future<void> _confirmUnshare(
     BuildContext context,
-    ServerProvider provider,
     NextcloudShare share,
   ) async {
     final confirmed = await showDialog<bool>(
@@ -303,7 +298,9 @@ class _SharesViewState extends State<SharesView> {
     if (confirmed != true || !context.mounted) return;
 
     final messenger = ScaffoldMessenger.of(context);
-    final success = await provider.deleteShare(share);
+    final success = await context.read<SharesController>().deleteShare(
+      share,
+    );
     messenger.showSnackBar(
       SnackBar(
         content: Text(

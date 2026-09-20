@@ -7,7 +7,7 @@ import 'gradual_bottom_sheet.dart';
 /// destination) - summarizes every conflict at once rather than prompting
 /// per item as they're hit, and lets the user resolve them all the same
 /// way (overwrite/keep both) or open a per-item breakdown. Returns the
-/// `ConflictChoice` map `ServerProvider.resolveConflicts` expects, or null
+/// `ConflictChoice` map `ItemOperations.resolveConflicts` expects, or null
 /// if dismissed without choosing.
 class MoveCopyConflictSheet extends StatefulWidget {
   final List<MoveCopyConflict> conflicts;

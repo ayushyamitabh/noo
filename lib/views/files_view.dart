@@ -9,7 +9,12 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/nextcloud_item.dart';
 import '../models/selection_action.dart';
-import '../providers/server_provider.dart';
+import '../providers/files_controller.dart';
+import '../providers/item_operations.dart';
+import '../providers/pick_controller.dart';
+import '../providers/session_controller.dart';
+import '../providers/settings_controller.dart';
+import '../providers/sync_status_controller.dart';
 import '../services/download_service.dart';
 import '../services/share_intent_service.dart';
 import '../widgets/breadcrumbs.dart';
@@ -204,16 +209,14 @@ class _FilesViewState extends State<FilesView>
   /// folders are still browsable, a matching file either toggles selection
   /// (multi-select requests) or immediately finishes the pick, and a
   /// non-matching file (wrong mime type for the caller) is rejected.
-  void _handlePickTap(
-    BuildContext context,
-    ServerProvider provider,
-    NextcloudItem item,
-  ) {
+  void _handlePickTap(BuildContext context, NextcloudItem item) {
+    final files = context.read<FilesController>();
+    final pick = context.read<PickController>();
     if (item.isFolder) {
-      provider.navigateToFolder(item.path);
+      files.navigateToFolder(item.path);
       return;
     }
-    if (!provider.itemMatchesPickFilter(item)) {
+    if (!pick.itemMatchesPickFilter(item)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("This app can't accept this file type"),
@@ -222,25 +225,27 @@ class _FilesViewState extends State<FilesView>
       );
       return;
     }
-    if (provider.pickRequest!.allowMultiple) {
+    if (pick.pickRequest!.allowMultiple) {
       _toggleSelection(item);
     } else {
-      provider.confirmPick([item]);
+      pick.confirmPick([item]);
     }
   }
 
   /// The bulk actions shown in the sticky selection toolbar for the
   /// currently-selected items.
   List<SelectionAction> _buildSelectionActions(
-    ServerProvider provider,
+    BuildContext context,
     List<NextcloudItem> selected,
   ) {
-    if (provider.isPicking) {
+    final pick = context.watch<PickController>();
+    final sync = context.watch<SyncStatusController>();
+    if (pick.isPicking) {
       return [
         SelectionAction(
           icon: Icons.check_rounded,
           label: 'Use ${selected.length} item(s)',
-          onTap: () => provider.confirmPick(selected),
+          onTap: () => pick.confirmPick(selected),
         ),
       ];
     }
@@ -252,52 +257,52 @@ class _FilesViewState extends State<FilesView>
         label: selected.every((i) => i.isFavorite)
             ? 'Remove from favorites'
             : 'Favorite',
-        onTap: () => _favoriteSelected(provider, selected),
+        onTap: () => _favoriteSelected(context, selected),
       ),
       SelectionAction(
         icon: Icons.share_rounded,
         label: 'Share',
         onTap: () => selected.length == 1
             ? ShareSheet.show(context, selected.single)
-            : _shareSelected(context, provider, selected),
+            : _shareSelected(context, selected),
       ),
       SelectionAction(
         icon: Icons.download_rounded,
         label: 'Download',
-        onTap: () => _downloadSelected(context, provider, selected),
+        onTap: () => _downloadSelected(context, selected),
       ),
       SelectionAction(
         icon: Icons.delete_outline_rounded,
         label: 'Delete',
-        onTap: () => _confirmDeleteSelected(context, provider, selected),
+        onTap: () => _confirmDeleteSelected(context, selected),
       ),
       SelectionAction(
         icon: Icons.copy_rounded,
         label: 'Copy',
-        onTap: () => _moveOrCopySelected(provider, selected, copy: true),
+        onTap: () => _moveOrCopySelected(context, selected, copy: true),
       ),
       SelectionAction(
         icon: Icons.drive_file_move_rounded,
         label: 'Move',
-        onTap: () => _moveOrCopySelected(provider, selected, copy: false),
+        onTap: () => _moveOrCopySelected(context, selected, copy: false),
       ),
       if (selected.length == 1)
         SelectionAction(
           icon: Icons.drive_file_rename_outline_rounded,
           label: 'Rename',
-          onTap: () => _renameItem(provider, selected.single),
+          onTap: () => _renameItem(selected.single),
         ),
       if (selected.length == 1)
         SelectionAction(
-          icon: provider.isPathSynced(selected.single.path)
+          icon: sync.isPathSynced(selected.single.path)
               ? Icons.sync_rounded
               : Icons.sync_outlined,
-          label: provider.isPathSynced(selected.single.path)
+          label: sync.isPathSynced(selected.single.path)
               ? 'Stop syncing to device'
               : 'Sync to device',
-          onTap: () => provider.isPathSynced(selected.single.path)
-              ? provider.removeSyncedPath(selected.single.path)
-              : provider.addSyncedPath(selected.single.path),
+          onTap: () => sync.isPathSynced(selected.single.path)
+              ? sync.removeSyncedPath(selected.single.path)
+              : sync.addSyncedPath(selected.single.path),
         ),
       if (selected.length == 1)
         SelectionAction(
@@ -308,7 +313,7 @@ class _FilesViewState extends State<FilesView>
     ];
   }
 
-  Future<void> _renameItem(ServerProvider provider, NextcloudItem item) async {
+  Future<void> _renameItem(NextcloudItem item) async {
     final controller = TextEditingController(text: item.name);
     final newName = await showDialog<String>(
       context: context,
@@ -345,7 +350,8 @@ class _FilesViewState extends State<FilesView>
     if (!mounted) return;
 
     final messenger = ScaffoldMessenger.of(context);
-    final success = await provider.renameItem(item, newName);
+    final ops = context.read<ItemOperations>();
+    final success = await ops.renameItem(item, newName);
     _clearSelection();
     messenger.showSnackBar(
       SnackBar(
@@ -359,9 +365,9 @@ class _FilesViewState extends State<FilesView>
 
   Future<void> _shareSelected(
     BuildContext context,
-    ServerProvider provider,
     List<NextcloudItem> items,
   ) async {
+    final ops = context.read<ItemOperations>();
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(
       const SnackBar(
@@ -372,7 +378,7 @@ class _FilesViewState extends State<FilesView>
 
     final lines = <String>[];
     for (final item in items) {
-      final link = await provider.createShareLink(item);
+      final link = await ops.createShareLink(item);
       if (link != null) {
         lines.add(items.length > 1 ? '${item.name}: $link' : link);
       }
@@ -408,14 +414,14 @@ class _FilesViewState extends State<FilesView>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final provider = context.watch<ServerProvider>();
+    final files = context.watch<FilesController>();
 
-    final pathDepth = provider.pathStack.length;
+    final pathDepth = files.pathStack.length;
     final navigatingDeeper = pathDepth > _lastPathDepth;
     _lastPathDepth = pathDepth;
 
-    final hasBreadcrumbs = provider.pathStack.length > 1;
-    final selectedItems = provider.items
+    final hasBreadcrumbs = files.pathStack.length > 1;
+    final selectedItems = files.items
         .where((i) => _selectedIds.contains(i.id))
         .toList();
 
@@ -445,16 +451,16 @@ class _FilesViewState extends State<FilesView>
                 children: [
                   IconButton(
                     icon: Icon(
-                      provider.filesSortAscending
+                      files.filesSortAscending
                           ? Icons.arrow_upward_rounded
                           : Icons.arrow_downward_rounded,
                       size: 20,
                     ),
                     visualDensity: VisualDensity.compact,
-                    tooltip: provider.filesSortAscending
+                    tooltip: files.filesSortAscending
                         ? 'Ascending'
                         : 'Descending',
-                    onPressed: provider.toggleFilesSortOrder,
+                    onPressed: files.toggleFilesSortOrder,
                   ),
                   // A plain width, not Expanded - this row scrolls
                   // horizontally now, which gives every control unbounded
@@ -462,16 +468,16 @@ class _FilesViewState extends State<FilesView>
                   SizedBox(
                     width: 130,
                     child: SortMenuButton(
-                      field: provider.filesSortField,
-                      onChanged: provider.setFilesSortField,
+                      field: files.filesSortField,
+                      onChanged: files.setFilesSortField,
                     ),
                   ),
                   ToggleIconButton(
-                    icon: provider.showHiddenFiles
+                    icon: files.showHiddenFiles
                         ? Icons.visibility_rounded
                         : Icons.visibility_off_rounded,
-                    isSelected: provider.showHiddenFiles,
-                    onTap: () => provider.toggleShowHiddenFiles(),
+                    isSelected: files.showHiddenFiles,
+                    onTap: () => files.toggleShowHiddenFiles(),
                     tooltip: 'Show hidden files',
                   ),
                   const SizedBox(width: 4),
@@ -479,17 +485,17 @@ class _FilesViewState extends State<FilesView>
                     children: [
                       ToggleIconButton(
                         icon: Symbols.circles_rounded,
-                        isSelected: provider.storageScope == StorageScope.cloud,
+                        isSelected: files.storageScope == StorageScope.cloud,
                         onTap: () =>
-                            provider.setStorageScope(StorageScope.cloud),
+                            files.setStorageScope(StorageScope.cloud),
                         tooltip: 'Cloud storage',
                       ),
                       ToggleIconButton(
                         icon: Symbols.hard_drive_rounded,
                         isSelected:
-                            provider.storageScope == StorageScope.external,
+                            files.storageScope == StorageScope.external,
                         onTap: () =>
-                            provider.setStorageScope(StorageScope.external),
+                            files.setStorageScope(StorageScope.external),
                         tooltip: 'External storage',
                       ),
                     ],
@@ -500,17 +506,17 @@ class _FilesViewState extends State<FilesView>
                       ToggleIconButton(
                         icon: Icons.select_all_rounded,
                         isSelected:
-                            provider.filesTypeFilter == FilesTypeFilter.all,
+                            files.filesTypeFilter == FilesTypeFilter.all,
                         onTap: () =>
-                            provider.setFilesTypeFilter(FilesTypeFilter.all),
+                            files.setFilesTypeFilter(FilesTypeFilter.all),
                         tooltip: 'Files & folders',
                       ),
                       ToggleIconButton(
                         icon: Icons.insert_drive_file_outlined,
                         isSelected:
-                            provider.filesTypeFilter ==
+                            files.filesTypeFilter ==
                             FilesTypeFilter.filesOnly,
-                        onTap: () => provider.setFilesTypeFilter(
+                        onTap: () => files.setFilesTypeFilter(
                           FilesTypeFilter.filesOnly,
                         ),
                         tooltip: 'Files only',
@@ -518,9 +524,9 @@ class _FilesViewState extends State<FilesView>
                       ToggleIconButton(
                         icon: Icons.folder_outlined,
                         isSelected:
-                            provider.filesTypeFilter ==
+                            files.filesTypeFilter ==
                             FilesTypeFilter.foldersOnly,
-                        onTap: () => provider.setFilesTypeFilter(
+                        onTap: () => files.setFilesTypeFilter(
                           FilesTypeFilter.foldersOnly,
                         ),
                         tooltip: 'Folders only',
@@ -532,14 +538,14 @@ class _FilesViewState extends State<FilesView>
                     children: [
                       ToggleIconButton(
                         icon: Icons.view_list_rounded,
-                        isSelected: !provider.isGridView,
-                        onTap: () => provider.setGridView(false),
+                        isSelected: !files.isGridView,
+                        onTap: () => files.setGridView(false),
                         tooltip: 'List view',
                       ),
                       ToggleIconButton(
                         icon: Icons.grid_view_rounded,
-                        isSelected: provider.isGridView,
-                        onTap: () => provider.setGridView(true),
+                        isSelected: files.isGridView,
+                        onTap: () => files.setGridView(true),
                         tooltip: 'Grid view',
                       ),
                     ],
@@ -553,8 +559,8 @@ class _FilesViewState extends State<FilesView>
             SizedBox(
               height: 32,
               child: Breadcrumbs(
-                pathStack: provider.pathStack,
-                onTap: (index) => provider.navigateToPathIndex(index),
+                pathStack: files.pathStack,
+                onTap: (index) => files.navigateToPathIndex(index),
               ),
             ),
           ],
@@ -574,12 +580,12 @@ class _FilesViewState extends State<FilesView>
         ),
       ),
       // Files List / Grid
-      if (provider.isLoading)
+      if (files.isLoading)
         const SliverFillRemaining(
           hasScrollBody: false,
           child: Center(child: CircularProgressIndicator()),
         )
-      else if (provider.errorMessage != null)
+      else if (files.errorMessage != null)
         SliverFillRemaining(
           hasScrollBody: false,
           child: Center(
@@ -603,7 +609,7 @@ class _FilesViewState extends State<FilesView>
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    provider.errorMessage!,
+                    files.errorMessage!,
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: colorScheme.onSurfaceVariant,
@@ -611,7 +617,7 @@ class _FilesViewState extends State<FilesView>
                   ),
                   const SizedBox(height: 20),
                   FilledButton.icon(
-                    onPressed: provider.refreshData,
+                    onPressed: files.refreshData,
                     icon: const Icon(Icons.refresh_rounded),
                     label: const Text('Retry Connection'),
                   ),
@@ -620,7 +626,7 @@ class _FilesViewState extends State<FilesView>
             ),
           ),
         )
-      else if (provider.items.isEmpty)
+      else if (files.items.isEmpty)
         SliverFillRemaining(
           hasScrollBody: false,
           child: Center(
@@ -643,7 +649,7 @@ class _FilesViewState extends State<FilesView>
             ),
           ),
         )
-      else if (provider.isGridView)
+      else if (files.isGridView)
         SliverPadding(
           key: const ValueKey('files-grid'),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -655,14 +661,14 @@ class _FilesViewState extends State<FilesView>
               mainAxisSpacing: 12,
             ),
             delegate: SliverChildBuilderDelegate((context, index) {
-              final item = provider.items[index];
+              final item = files.items[index];
               return _FolderEnterAnimation(
-                key: ValueKey('${provider.currentFolderPath}::${item.id}'),
+                key: ValueKey('${files.currentFolderPath}::${item.id}'),
                 index: index,
                 fromRight: navigatingDeeper,
-                child: _buildGridCard(context, item, provider),
+                child: _buildGridCard(context, item),
               );
-            }, childCount: provider.items.length),
+            }, childCount: files.items.length),
           ),
         )
       else
@@ -671,14 +677,14 @@ class _FilesViewState extends State<FilesView>
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate((context, index) {
-              final item = provider.items[index];
+              final item = files.items[index];
               return _FolderEnterAnimation(
-                key: ValueKey('${provider.currentFolderPath}::${item.id}'),
+                key: ValueKey('${files.currentFolderPath}::${item.id}'),
                 index: index,
                 fromRight: navigatingDeeper,
-                child: _buildListTile(context, item, provider),
+                child: _buildListTile(context, item),
               );
-            }, childCount: provider.items.length),
+            }, childCount: files.items.length),
           ),
         ),
 
@@ -693,29 +699,28 @@ class _FilesViewState extends State<FilesView>
     ];
 
     return PopScope(
-      canPop: !_isSelecting && provider.pathStack.length <= 1,
+      canPop: !_isSelecting && files.pathStack.length <= 1,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         if (_isSelecting) {
           _clearSelection();
         } else {
-          provider.navigateUp();
+          files.navigateUp();
         }
       },
       child: SyncedHeaderScaffold(
         scrollController: widget.scrollController,
-        provider: provider,
         actions: [
           IconButton(
             icon: const Icon(Icons.add_rounded),
             tooltip: 'New',
-            onPressed: () => _showCreateMenu(context, provider),
+            onPressed: () => _showCreateMenu(context),
           ),
           const MoreTabsButton(),
           const ProfileAvatarButton(),
         ],
         selectionBar: _isSelecting
-            ? _buildSelectionBar(context, theme, provider, selectedItems)
+            ? _buildSelectionBar(context, theme, selectedItems)
             : null,
         contentSlivers: contentSlivers,
       ),
@@ -728,7 +733,6 @@ class _FilesViewState extends State<FilesView>
   Widget _buildSelectionBar(
     BuildContext context,
     ThemeData theme,
-    ServerProvider provider,
     List<NextcloudItem> selectedItems,
   ) {
     return Padding(
@@ -771,7 +775,7 @@ class _FilesViewState extends State<FilesView>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   for (final action in _buildSelectionActions(
-                    provider,
+                    context,
                     selectedItems,
                   ))
                     IconButton(
@@ -790,13 +794,14 @@ class _FilesViewState extends State<FilesView>
   }
 
   Future<void> _favoriteSelected(
-    ServerProvider provider,
+    BuildContext context,
     List<NextcloudItem> items,
   ) async {
+    final ops = context.read<ItemOperations>();
     final allFavorited = items.every((i) => i.isFavorite);
     for (final item in items) {
       if (item.isFavorite == allFavorited) {
-        await provider.toggleItemFavorite(item);
+        await ops.toggleItemFavorite(item);
       }
     }
     _clearSelection();
@@ -810,9 +815,10 @@ class _FilesViewState extends State<FilesView>
   /// notification for the whole selection instead of blocking here.
   Future<void> _downloadSelected(
     BuildContext context,
-    ServerProvider provider,
     List<NextcloudItem> items,
   ) async {
+    final session = context.read<SessionController>();
+    final sync = context.read<SyncStatusController>();
     final files = items.where((i) => !i.isFolder).toList();
     _clearSelection();
     if (files.isEmpty) return;
@@ -822,9 +828,9 @@ class _FilesViewState extends State<FilesView>
     // Already mirrored locally by device sync (every selected file, not
     // just some)? Save straight from the local copy instead of a fresh
     // network fetch through DownloadService - see
-    // ServerProvider.localSyncedFilePath.
+    // SyncStatusController.localSyncedFilePath.
     final localPaths = await Future.wait(
-      files.map(provider.localSyncedFilePath),
+      files.map(sync.localSyncedFilePath),
     );
     if (localPaths.every((path) => path != null)) {
       try {
@@ -859,7 +865,7 @@ class _FilesViewState extends State<FilesView>
     }
 
     try {
-      await DownloadService.startDownload(provider, files);
+      await DownloadService.startDownload(session, files);
       messenger.showSnackBar(
         SnackBar(
           content: Text(
@@ -882,7 +888,6 @@ class _FilesViewState extends State<FilesView>
 
   Future<void> _confirmDeleteSelected(
     BuildContext context,
-    ServerProvider provider,
     List<NextcloudItem> items,
   ) async {
     final confirmed = await showDialog<bool>(
@@ -912,9 +917,10 @@ class _FilesViewState extends State<FilesView>
     if (confirmed != true || !context.mounted) return;
 
     final messenger = ScaffoldMessenger.of(context);
+    final ops = context.read<ItemOperations>();
     var succeeded = 0;
     for (final item in items) {
-      final success = await provider.deleteItem(item.path);
+      final success = await ops.deleteItem(item.path);
       if (success) succeeded++;
     }
 
@@ -928,7 +934,7 @@ class _FilesViewState extends State<FilesView>
   }
 
   Future<void> _moveOrCopySelected(
-    ServerProvider provider,
+    BuildContext context,
     List<NextcloudItem> items, {
     required bool copy,
   }) async {
@@ -937,7 +943,7 @@ class _FilesViewState extends State<FilesView>
       items,
       copy: copy,
     );
-    if (!mounted || result == null) return;
+    if (!context.mounted || result == null) return;
     _clearSelection();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -949,13 +955,15 @@ class _FilesViewState extends State<FilesView>
     );
   }
 
-  Widget _buildListTile(
-    BuildContext context,
-    NextcloudItem item,
-    ServerProvider provider,
-  ) {
+  Widget _buildListTile(BuildContext context, NextcloudItem item) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final files = context.watch<FilesController>();
+    final pick = context.watch<PickController>();
+    final sync = context.watch<SyncStatusController>();
+    final session = context.watch<SessionController>();
+    final settings = context.watch<SettingsController>();
+    final ops = context.read<ItemOperations>();
     final isSelected = _selectedIds.contains(item.id);
 
     // No border radius here — the outer ClipRRect below is the only place
@@ -968,17 +976,17 @@ class _FilesViewState extends State<FilesView>
           : colorScheme.surfaceContainerLow,
       child: InkWell(
         onTap: () {
-          if (provider.isPicking) {
-            _handlePickTap(context, provider, item);
+          if (pick.isPicking) {
+            _handlePickTap(context, item);
           } else if (_isSelecting) {
             _toggleSelection(item);
           } else if (item.isFolder) {
-            provider.navigateToFolder(item.path);
+            files.navigateToFolder(item.path);
           } else {
-            _openFile(context, item, provider);
+            _openFile(context, item);
           }
         },
-        onLongPress: provider.isPicking && !provider.pickRequest!.allowMultiple
+        onLongPress: pick.isPicking && !pick.pickRequest!.allowMultiple
             ? null
             : () => _toggleSelection(item),
         child: Padding(
@@ -994,7 +1002,7 @@ class _FilesViewState extends State<FilesView>
                     checkmarkSize: 24,
                     child: ItemThumbnail(
                       item: item,
-                      provider: provider,
+                      service: session.service,
                       size: 44,
                       borderRadius: 12,
                       iconSize: 22,
@@ -1004,7 +1012,7 @@ class _FilesViewState extends State<FilesView>
                     right: -2,
                     bottom: -2,
                     child: SyncStatusBadge(
-                      status: provider.syncStatusFor(item),
+                      status: sync.syncStatusFor(item),
                     ),
                   ),
                 ],
@@ -1039,15 +1047,15 @@ class _FilesViewState extends State<FilesView>
       ),
     );
 
-    final content = _isSelecting || provider.isPicking
+    final content = _isSelecting || pick.isPicking
         ? card
         : SwipeableItem(
             itemKey: ValueKey('file-${item.id}'),
             itemName: item.name,
-            provider: provider,
-            onFavorite: () => provider.toggleItemFavorite(item),
+            settings: settings,
+            onFavorite: () => ops.toggleItemFavorite(item),
             onShare: () => ShareSheet.show(context, item),
-            onDelete: () => _deleteViaSwipe(provider, item),
+            onDelete: () => _deleteViaSwipe(item),
             child: card,
           );
 
@@ -1057,11 +1065,9 @@ class _FilesViewState extends State<FilesView>
     );
   }
 
-  Future<void> _deleteViaSwipe(
-    ServerProvider provider,
-    NextcloudItem item,
-  ) async {
-    final success = await provider.deleteItem(item.path);
+  Future<void> _deleteViaSwipe(NextcloudItem item) async {
+    final ops = context.read<ItemOperations>();
+    final success = await ops.deleteItem(item.path);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -1073,11 +1079,10 @@ class _FilesViewState extends State<FilesView>
     );
   }
 
-  Widget _buildGridCard(
-    BuildContext context,
-    NextcloudItem item,
-    ServerProvider provider,
-  ) {
+  Widget _buildGridCard(BuildContext context, NextcloudItem item) {
+    final files = context.watch<FilesController>();
+    final pick = context.watch<PickController>();
+    final sync = context.watch<SyncStatusController>();
     final isSelected = _selectedIds.contains(item.id);
     final isMedia =
         (item.type == NextcloudItemType.image ||
@@ -1090,17 +1095,17 @@ class _FilesViewState extends State<FilesView>
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () {
-          if (provider.isPicking) {
-            _handlePickTap(context, provider, item);
+          if (pick.isPicking) {
+            _handlePickTap(context, item);
           } else if (_isSelecting) {
             _toggleSelection(item);
           } else if (item.isFolder) {
-            provider.navigateToFolder(item.path);
+            files.navigateToFolder(item.path);
           } else {
-            _openFile(context, item, provider);
+            _openFile(context, item);
           }
         },
-        onLongPress: provider.isPicking && !provider.pickRequest!.allowMultiple
+        onLongPress: pick.isPicking && !pick.pickRequest!.allowMultiple
             ? null
             : () => _toggleSelection(item),
         child: Stack(
@@ -1109,13 +1114,13 @@ class _FilesViewState extends State<FilesView>
               isSelected: isSelected,
               checkmarkSize: 32,
               child: isMedia
-                  ? _buildMediaGridContent(context, item, provider)
+                  ? _buildMediaGridContent(context, item)
                   : _buildPlainGridContent(context, item),
             ),
             Positioned(
               right: 6,
               bottom: 6,
-              child: SyncStatusBadge(status: provider.syncStatusFor(item)),
+              child: SyncStatusBadge(status: sync.syncStatusFor(item)),
             ),
           ],
         ),
@@ -1126,11 +1131,8 @@ class _FilesViewState extends State<FilesView>
   /// Grid content for images/videos: the actual preview fills the whole
   /// card as a background, with the name/size legible over a bottom scrim
   /// — matching a Google Photos-style grid instead of a small icon badge.
-  Widget _buildMediaGridContent(
-    BuildContext context,
-    NextcloudItem item,
-    ServerProvider provider,
-  ) {
+  Widget _buildMediaGridContent(BuildContext context, NextcloudItem item) {
+    final session = context.watch<SessionController>();
     final theme = Theme.of(context);
 
     return LayoutBuilder(
@@ -1143,7 +1145,7 @@ class _FilesViewState extends State<FilesView>
           children: [
             Image.network(
               item.previewUrl!,
-              headers: provider.service?.authHeaders,
+              headers: session.service?.authHeaders,
               fit: BoxFit.cover,
               cacheWidth: cachePixels,
               cacheHeight: cachePixels,
@@ -1253,18 +1255,15 @@ class _FilesViewState extends State<FilesView>
     );
   }
 
-  void _openFile(
-    BuildContext context,
-    NextcloudItem item,
-    ServerProvider provider,
-  ) {
+  void _openFile(BuildContext context, NextcloudItem item) {
+    final files = context.read<FilesController>();
     Navigator.push(
       context,
-      FileViewerScreen.route(item: item, siblings: provider.items),
+      FileViewerScreen.route(item: item, siblings: files.items),
     );
   }
 
-  void _showCreateMenu(BuildContext context, ServerProvider provider) {
+  void _showCreateMenu(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     showModalBottomSheet(
       context: context,
@@ -1293,7 +1292,7 @@ class _FilesViewState extends State<FilesView>
                   title: const Text('New Folder'),
                   onTap: () {
                     Navigator.pop(sheetContext);
-                    _showCreateFolderDialog(context, provider);
+                    _showCreateFolderDialog(context);
                   },
                 ),
               ],
@@ -1304,7 +1303,8 @@ class _FilesViewState extends State<FilesView>
     );
   }
 
-  void _showCreateFolderDialog(BuildContext context, ServerProvider provider) {
+  void _showCreateFolderDialog(BuildContext context) {
+    final files = context.read<FilesController>();
     final controller = TextEditingController();
 
     showDialog(
@@ -1329,7 +1329,7 @@ class _FilesViewState extends State<FilesView>
                 final name = controller.text.trim();
                 if (name.isNotEmpty) {
                   Navigator.pop(context);
-                  final success = await provider.createFolder(name);
+                  final success = await files.createFolder(name);
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(

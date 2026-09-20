@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/services.dart';
 import '../models/nextcloud_item.dart';
-import '../providers/server_provider.dart';
+import '../providers/session_controller.dart';
+import 'native_channel.dart';
 
 /// Hands a download off to `DownloadService.kt`'s Android foreground
 /// service - the download counterpart of `UploadService`/
@@ -20,15 +21,10 @@ class DownloadService {
   /// progress/completion/cancellation through its own notification, not
   /// back to the app.
   static Future<void> startDownload(
-    ServerProvider provider,
+    SessionController session,
     List<NextcloudItem> items,
   ) async {
-    final service = provider.service;
-    final authHeader = service?.authHeaders['Authorization'];
-    if (service == null || authHeader == null) {
-      throw Exception('Not logged in.');
-    }
-
+    final args = baseChannelArgs(session);
     final filesJson = jsonEncode(
       items
           .map(
@@ -42,11 +38,6 @@ class DownloadService {
           .toList(),
     );
 
-    await _channel.invokeMethod('startDownload', {
-      'files': filesJson,
-      'serverUrl': provider.serverUrl,
-      'username': provider.username,
-      'authHeader': authHeader,
-    });
+    await _channel.invokeMethod('startDownload', {...args, 'files': filesJson});
   }
 }

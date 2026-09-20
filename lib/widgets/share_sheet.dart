@@ -7,7 +7,9 @@ import 'package:share_plus/share_plus.dart';
 import '../models/nextcloud_item.dart';
 import '../models/nextcloud_share.dart';
 import '../models/nextcloud_sharee.dart';
-import '../providers/server_provider.dart';
+import '../providers/item_operations.dart';
+import '../providers/session_controller.dart';
+import '../providers/sync_status_controller.dart';
 import 'details/details_sheet.dart' show DetailsHeader;
 import 'gradual_bottom_sheet.dart';
 
@@ -83,10 +85,10 @@ class _ShareSheetState extends State<ShareSheet> {
   }
 
   Future<void> _load() async {
-    final provider = context.read<ServerProvider>();
+    final ops = context.read<ItemOperations>();
     final results = await Future.wait([
-      provider.fetchItemShares(widget.item),
-      provider.fetchInheritedShares(widget.item),
+      ops.fetchItemShares(widget.item),
+      ops.fetchInheritedShares(widget.item),
     ]);
     if (!mounted) return;
     setState(() {
@@ -103,8 +105,8 @@ class _ShareSheetState extends State<ShareSheet> {
       return;
     }
     setState(() => _isSearching = true);
-    final provider = context.read<ServerProvider>();
-    final results = await provider.searchSharees(trimmed);
+    final ops = context.read<ItemOperations>();
+    final results = await ops.searchSharees(trimmed);
     if (!mounted) return;
     setState(() {
       _searchResults = results;
@@ -113,9 +115,9 @@ class _ShareSheetState extends State<ShareSheet> {
   }
 
   Future<void> _addSharee(NextcloudSharee sharee) async {
-    final provider = context.read<ServerProvider>();
+    final ops = context.read<ItemOperations>();
     final messenger = ScaffoldMessenger.of(context);
-    final share = await provider.createShare(
+    final share = await ops.createShare(
       path: widget.item.path,
       shareType: sharee.shareTypeValue,
       shareWith: sharee.shareWith,
@@ -147,9 +149,9 @@ class _ShareSheetState extends State<ShareSheet> {
     final email = _emailController.text.trim();
     if (email.isEmpty) return;
     setState(() => _isAddingEmail = true);
-    final provider = context.read<ServerProvider>();
+    final ops = context.read<ItemOperations>();
     final messenger = ScaffoldMessenger.of(context);
-    final share = await provider.createShare(
+    final share = await ops.createShare(
       path: widget.item.path,
       shareType: 4,
       shareWith: email,
@@ -179,9 +181,9 @@ class _ShareSheetState extends State<ShareSheet> {
   }
 
   Future<void> _createPublicLink() async {
-    final provider = context.read<ServerProvider>();
+    final ops = context.read<ItemOperations>();
     final messenger = ScaffoldMessenger.of(context);
-    final share = await provider.createShare(
+    final share = await ops.createShare(
       path: widget.item.path,
       shareType: 3,
     );
@@ -199,9 +201,9 @@ class _ShareSheetState extends State<ShareSheet> {
   }
 
   Future<void> _removeShare(NextcloudShare share) async {
-    final provider = context.read<ServerProvider>();
+    final ops = context.read<ItemOperations>();
     final messenger = ScaffoldMessenger.of(context);
-    final success = await provider.deleteShare(share);
+    final success = await ops.deleteShare(share);
     if (!mounted) return;
     if (success) {
       setState(() => _shares = _shares.where((s) => s.id != share.id).toList());
@@ -231,20 +233,21 @@ class _ShareSheetState extends State<ShareSheet> {
   /// users/links) and the only one here that reads the file's actual
   /// bytes.
   Future<void> _shareFileDirectly() async {
-    final provider = context.read<ServerProvider>();
-    if (provider.service == null) return;
+    final session = context.read<SessionController>();
+    final sync = context.read<SyncStatusController>();
+    if (session.service == null) return;
     setState(() => _isSharingFile = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
       // Already mirrored locally by device sync? Share that copy straight
       // away instead of a fresh WebDAV fetch - see
-      // ServerProvider.localSyncedFilePath.
+      // SyncStatusController.localSyncedFilePath.
       final tempPath =
-          await provider.localSyncedFilePath(widget.item) ??
+          await sync.localSyncedFilePath(widget.item) ??
           await () async {
             final tempDir = await getTemporaryDirectory();
             final path = p.join(tempDir.path, widget.item.name);
-            await provider.service!.downloadToFile(widget.item.path, path);
+            await session.service!.downloadToFile(widget.item.path, path);
             return path;
           }();
       if (!mounted) return;
@@ -334,7 +337,7 @@ class _ShareSheetState extends State<ShareSheet> {
     }
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final provider = context.watch<ServerProvider>();
+    final session = context.watch<SessionController>();
 
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -352,7 +355,7 @@ class _ShareSheetState extends State<ShareSheet> {
     final emailShares = _shares
         .where((s) => s.shareType == ShareType.email)
         .toList();
-    final internalLink = internalLinkFor(provider.serverUrl, widget.item.id);
+    final internalLink = internalLinkFor(session.serverUrl, widget.item.id);
 
     return ListView(
       controller: widget.scrollController,

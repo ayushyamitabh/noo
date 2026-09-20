@@ -4,7 +4,9 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
 import '../models/move_copy_result.dart';
 import '../models/nextcloud_item.dart';
-import '../providers/server_provider.dart';
+import '../providers/files_controller.dart';
+import '../providers/item_operations.dart';
+import '../providers/session_controller.dart';
 import '../widgets/breadcrumbs.dart';
 import '../widgets/item_icon.dart';
 import '../widgets/more_tabs_button.dart';
@@ -18,13 +20,13 @@ import '../widgets/synced_header_scaffold.dart';
 /// Destination-folder browser for moving/copying [items] (a multi-select
 /// batch from Files or Photos). Visually mirrors `ShareUploadView`'s
 /// browser (same chrome/controls/listing), but deliberately does **not**
-/// reuse `ServerProvider`'s shared `currentFolderPath`/`pathStack`/`items`
+/// reuse `FilesController`'s shared `currentFolderPath`/`pathStack`/`items`
 /// navigation state the way that screen does - this is pushed mid-browsing
 /// session (the user was already looking at a specific Files-tab folder
 /// when they selected items and tapped Move/Copy), so clobbering that
 /// shared state here would strand the Files tab in whatever folder this
 /// picker last visited. Instead it owns its own local navigation state and
-/// fetches through `ServerProvider.fetchFolderListing`, a stateless
+/// fetches through `FilesController.fetchFolderListing`, a stateless
 /// pass-through that never touches shared fields - `ShareUploadView` gets
 /// away with the shared state precisely because it always resets to root
 /// and pops all the way to the app root afterward (a cold share-intent
@@ -83,7 +85,9 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
 
   Future<void> _fetch(String path) async {
     setState(() => _isLoading = true);
-    final raw = await context.read<ServerProvider>().fetchFolderListing(path);
+    final raw = await context.read<FilesController>().fetchFolderListing(
+      path,
+    );
     if (!mounted) return;
     setState(() {
       _rawItems = raw;
@@ -109,7 +113,7 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
     return true;
   }
 
-  /// Client-side mirror of `ServerProvider`'s own authoritative check (see
+  /// Client-side mirror of `ItemOperations`' own authoritative check (see
   /// `_isSelfOrDescendant`) - just for disabling the confirm button with an
   /// explanation up front instead of letting the request round-trip and
   /// fail.
@@ -123,11 +127,11 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
     return false;
   }
 
-  Future<void> _confirm(ServerProvider provider) async {
+  Future<void> _confirm(ItemOperations ops) async {
     setState(() => _isSubmitting = true);
     final result = widget.copy
-        ? await provider.copyItems(widget.items, _currentPath)
-        : await provider.moveItems(widget.items, _currentPath);
+        ? await ops.copyItems(widget.items, _currentPath)
+        : await ops.moveItems(widget.items, _currentPath);
     if (!mounted) return;
 
     if (result.blockedReason != null) {
@@ -151,7 +155,7 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
       );
       if (!mounted) return;
       if (choices != null) {
-        final resolved = await provider.resolveConflicts(
+        final resolved = await ops.resolveConflicts(
           result.conflicts,
           _currentPath,
           copy: widget.copy,
@@ -171,7 +175,7 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
     ).pop(MoveCopyResult(succeeded: succeeded, failed: failed));
   }
 
-  Widget _buildControlsRow(ServerProvider provider) {
+  Widget _buildControlsRow(FilesController files) {
     return SizedBox(
       height: 44,
       child: SingleChildScrollView(
@@ -180,28 +184,28 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
           children: [
             IconButton(
               icon: Icon(
-                provider.filesSortAscending
+                files.filesSortAscending
                     ? Icons.arrow_upward_rounded
                     : Icons.arrow_downward_rounded,
                 size: 20,
               ),
               visualDensity: VisualDensity.compact,
-              tooltip: provider.filesSortAscending ? 'Ascending' : 'Descending',
-              onPressed: provider.toggleFilesSortOrder,
+              tooltip: files.filesSortAscending ? 'Ascending' : 'Descending',
+              onPressed: files.toggleFilesSortOrder,
             ),
             SizedBox(
               width: 130,
               child: SortMenuButton(
-                field: provider.filesSortField,
-                onChanged: provider.setFilesSortField,
+                field: files.filesSortField,
+                onChanged: files.setFilesSortField,
               ),
             ),
             ToggleIconButton(
-              icon: provider.showHiddenFiles
+              icon: files.showHiddenFiles
                   ? Icons.visibility_rounded
                   : Icons.visibility_off_rounded,
-              isSelected: provider.showHiddenFiles,
-              onTap: () => provider.toggleShowHiddenFiles(),
+              isSelected: files.showHiddenFiles,
+              onTap: () => files.toggleShowHiddenFiles(),
               tooltip: 'Show hidden files',
             ),
             const SizedBox(width: 4),
@@ -209,14 +213,14 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
               children: [
                 ToggleIconButton(
                   icon: Symbols.circles_rounded,
-                  isSelected: provider.storageScope == StorageScope.cloud,
-                  onTap: () => provider.setStorageScope(StorageScope.cloud),
+                  isSelected: files.storageScope == StorageScope.cloud,
+                  onTap: () => files.setStorageScope(StorageScope.cloud),
                   tooltip: 'Cloud storage',
                 ),
                 ToggleIconButton(
                   icon: Symbols.hard_drive_rounded,
-                  isSelected: provider.storageScope == StorageScope.external,
-                  onTap: () => provider.setStorageScope(StorageScope.external),
+                  isSelected: files.storageScope == StorageScope.external,
+                  onTap: () => files.setStorageScope(StorageScope.external),
                   tooltip: 'External storage',
                 ),
               ],
@@ -226,14 +230,14 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
               children: [
                 ToggleIconButton(
                   icon: Icons.view_list_rounded,
-                  isSelected: !provider.isGridView,
-                  onTap: () => provider.setGridView(false),
+                  isSelected: !files.isGridView,
+                  onTap: () => files.setGridView(false),
                   tooltip: 'List view',
                 ),
                 ToggleIconButton(
                   icon: Icons.grid_view_rounded,
-                  isSelected: provider.isGridView,
-                  onTap: () => provider.setGridView(true),
+                  isSelected: files.isGridView,
+                  onTap: () => files.setGridView(true),
                   tooltip: 'Grid view',
                 ),
               ],
@@ -248,9 +252,10 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
   // the listing matches what the Files tab itself would show for this
   // folder) but are visually dimmed and inert, same treatment as
   // ShareUploadView's own destination browser.
-  Widget _buildListTile(NextcloudItem item, ServerProvider provider) {
+  Widget _buildListTile(NextcloudItem item) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final session = context.watch<SessionController>();
     final isFolder = item.isFolder;
 
     return Padding(
@@ -272,7 +277,7 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
                   children: [
                     ItemThumbnail(
                       item: item,
-                      provider: provider,
+                      service: session.service,
                       size: 44,
                       borderRadius: 12,
                       iconSize: 22,
@@ -312,7 +317,7 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
     );
   }
 
-  Widget _buildGridCard(NextcloudItem item, ServerProvider provider) {
+  Widget _buildGridCard(NextcloudItem item) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isFolder = item.isFolder;
@@ -379,12 +384,13 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final provider = context.watch<ServerProvider>();
+    final files = context.watch<FilesController>();
+    final ops = context.read<ItemOperations>();
     final hasBreadcrumbs = _pathStack.length > 1;
     final currentLabel = _currentPath == '/'
         ? 'Home'
         : _currentPath.split('/').where((s) => s.isNotEmpty).last;
-    final items = provider.applyFilesDisplayPrefs(_rawItems);
+    final items = files.applyFilesDisplayPrefs(_rawItems);
     final invalidDestination = _destinationIsInvalid();
 
     final controlsColumn = Padding(
@@ -392,7 +398,7 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildControlsRow(provider),
+          _buildControlsRow(files),
           if (hasBreadcrumbs) ...[
             const SizedBox(height: 10),
             SizedBox(
@@ -430,7 +436,7 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
             ),
           ),
         )
-      else if (provider.isGridView)
+      else if (files.isGridView)
         SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           sliver: SliverGrid(
@@ -441,7 +447,7 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
               mainAxisSpacing: 12,
             ),
             delegate: SliverChildBuilderDelegate((context, index) {
-              return _buildGridCard(items[index], provider);
+              return _buildGridCard(items[index]);
             }, childCount: items.length),
           ),
         )
@@ -450,7 +456,7 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate((context, index) {
-              return _buildListTile(items[index], provider);
+              return _buildListTile(items[index]);
             }, childCount: items.length),
           ),
         ),
@@ -465,7 +471,6 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
       child: Scaffold(
         body: SyncedHeaderScaffold(
           scrollController: _scrollController,
-          provider: provider,
           actions: const [MoreTabsButton(), ProfileAvatarButton()],
           contentSlivers: contentSlivers,
         ),
@@ -499,7 +504,7 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
                     child: FilledButton.icon(
                       onPressed: invalidDestination || _isSubmitting
                           ? null
-                          : () => _confirm(provider),
+                          : () => _confirm(ops),
                       icon: _isSubmitting
                           ? const SizedBox(
                               width: 18,

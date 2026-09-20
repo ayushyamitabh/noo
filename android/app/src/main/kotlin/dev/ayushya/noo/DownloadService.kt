@@ -1,7 +1,6 @@
 package dev.ayushya.noo
 
 import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
@@ -18,24 +17,22 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import org.json.JSONArray
 import java.io.File
-import java.net.HttpURLConnection
 import java.net.URL
-import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Foreground service that downloads one or more files over WebDAV straight
  * into the device's public Downloads folder, independent of MainActivity/
  * the Flutter engine being alive - the download counterpart of
- * ShareUploadService.kt (see its doc comment for the full rationale: only
- * a real Android Service survives the app being closed mid-transfer, the
- * same guarantee a real file-manager app's download notification gives
- * you). Re-implements a plain WebDAV GET here in Kotlin for the same
- * reason uploads do - keep NextcloudService.downloadToFile in sync if
- * download semantics change.
+ * ShareUploadService.kt (see its doc comment: only a real Android Service
+ * survives the app being closed mid-transfer, the same guarantee a real
+ * file-manager app's download notification gives you). GET itself is
+ * [DavTransfer.getInto]; this file owns only what's specific to
+ * downloading - MediaStore staging and the notification/queue plumbing.
  *
  * Started via the `dev.ayushya.noo/download_service` MethodChannel
  * (MainActivity.kt). Shows one persistent, cancellable notification for
- * the whole batch, same UX as ShareUploadService's.
+ * the whole batch; a second batch arriving mid-download queues behind the
+ * first (see [TransferQueue]) instead of being dropped.
  */
 class DownloadService : Service() {
     companion object {
@@ -49,9 +46,6 @@ class DownloadService : Service() {
         private const val NOTIFICATION_ID = 4301
     }
 
-    private val cancelled = AtomicBoolean(false)
-    private var downloadThread: Thread? = null
-
     private data class DownloadFile(
         val path: String,
         val name: String,
@@ -59,11 +53,23 @@ class DownloadService : Service() {
         val size: Long?,
     )
 
+    private data class DownloadBatch(
+        val files: List<DownloadFile>,
+        val serverUrl: String,
+        val username: String,
+        val authHeader: String,
+    )
+
+    @Volatile
+    private var cancelled = false
+    private val queue = TransferQueue<DownloadBatch> { runDownloads(it) }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_CANCEL) {
-            cancelled.set(true)
+            cancelled = true
+            queue.clearPending()
             return START_NOT_STICKY
         }
 
@@ -76,7 +82,13 @@ class DownloadService : Service() {
             return START_NOT_STICKY
         }
 
-        createNotificationChannel()
+        NooNotificationChannels.ensure(
+            this,
+            CHANNEL_ID,
+            "File downloads",
+            NotificationManager.IMPORTANCE_LOW,
+            "Progress for files downloaded from Noo",
+        )
         ServiceCompat.startForeground(
             this,
             NOTIFICATION_ID,
@@ -88,16 +100,7 @@ class DownloadService : Service() {
             },
         )
 
-        // A second batch arriving mid-download is dropped rather than
-        // queued - same tradeoff ShareUploadService makes, rare in
-        // practice and not worth a real queue for.
-        if (downloadThread == null) {
-            val files = parseFiles(filesJson)
-            downloadThread = Thread {
-                runDownloads(files, serverUrl, username, authHeader)
-            }.also { it.start() }
-        }
-
+        queue.enqueue(DownloadBatch(parseFiles(filesJson), serverUrl, username, authHeader))
         return START_NOT_STICKY
     }
 
@@ -114,25 +117,25 @@ class DownloadService : Service() {
         }
     }
 
-    private fun runDownloads(
-        files: List<DownloadFile>,
-        serverUrl: String,
-        username: String,
-        authHeader: String,
-    ) {
+    private fun runDownloads(batch: DownloadBatch) {
+        cancelled = false
         var succeeded = 0
         var failed = 0
-        val cleanServer = serverUrl.trimEnd('/')
+        val cleanServer = batch.serverUrl.trimEnd('/')
 
-        for ((index, file) in files.withIndex()) {
-            if (cancelled.get()) break
-            val label = if (files.size == 1) file.name else "${file.name} (${index + 1}/${files.size})"
+        for ((index, file) in batch.files.withIndex()) {
+            if (cancelled) break
+            val label = if (batch.files.size == 1) {
+                file.name
+            } else {
+                "${file.name} (${index + 1}/${batch.files.size})"
+            }
             try {
                 var cleanPath = file.path.trim()
                 if (!cleanPath.startsWith("/")) cleanPath = "/$cleanPath"
                 val encodedPath = cleanPath.split("/").joinToString("/") { Uri.encode(it) }
-                val url = URL("$cleanServer/remote.php/dav/files/$username$encodedPath")
-                val ok = downloadFile(file, url, authHeader) { received, total ->
+                val url = URL("$cleanServer/remote.php/dav/files/${batch.username}$encodedPath")
+                val ok = downloadFile(file, url, batch.authHeader) { received, total ->
                     notify(
                         buildProgressNotification(
                             "Downloading $label…",
@@ -147,17 +150,18 @@ class DownloadService : Service() {
             }
         }
 
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val finalText = when {
-            cancelled.get() -> "Download cancelled"
-            failed == 0 && files.size == 1 -> "Downloaded ${files.first().name}"
-            failed == 0 -> "Downloaded $succeeded of ${files.size} files"
-            else -> "Downloaded $succeeded of ${files.size} files - $failed failed"
+            cancelled -> "Download cancelled"
+            failed == 0 && batch.files.size == 1 -> "Downloaded ${batch.files.first().name}"
+            failed == 0 -> "Downloaded $succeeded of ${batch.files.size} files"
+            else -> "Downloaded $succeeded of ${batch.files.size} files - $failed failed"
         }
-        manager.notify(NOTIFICATION_ID, buildFinalNotification(finalText))
+        manager().notify(NOTIFICATION_ID, buildFinalNotification(finalText))
 
-        stopForeground(STOP_FOREGROUND_DETACH)
-        stopSelf()
+        if (queue.pendingCount == 0) {
+            stopForeground(STOP_FOREGROUND_DETACH)
+            stopSelf()
+        }
     }
 
     private fun progressFraction(received: Long, total: Long?): Float? {
@@ -177,57 +181,32 @@ class DownloadService : Service() {
         authHeader: String,
         onProgress: (Long, Long?) -> Unit,
     ): Boolean {
-        val connection = url.openConnection() as HttpURLConnection
-        return try {
-            connection.requestMethod = "GET"
-            connection.setRequestProperty("Authorization", authHeader)
-            connection.setRequestProperty("OCS-APIRequest", "true")
-            connection.connectTimeout = 15000
-            connection.readTimeout = 30000
-            connection.connect()
-
-            if (connection.responseCode !in 200..299) return false
-
-            val total = file.size ?: connection.contentLengthLong.takeIf { it > 0 }
-            val mimeType = file.mimeType ?: "application/octet-stream"
-            val outputUri = createDownloadsEntry(file.name, mimeType) ?: return false
-
-            val stream = contentResolver.openOutputStream(outputUri) ?: return false
-            stream.use { output ->
-                connection.inputStream.use { input ->
-                    val buffer = ByteArray(256 * 1024)
-                    var received = 0L
-                    var lastEmit = 0L
-                    while (!cancelled.get()) {
-                        val read = input.read(buffer)
-                        if (read == -1) break
-                        output.write(buffer, 0, read)
-                        received += read
-                        val now = System.currentTimeMillis()
-                        if (now - lastEmit >= 200) {
-                            lastEmit = now
-                            onProgress(received, total)
-                        }
-                    }
+        val mimeType = file.mimeType ?: "application/octet-stream"
+        var outputUri: Uri? = null
+        val ok = DavTransfer.getInto(
+            url,
+            authHeader,
+            openOutput = {
+                val uri = createDownloadsEntry(file.name, mimeType)
+                if (uri != null) {
+                    outputUri = uri
+                    contentResolver.openOutputStream(uri)
+                } else {
+                    null
                 }
-            }
+            },
+            onProgress = { received, total -> onProgress(received, file.size ?: total) },
+            isCancelled = { cancelled },
+        )
 
+        outputUri?.let { uri ->
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val values = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
-                contentResolver.update(outputUri, values, null, null)
+                contentResolver.update(uri, values, null, null)
             }
-
-            if (cancelled.get()) {
-                contentResolver.delete(outputUri, null, null)
-                false
-            } else {
-                true
-            }
-        } catch (e: Exception) {
-            false
-        } finally {
-            connection.disconnect()
+            if (!ok) contentResolver.delete(uri, null, null)
         }
+        return ok
     }
 
     private fun createDownloadsEntry(name: String, mimeType: String): Uri? {
@@ -247,21 +226,11 @@ class DownloadService : Service() {
         }
     }
 
-    private fun notify(notification: Notification) {
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(NOTIFICATION_ID, notification)
-    }
+    private fun manager() =
+        getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "File downloads",
-                NotificationManager.IMPORTANCE_LOW,
-            ).apply { description = "Progress for files downloaded from Noo" }
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.createNotificationChannel(channel)
-        }
+    private fun notify(notification: Notification) {
+        manager().notify(NOTIFICATION_ID, notification)
     }
 
     private fun buildProgressNotification(
@@ -301,7 +270,7 @@ class DownloadService : Service() {
     }
 
     override fun onDestroy() {
-        cancelled.set(true)
+        cancelled = true
         super.onDestroy()
     }
 }

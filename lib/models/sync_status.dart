@@ -34,5 +34,5 @@ enum SyncItemStatus { none, syncing, synced, conflict }
 
 /// The persistent header chip/panel's overall status (account-wide, not
 /// scoped to whatever folder is currently browsed) - see
-/// `ServerProvider.syncHeaderStatus`.
+/// `SyncStatusController.syncHeaderStatus`.
 enum SyncHeaderStatus { off, syncing, done, alert }

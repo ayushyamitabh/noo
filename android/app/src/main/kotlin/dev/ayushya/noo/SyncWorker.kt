@@ -1,12 +1,10 @@
 package dev.ayushya.noo
 
 import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
@@ -260,13 +258,12 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
         applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
     private fun createChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Device sync",
-                NotificationManager.IMPORTANCE_DEFAULT,
-            ).apply { description = "Updates and conflicts for folders synced to this device" }
-            manager().createNotificationChannel(channel)
-        }
+        NooNotificationChannels.ensure(
+            applicationContext,
+            CHANNEL_ID,
+            "Device sync",
+            NotificationManager.IMPORTANCE_DEFAULT,
+            "Updates and conflicts for folders synced to this device",
+        )
     }
 }

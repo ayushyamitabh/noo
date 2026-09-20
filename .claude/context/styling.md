@@ -57,15 +57,15 @@ widgets. Key points:
   new blur/shadow combo.
 - [`FloatingBottomNavBar`](../../lib/widgets/floating_bottom_bar.dart) — the
   main tab bar; opacity/blur are user-adjustable settings
-  (`ServerProvider.bottomBarOpacity`/`bottomBarBlur`), not constants — pull
-  new adjustable visual knobs from the provider the same way rather than
-  hardcoding them.
+  (`SettingsController.bottomBarOpacity`/`bottomBarBlur`), not constants —
+  pull new adjustable visual knobs from `SettingsController` the same way
+  rather than hardcoding them.
 - [`SyncedHeaderScaffold`](../../lib/widgets/synced_header_scaffold.dart) —
   the pull-to-sync `CustomScrollView` header shared by 5 of the 6 tabs (see
   `architecture.md`); also where the pull-to-refresh gesture thresholds and
   the classic Material refresh spinner live. Its persistent chip/panel
   (icon + "Sync off"/"Syncing…"/"Synced"/"Sync issue") reflects device-sync
-  status (`ServerProvider.syncHeaderStatus`), not the WebDAV-refresh
+  status (`SyncStatusController.syncHeaderStatus`), not the WebDAV-refresh
   loading state the pull gesture itself triggers - that has its own,
   separate floating spinner bubble, so nothing was lost by handing the
   persistent text/icon over.

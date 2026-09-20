@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/nextcloud_item.dart';
-import '../providers/server_provider.dart';
+import '../providers/trash_controller.dart';
 import '../widgets/more_tabs_button.dart';
 import '../widgets/profile_avatar_button.dart';
 import '../widgets/synced_header_scaffold.dart';
@@ -42,26 +42,26 @@ class _TrashViewState extends State<TrashView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final provider = context.watch<ServerProvider>();
+    final trashController = context.watch<TrashController>();
 
     if (!_requested) {
       _requested = true;
       WidgetsBinding.instance.addPostFrameCallback(
-        (_) => provider.fetchTrash(),
+        (_) => trashController.fetchAll(),
       );
     }
 
-    final trash = provider.trashItems;
+    final trash = trashController.items;
 
     final List<Widget> contentSlivers = [
       const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
-      if (provider.isTrashLoading && trash.isEmpty)
+      if (trashController.isLoading && trash.isEmpty)
         const SliverFillRemaining(
           hasScrollBody: false,
           child: Center(child: CircularProgressIndicator()),
         )
-      else if (provider.trashErrorMessage != null)
+      else if (trashController.errorMessage != null)
         SliverFillRemaining(
           hasScrollBody: false,
           child: Center(
@@ -85,7 +85,7 @@ class _TrashViewState extends State<TrashView> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    provider.trashErrorMessage!,
+                    trashController.errorMessage!,
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: colorScheme.onSurfaceVariant,
@@ -93,7 +93,7 @@ class _TrashViewState extends State<TrashView> {
                   ),
                   const SizedBox(height: 20),
                   FilledButton.icon(
-                    onPressed: provider.fetchTrash,
+                    onPressed: trashController.fetchAll,
                     icon: const Icon(Icons.refresh_rounded),
                     label: const Text('Retry'),
                   ),
@@ -131,7 +131,7 @@ class _TrashViewState extends State<TrashView> {
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate((context, index) {
               final item = trash[index];
-              return _buildTrashTile(context, item, provider);
+              return _buildTrashTile(context, item);
             }, childCount: trash.length),
           ),
         ),
@@ -142,18 +142,13 @@ class _TrashViewState extends State<TrashView> {
 
     return SyncedHeaderScaffold(
       scrollController: widget.scrollController,
-      provider: provider,
       actions: const [MoreTabsButton(), ProfileAvatarButton()],
-      onRefresh: provider.fetchTrash,
+      onRefresh: trashController.fetchAll,
       contentSlivers: contentSlivers,
     );
   }
 
-  Widget _buildTrashTile(
-    BuildContext context,
-    NextcloudItem item,
-    ServerProvider provider,
-  ) {
+  Widget _buildTrashTile(BuildContext context, NextcloudItem item) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final iconColor = colorScheme.outline;
@@ -210,7 +205,7 @@ class _TrashViewState extends State<TrashView> {
                 icon: const Icon(Icons.restore_rounded),
                 tooltip: 'Restore',
                 color: colorScheme.primary,
-                onPressed: () => _restore(context, provider, item),
+                onPressed: () => _restore(context, item),
               ),
               IconButton(
                 icon: Icon(
@@ -218,7 +213,7 @@ class _TrashViewState extends State<TrashView> {
                   color: colorScheme.error,
                 ),
                 tooltip: 'Delete forever',
-                onPressed: () => _confirmDeleteForever(context, provider, item),
+                onPressed: () => _confirmDeleteForever(context, item),
               ),
             ],
           ),
@@ -227,13 +222,9 @@ class _TrashViewState extends State<TrashView> {
     );
   }
 
-  Future<void> _restore(
-    BuildContext context,
-    ServerProvider provider,
-    NextcloudItem item,
-  ) async {
+  Future<void> _restore(BuildContext context, NextcloudItem item) async {
     final messenger = ScaffoldMessenger.of(context);
-    final success = await provider.restoreTrashItem(item);
+    final success = await context.read<TrashController>().restore(item);
     messenger.showSnackBar(
       SnackBar(
         content: Text(
@@ -246,7 +237,6 @@ class _TrashViewState extends State<TrashView> {
 
   Future<void> _confirmDeleteForever(
     BuildContext context,
-    ServerProvider provider,
     NextcloudItem item,
   ) async {
     final confirmed = await showDialog<bool>(
@@ -276,7 +266,7 @@ class _TrashViewState extends State<TrashView> {
     if (confirmed != true || !context.mounted) return;
 
     final messenger = ScaffoldMessenger.of(context);
-    final success = await provider.deleteTrashItemForever(item);
+    final success = await context.read<TrashController>().deleteForever(item);
     messenger.showSnackBar(
       SnackBar(
         content: Text(

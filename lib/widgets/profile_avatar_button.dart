@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../providers/server_provider.dart';
+import '../providers/session_controller.dart';
 import '../views/account_view.dart';
 
 /// Top-bar avatar button that opens the account screen. Replaces the old
@@ -20,7 +20,7 @@ class ProfileAvatarButton extends StatelessWidget {
     final velocity = details.primaryVelocity ?? 0;
     if (velocity.abs() < 250) return;
 
-    final provider = context.read<ServerProvider>();
+    final provider = context.read<SessionController>();
     final target = velocity < 0
         ? await provider.cycleToNextAccount()
         : await provider.cycleToPreviousAccount();
@@ -37,7 +37,7 @@ class ProfileAvatarButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<ServerProvider>();
+    final provider = context.watch<SessionController>();
     final colorScheme = Theme.of(context).colorScheme;
     final initial = provider.username.isNotEmpty
         ? provider.username[0].toUpperCase()

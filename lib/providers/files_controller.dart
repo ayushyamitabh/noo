@@ -1,0 +1,557 @@
+import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../models/nextcloud_item.dart';
+import 'session_controller.dart';
+
+enum FileSortField { name, dateCreated, dateModified, size }
+
+/// Which storage a listing shows — always exactly one, like the list/grid
+/// view toggle, not an optional filter. Shared across Files/Photos/
+/// Favorites (see [applyCommonFilters]'s doc comment).
+enum StorageScope { cloud, external }
+
+/// The Files tab's files/folders/both filter — independent of and applied
+/// after [StorageScope]/favorites/hidden filtering.
+enum FilesTypeFilter { all, filesOnly, foldersOnly }
+
+/// How aggressively the Files tab's folder listings (not thumbnails/file
+/// content - just the list of names/sizes/dates) are reused across
+/// navigation instead of refetched from the server every time.
+enum CachePolicy {
+  /// Every navigation refetches - today's behavior.
+  never,
+
+  /// A listing is reused until it's older than [FilesController.
+  /// cacheIntervalMinutes]; a timer also proactively refreshes the current
+  /// folder on that same interval while the app is in the foreground.
+  interval,
+
+  /// A listing is reused indefinitely until the user pulls to refresh.
+  manual,
+}
+
+/// One cached folder listing and when it was fetched.
+class _CachedDirectory {
+  final List<NextcloudItem> items;
+  final DateTime fetchedAt;
+
+  const _CachedDirectory(this.items, this.fetchedAt);
+}
+
+/// The Files tab: current folder/browsing state, display prefs (grid/list,
+/// hidden, type filter, storage scope, sort), the directory-listing cache,
+/// and - piggybacked onto the same fetch cycle as the original single
+/// provider did - account quota and the Activity tab's feed (neither is
+/// really "Files" data, but both were always fetched alongside the current
+/// folder's listing, not independently; preserved here as-is rather than
+/// invented a home for them, since untangling that wasn't asked for). Also
+/// the shared [storageScope]/[applyCommonFilters]/[applyFilesDisplayPrefs]
+/// logic Photos/Favorites both reuse - see their own controllers' doc
+/// comments for why they depend on this one.
+///
+/// Split out of the former single `ServerProvider` god object.
+class FilesController extends ChangeNotifier with WidgetsBindingObserver {
+  final SessionController session;
+
+  static const _prefGridView = 'ui_grid_view';
+  static const _prefStorageScope = 'ui_storage_scope';
+  static const _prefFilesTypeFilter = 'ui_files_type_filter';
+  static const _prefShowHiddenFiles = 'ui_show_hidden';
+  static const _prefFolderSort = 'ui_folder_sort';
+  static const _prefCachePolicy = 'ui_cache_policy';
+  static const _prefCacheIntervalMinutes = 'ui_cache_interval_minutes';
+
+  String _currentFolderPath = '/';
+  List<String> _pathStack = ['/'];
+
+  bool _isGridView = false;
+  StorageScope _storageScope = StorageScope.cloud;
+  FilesTypeFilter _filesTypeFilter = FilesTypeFilter.all;
+  bool _showHiddenFiles = false;
+
+  final Map<String, FileSortField> _folderSortField = {};
+  final Map<String, bool> _folderSortAscending = {};
+
+  CachePolicy _cachePolicy = CachePolicy.never;
+  int _cacheIntervalMinutes = 5;
+  final Map<String, _CachedDirectory> _directoryCache = {};
+  Timer? _cacheRefreshTimer;
+
+  List<NextcloudItem> _items = [];
+  NextcloudUserQuota? _quota;
+  List<NextcloudActivity> _activities = [];
+  bool _isLoading = false;
+  String? _errorMessage;
+
+  FilesController(this.session) {
+    WidgetsBinding.instance.addObserver(this);
+    session.addAccountClearedListener(_onAccountCleared);
+    session.addAccountActivatedListener(_onAccountActivated);
+  }
+
+  // Getters
+  String get currentFolderPath => _currentFolderPath;
+  List<String> get pathStack => _pathStack;
+  bool get isGridView => _isGridView;
+  StorageScope get storageScope => _storageScope;
+  FilesTypeFilter get filesTypeFilter => _filesTypeFilter;
+  bool get showHiddenFiles => _showHiddenFiles;
+  FileSortField get filesSortField =>
+      _folderSortField[_currentFolderPath] ?? FileSortField.name;
+  bool get filesSortAscending =>
+      _folderSortAscending[_currentFolderPath] ?? true;
+  CachePolicy get cachePolicy => _cachePolicy;
+  int get cacheIntervalMinutes => _cacheIntervalMinutes;
+  bool get isLoading => _isLoading;
+  String? get errorMessage => _errorMessage;
+  NextcloudUserQuota? get quota => _quota;
+  List<NextcloudActivity> get activities => _activities;
+
+  List<NextcloudItem> get items => applyFilesDisplayPrefs(_items);
+
+  int _compareItems(NextcloudItem a, NextcloudItem b, FileSortField field) {
+    switch (field) {
+      case FileSortField.name:
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      case FileSortField.dateCreated:
+        return a.dateCreated.compareTo(b.dateCreated);
+      case FileSortField.dateModified:
+        return a.lastModified.compareTo(b.lastModified);
+      case FileSortField.size:
+        return a.size.compareTo(b.size);
+    }
+  }
+
+  /// True if [item] or any ancestor folder in its path is a dotfile/dotfolder.
+  bool _isHiddenItem(NextcloudItem item) {
+    return item.path
+        .split('/')
+        .where((segment) => segment.isNotEmpty)
+        .any((segment) => segment.startsWith('.'));
+  }
+
+  /// Applies the shared favorites-only/hidden-files/storage-scope toggles -
+  /// shared by Files' own [items], Photos' `photoItems` (its own favorites-
+  /// only/hidden toggles, but [storageScope] here), and Favorites'
+  /// `favoriteItems` (via [applyFilesDisplayPrefs]).
+  List<NextcloudItem> applyCommonFilters(
+    List<NextcloudItem> source, {
+    required bool showFavoritesOnly,
+    required bool showHidden,
+  }) {
+    var filtered = source;
+    if (showFavoritesOnly) {
+      filtered = filtered.where((item) => item.isFavorite).toList();
+    }
+    if (!showHidden) {
+      filtered = filtered.where((item) => !_isHiddenItem(item)).toList();
+    }
+    filtered = filtered
+        .where(
+          (item) => _storageScope == StorageScope.external
+              ? item.isExternalStorage
+              : !item.isExternalStorage,
+        )
+        .toList();
+    return filtered;
+  }
+
+  /// Applies the Files tab's current sort/filter display prefs (hidden,
+  /// type filter, storage scope, sort field/direction) to an arbitrary raw
+  /// item list - factored out of the [items] getter so both the Favorites
+  /// tab and the Move/Copy destination picker (which fetches its own
+  /// listings via [fetchFolderListing] rather than reading [items] itself)
+  /// can render with the exact same controls/behavior as the Files tab
+  /// without duplicating this logic.
+  List<NextcloudItem> applyFilesDisplayPrefs(List<NextcloudItem> rawItems) {
+    var filtered = applyCommonFilters(
+      rawItems,
+      // Files itself doesn't filter by favorite - that's the dedicated
+      // Favorites tab's job.
+      showFavoritesOnly: false,
+      showHidden: _showHiddenFiles,
+    );
+    switch (_filesTypeFilter) {
+      case FilesTypeFilter.all:
+        break;
+      case FilesTypeFilter.filesOnly:
+        filtered = filtered.where((i) => !i.isFolder).toList();
+      case FilesTypeFilter.foldersOnly:
+        filtered = filtered.where((i) => i.isFolder).toList();
+    }
+
+    final field = filesSortField;
+    final folders = filtered.where((i) => i.isFolder).toList()
+      ..sort((a, b) => _compareItems(a, b, field));
+    final files = filtered.where((i) => !i.isFolder).toList()
+      ..sort((a, b) => _compareItems(a, b, field));
+    return filesSortAscending
+        ? [...folders, ...files]
+        : [...folders.reversed, ...files.reversed];
+  }
+
+  void _onAccountCleared() {
+    _cacheRefreshTimer?.cancel();
+    _directoryCache.clear();
+    _folderSortField.clear();
+    _folderSortAscending.clear();
+    _items = [];
+    _quota = null;
+    _activities = [];
+    _currentFolderPath = '/';
+    _pathStack = ['/'];
+    _isGridView = false;
+    _storageScope = StorageScope.cloud;
+    _filesTypeFilter = FilesTypeFilter.all;
+    _showHiddenFiles = false;
+    _cachePolicy = CachePolicy.never;
+    _cacheIntervalMinutes = 5;
+    _isLoading = false;
+    _errorMessage = null;
+    notifyListeners();
+  }
+
+  Future<void> _onAccountActivated() async {
+    final id = session.activeAccountId;
+    if (id != null) {
+      final prefs = await session.prefsFuture;
+      String k(String base) => session.accountStore.accountPrefKey(id, base);
+
+      _isGridView = prefs.getBool(k(_prefGridView)) ?? false;
+      final storageScopeName = prefs.getString(k(_prefStorageScope));
+      _storageScope = StorageScope.values.firstWhere(
+        (s) => s.name == storageScopeName,
+        orElse: () => StorageScope.cloud,
+      );
+      final filesTypeFilterName = prefs.getString(k(_prefFilesTypeFilter));
+      _filesTypeFilter = FilesTypeFilter.values.firstWhere(
+        (f) => f.name == filesTypeFilterName,
+        orElse: () => FilesTypeFilter.all,
+      );
+      _showHiddenFiles = prefs.getBool(k(_prefShowHiddenFiles)) ?? false;
+
+      final folderSortJson = prefs.getString(k(_prefFolderSort));
+      if (folderSortJson != null) {
+        try {
+          final decoded = jsonDecode(folderSortJson) as Map<String, dynamic>;
+          for (final entry in decoded.entries) {
+            final value = entry.value as Map<String, dynamic>;
+            final fieldName = value['field'] as String?;
+            if (fieldName != null) {
+              _folderSortField[entry.key] = FileSortField.values.firstWhere(
+                (f) => f.name == fieldName,
+                orElse: () => FileSortField.name,
+              );
+            }
+            final ascending = value['ascending'] as bool?;
+            if (ascending != null) _folderSortAscending[entry.key] = ascending;
+          }
+        } catch (e) {
+          debugPrint('[FilesController] Folder sort restore failed: $e');
+        }
+      }
+
+      final cachePolicyName = prefs.getString(k(_prefCachePolicy));
+      _cachePolicy = CachePolicy.values.firstWhere(
+        (c) => c.name == cachePolicyName,
+        orElse: () => CachePolicy.never,
+      );
+      _cacheIntervalMinutes = prefs.getInt(k(_prefCacheIntervalMinutes)) ?? 5;
+      notifyListeners();
+    }
+    _startCacheRefreshTimerIfNeeded();
+    await refreshData();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Only relevant under CachePolicy.interval.
+    if (state == AppLifecycleState.resumed) {
+      _startCacheRefreshTimerIfNeeded();
+    } else if (state == AppLifecycleState.paused) {
+      _cacheRefreshTimer?.cancel();
+    }
+  }
+
+  void _startCacheRefreshTimerIfNeeded() {
+    _cacheRefreshTimer?.cancel();
+    if (_cachePolicy != CachePolicy.interval || !session.isLoggedIn) return;
+    _cacheRefreshTimer = Timer.periodic(
+      Duration(minutes: _cacheIntervalMinutes),
+      (_) => refreshData(),
+    );
+  }
+
+  bool _isCacheFresh(String path) {
+    if (_cachePolicy == CachePolicy.never) return false;
+    final cached = _directoryCache[path];
+    if (cached == null) return false;
+    if (_cachePolicy == CachePolicy.manual) return true;
+    return DateTime.now().difference(cached.fetchedAt) <
+        Duration(minutes: _cacheIntervalMinutes);
+  }
+
+  Future<void> refreshData() async {
+    final service = session.service;
+    if (!session.isLoggedIn || service == null) {
+      debugPrint(
+        '[FilesController] refreshData skipped: isLoggedIn=${session.isLoggedIn}, service=${service != null}',
+      );
+      return;
+    }
+    // Captured so a response landing after an account switch mid-flight
+    // can recognize it's for an account the user has already left and
+    // discard itself instead of overwriting the new account's content.
+    final gen = session.sessionGeneration;
+
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    debugPrint('[FilesController] Refreshing data for path: $_currentFolderPath');
+
+    try {
+      final items = await service.fetchDirectory(_currentFolderPath);
+      if (gen != session.sessionGeneration) return;
+      _items = items;
+      _directoryCache[_currentFolderPath] = _CachedDirectory(
+        _items,
+        DateTime.now(),
+      );
+      debugPrint(
+        '[FilesController] Loaded ${_items.length} items for $_currentFolderPath',
+      );
+      try {
+        _quota = await service.fetchUserQuota();
+      } catch (e) {
+        debugPrint('[FilesController] Quota fetch warning: $e');
+      }
+      try {
+        _activities = await service.fetchActivities();
+      } catch (e) {
+        debugPrint('[FilesController] Activity fetch warning: $e');
+      }
+    } catch (e) {
+      if (gen != session.sessionGeneration) return;
+      debugPrint('[FilesController] Error fetching directory: $e');
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+    } finally {
+      if (gen == session.sessionGeneration) {
+        _isLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<List<NextcloudItem>> searchFiles(String query) async {
+    final service = session.service;
+    if (service == null) return [];
+    return service.searchFiles(query);
+  }
+
+  Future<void> navigateToFolder(String path) async {
+    _pathStack.add(path);
+    await _navigateTo(path);
+  }
+
+  Future<void> navigateUp() async {
+    if (_pathStack.length > 1) {
+      _pathStack.removeLast();
+      await _navigateTo(_pathStack.last);
+    }
+  }
+
+  /// Jumps directly to an ancestor folder by its position in [pathStack]
+  /// (as tapped from a breadcrumb), trimming everything below it.
+  Future<void> navigateToPathIndex(int index) async {
+    if (index < 0 || index >= _pathStack.length - 1) return;
+    _pathStack = _pathStack.sublist(0, index + 1);
+    await _navigateTo(_pathStack.last);
+  }
+
+  /// Navigates directly to an arbitrary absolute folder path (e.g. from a
+  /// search result) - unlike [navigateToFolder], which assumes [path] is a
+  /// child of wherever the user is currently browsing and just appends it,
+  /// this rebuilds the whole breadcrumb trail from root so it's correct
+  /// regardless of where the user was before.
+  Future<void> navigateToAbsoluteFolder(String path) async {
+    final normalized = path.trim().replaceAll(RegExp(r'/+$'), '');
+    final segments = normalized.split('/').where((s) => s.isNotEmpty).toList();
+    final stack = <String>['/'];
+    var current = '';
+    for (final segment in segments) {
+      current = '$current/$segment';
+      stack.add(current);
+    }
+    _pathStack = stack;
+    await _navigateTo(stack.last);
+  }
+
+  /// Switches the current folder to [path], serving its listing straight
+  /// from the cache when that's still fresh (instant, no network call at
+  /// all) and only falling back to [refreshData] otherwise.
+  Future<void> _navigateTo(String path) async {
+    _currentFolderPath = path;
+    final cached = _directoryCache[path];
+    if (cached != null && _isCacheFresh(path)) {
+      debugPrint('[FilesController] Serving cached listing for $path');
+      _items = cached.items;
+      _errorMessage = null;
+      notifyListeners();
+      return;
+    }
+    await refreshData();
+  }
+
+  /// A destination-picker-only fetch: the current folder listing state
+  /// (`items`/`currentFolderPath`/`pathStack`/the directory cache) belongs
+  /// to whichever tab is actively browsing (Files), so the Move/Copy
+  /// destination picker deliberately doesn't touch any of it - it fetches
+  /// listings for its own local navigation state through this instead.
+  Future<List<NextcloudItem>> fetchFolderListing(String path) {
+    return session.service?.fetchDirectory(path) ?? Future.value([]);
+  }
+
+  void invalidateCache() => _directoryCache.clear();
+
+  /// Persists a per-account browsing pref under its `acct_<id>_`-namespaced
+  /// key. No-op if there's no active account (shouldn't normally happen -
+  /// these setters are only reachable from screens that require one).
+  void _persistAccountPref(
+    String baseKey,
+    void Function(SharedPreferences prefs, String key) write,
+  ) {
+    final id = session.activeAccountId;
+    if (id == null) return;
+    session.prefsFuture.then(
+      (p) => write(p, session.accountStore.accountPrefKey(id, baseKey)),
+    );
+  }
+
+  void setGridView(bool value) {
+    if (_isGridView == value) return;
+    _isGridView = value;
+    notifyListeners();
+    _persistAccountPref(_prefGridView, (p, key) => p.setBool(key, value));
+  }
+
+  void setStorageScope(StorageScope scope) {
+    if (_storageScope == scope) return;
+    _storageScope = scope;
+    notifyListeners();
+    _persistAccountPref(
+      _prefStorageScope,
+      (p, key) => p.setString(key, scope.name),
+    );
+  }
+
+  void setFilesTypeFilter(FilesTypeFilter filter) {
+    if (_filesTypeFilter == filter) return;
+    _filesTypeFilter = filter;
+    notifyListeners();
+    _persistAccountPref(
+      _prefFilesTypeFilter,
+      (p, key) => p.setString(key, filter.name),
+    );
+  }
+
+  /// Only *enabling* hidden-files visibility is gated - hiding them again
+  /// never exposes anything, so that direction is always allowed instantly.
+  Future<void> toggleShowHiddenFiles() async {
+    if (!_showHiddenFiles) {
+      if (!await session.passGate(
+        session.lockHiddenFiles,
+        'Unlock to show hidden files',
+      )) {
+        return;
+      }
+    }
+    _showHiddenFiles = !_showHiddenFiles;
+    notifyListeners();
+    _persistAccountPref(
+      _prefShowHiddenFiles,
+      (p, key) => p.setBool(key, _showHiddenFiles),
+    );
+  }
+
+  void _persistFolderSort() {
+    final combined = <String, dynamic>{};
+    for (final path in {
+      ..._folderSortField.keys,
+      ..._folderSortAscending.keys,
+    }) {
+      combined[path] = {
+        'field': _folderSortField[path]?.name,
+        'ascending': _folderSortAscending[path],
+      };
+    }
+    _persistAccountPref(
+      _prefFolderSort,
+      (p, key) => p.setString(key, jsonEncode(combined)),
+    );
+  }
+
+  void setFilesSortField(FileSortField field) {
+    if (filesSortField == field) return;
+    _folderSortField[_currentFolderPath] = field;
+    notifyListeners();
+    _persistFolderSort();
+  }
+
+  void toggleFilesSortOrder() {
+    _folderSortAscending[_currentFolderPath] = !filesSortAscending;
+    notifyListeners();
+    _persistFolderSort();
+  }
+
+  void setCachePolicy(CachePolicy policy) {
+    if (_cachePolicy == policy) return;
+    _cachePolicy = policy;
+    notifyListeners();
+    _persistAccountPref(
+      _prefCachePolicy,
+      (p, key) => p.setString(key, policy.name),
+    );
+    _startCacheRefreshTimerIfNeeded();
+  }
+
+  void setCacheIntervalMinutes(int minutes) {
+    final clamped = minutes.clamp(1, 60);
+    if (_cacheIntervalMinutes == clamped) return;
+    _cacheIntervalMinutes = clamped;
+    notifyListeners();
+    _persistAccountPref(
+      _prefCacheIntervalMinutes,
+      (p, key) => p.setInt(key, clamped),
+    );
+    _startCacheRefreshTimerIfNeeded();
+  }
+
+  Future<bool> createFolder(String folderName) async {
+    final service = session.service;
+    if (service == null) return false;
+    final success = await service.createFolder(_currentFolderPath, folderName);
+    if (success) {
+      await refreshData();
+    }
+    return success;
+  }
+
+  /// Patches a favorite-toggle result into [items] in place (no refetch) -
+  /// called by `ItemOperations.toggleItemFavorite` after a successful
+  /// server call.
+  void applyFavoriteToggle(NextcloudItem updated) {
+    final index = _items.indexWhere((i) => i.id == updated.id);
+    if (index != -1) _items[index] = updated;
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _cacheRefreshTimer?.cancel();
+    super.dispose();
+  }
+}

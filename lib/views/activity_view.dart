@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import '../providers/server_provider.dart';
+import '../providers/files_controller.dart';
 import '../widgets/more_tabs_button.dart';
 import '../widgets/profile_avatar_button.dart';
 import '../widgets/synced_header_scaffold.dart';
@@ -15,13 +15,13 @@ class ActivityView extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final provider = context.watch<ServerProvider>();
-    final activities = provider.activities;
+    final files = context.watch<FilesController>();
+    final activities = files.activities;
 
     final List<Widget> contentSlivers = [
       const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
-      if (provider.isLoading && activities.isEmpty)
+      if (files.isLoading && activities.isEmpty)
         const SliverFillRemaining(
           hasScrollBody: false,
           child: Center(child: CircularProgressIndicator()),
@@ -134,7 +134,6 @@ class ActivityView extends StatelessWidget {
 
     return SyncedHeaderScaffold(
       scrollController: scrollController,
-      provider: provider,
       actions: const [MoreTabsButton(), ProfileAvatarButton()],
       contentSlivers: contentSlivers,
     );

@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:provider/provider.dart';
 import '../models/nextcloud_item.dart';
 import '../models/sync_status.dart';
-import '../providers/server_provider.dart';
+import '../providers/files_controller.dart';
+import '../providers/session_controller.dart';
+import '../providers/sync_status_controller.dart';
 
 /// Icon/label for the persistent header chip/panel - reflects device-sync
-/// status (see `ServerProvider.syncHeaderStatus`), not the WebDAV
+/// status (see `SyncStatusController.syncHeaderStatus`), not the WebDAV
 /// directory-listing refresh the pull gesture itself triggers (that has
 /// its own, separate floating spinner bubble - see
 /// `_SyncedHeaderScaffoldState`'s `_isRefreshing`).
@@ -42,7 +45,6 @@ String formatQuota(NextcloudUserQuota quota) {
 /// holds the tab's own content slivers.
 class SyncedHeaderScaffold extends StatefulWidget {
   final ScrollController scrollController;
-  final ServerProvider provider;
 
   /// Trailing icons in the app bar (e.g. an upload button, the avatar).
   final List<Widget> actions;
@@ -53,8 +55,8 @@ class SyncedHeaderScaffold extends StatefulWidget {
   final List<Widget> contentSlivers;
 
   /// What a deliberate pull-to-sync should trigger. Defaults to
-  /// [ServerProvider.refreshData] (the current folder's listing); pass e.g.
-  /// `provider.fetchTrash` for a tab backed by different data.
+  /// [FilesController.refreshData] (the current folder's listing); pass
+  /// e.g. `trashController.fetchAll` for a tab backed by different data.
   final Future<void> Function()? onRefresh;
 
   /// When non-null (a tab is mid-selection), this takes over the pinned top
@@ -69,7 +71,6 @@ class SyncedHeaderScaffold extends StatefulWidget {
   const SyncedHeaderScaffold({
     super.key,
     required this.scrollController,
-    required this.provider,
     required this.actions,
     required this.contentSlivers,
     this.onRefresh,
@@ -118,7 +119,8 @@ class _SyncedHeaderScaffoldState extends State<SyncedHeaderScaffold> {
   }
 
   void _startRefresh() {
-    final refresh = widget.onRefresh ?? widget.provider.refreshData;
+    final refresh =
+        widget.onRefresh ?? context.read<FilesController>().refreshData;
     setState(() => _isRefreshing = true);
     refresh().whenComplete(() {
       if (mounted) setState(() => _isRefreshing = false);
@@ -163,7 +165,7 @@ class _SyncedHeaderScaffoldState extends State<SyncedHeaderScaffold> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final provider = widget.provider;
+    final syncStatus = context.watch<SyncStatusController>();
 
     final Widget leadingWidget;
     if (_headerLocked) {
@@ -175,7 +177,7 @@ class _SyncedHeaderScaffoldState extends State<SyncedHeaderScaffold> {
     } else if (_isPulling) {
       leadingWidget = const SizedBox.shrink();
     } else {
-      leadingWidget = _SyncStatusChip(provider: provider, onTap: _lockOpen);
+      leadingWidget = _SyncStatusChip(onTap: _lockOpen);
     }
 
     final topInset = MediaQuery.of(context).padding.top;
@@ -205,7 +207,7 @@ class _SyncedHeaderScaffoldState extends State<SyncedHeaderScaffold> {
                   expandedHeight: widget.selectionBar != null
                       ? kToolbarHeight
                       : (_headerLocked
-                            ? 190.0 + provider.syncConflicts.length * 52.0
+                            ? 190.0 + syncStatus.syncConflicts.length * 52.0
                             : kToolbarHeight),
                   collapsedHeight: kToolbarHeight,
                   backgroundColor: colorScheme.surfaceContainer,
@@ -225,7 +227,6 @@ class _SyncedHeaderScaffoldState extends State<SyncedHeaderScaffold> {
                       ? null
                       : FlexibleSpaceBar(
                           background: _SyncedStretchPanel(
-                            provider: provider,
                             forceVisible: _headerLocked,
                           ),
                         ),
@@ -287,16 +288,15 @@ class _SyncedHeaderScaffoldState extends State<SyncedHeaderScaffold> {
 /// [_SyncedStretchPanel] — tapping it is a discoverable shortcut for pulling
 /// the header down to expand that same "Synced" view.
 class _SyncStatusChip extends StatelessWidget {
-  final ServerProvider provider;
   final VoidCallback onTap;
 
-  const _SyncStatusChip({required this.provider, required this.onTap});
+  const _SyncStatusChip({required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final status = provider.syncHeaderStatus;
+    final status = context.watch<SyncStatusController>().syncHeaderStatus;
     final (icon, label) = _syncHeaderDisplay(status);
     final iconColor = status == SyncHeaderStatus.alert
         ? colorScheme.error
@@ -337,36 +337,33 @@ class _SyncStatusChip extends StatelessWidget {
 /// [_SyncedHeaderScaffoldState] decides via [forceVisible] whether it stays
 /// locked open.
 class _SyncedStretchPanel extends StatelessWidget {
-  final ServerProvider provider;
-
   /// Keeps the panel fully shown even without live overscroll — used once
   /// the header has "locked" open after a deliberate pull-down.
   final bool forceVisible;
 
-  const _SyncedStretchPanel({
-    required this.provider,
-    this.forceVisible = false,
-  });
+  const _SyncedStretchPanel({this.forceVisible = false});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final topInset = MediaQuery.of(context).padding.top;
+    final quota = context.watch<FilesController>().quota;
+    final serverUrl = context.watch<SessionController>().serverUrl;
+    final syncStatus = context.watch<SyncStatusController>();
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final settings = context
+        final spacerSettings = context
             .dependOnInheritedWidgetOfExactType<FlexibleSpaceBarSettings>();
-        final maxExtent = settings?.maxExtent ?? constraints.maxHeight;
+        final maxExtent = spacerSettings?.maxExtent ?? constraints.maxHeight;
         final stretch = (constraints.maxHeight - maxExtent).clamp(0.0, 80.0);
         // Reaches 1.0 (title fully hidden) at 50px of pull — comfortably
         // before the 100px lock threshold.
         final progress = forceVisible ? 1.0 : (stretch / 50).clamp(0.0, 1.0);
-        final quota = provider.quota;
-        final status = provider.syncHeaderStatus;
+        final status = syncStatus.syncHeaderStatus;
         final (_, statusLabel) = _syncHeaderDisplay(status);
-        final conflicts = provider.syncConflicts;
+        final conflicts = syncStatus.syncConflicts;
 
         return Stack(
           children: [
@@ -389,13 +386,10 @@ class _SyncedStretchPanel extends StatelessWidget {
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      if (provider.serverUrl.isNotEmpty) ...[
+                      if (serverUrl.isNotEmpty) ...[
                         const SizedBox(height: 2),
                         Text(
-                          provider.serverUrl.replaceFirst(
-                            RegExp(r'^https?://'),
-                            '',
-                          ),
+                          serverUrl.replaceFirst(RegExp(r'^https?://'), ''),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.bodySmall?.copyWith(
@@ -438,10 +432,7 @@ class _SyncedStretchPanel extends StatelessWidget {
                         for (final conflict in conflicts)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 8),
-                            child: _SyncConflictRow(
-                              conflict: conflict,
-                              provider: provider,
-                            ),
+                            child: _SyncConflictRow(conflict: conflict),
                           ),
                       ],
                     ],
@@ -462,9 +453,8 @@ class _SyncedStretchPanel extends StatelessWidget {
 /// side), just triggered in-app instead.
 class _SyncConflictRow extends StatefulWidget {
   final SyncConflictInfo conflict;
-  final ServerProvider provider;
 
-  const _SyncConflictRow({required this.conflict, required this.provider});
+  const _SyncConflictRow({required this.conflict});
 
   @override
   State<_SyncConflictRow> createState() => _SyncConflictRowState();
@@ -476,7 +466,7 @@ class _SyncConflictRowState extends State<_SyncConflictRow> {
   Future<void> _resolve(bool useLocal) async {
     setState(() => _resolving = true);
     try {
-      await widget.provider.resolveSyncConflict(
+      await context.read<SyncStatusController>().resolveSyncConflict(
         widget.conflict,
         useLocal: useLocal,
       );

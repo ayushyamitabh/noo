@@ -8,7 +8,9 @@ lib/
                       # MainShellView (bottom-nav shell), share-intent listener
   models/             # plain data classes (NextcloudItem, NextcloudShare,
                        # SavedAccount, AppTab, ...)
-  providers/           # ServerProvider — the single app-wide ChangeNotifier
+  providers/           # per-domain ChangeNotifiers (SessionController,
+                       # FilesController, PhotosController, ...) plus
+                       # ItemOperations, a plain cross-domain coordinator
   services/             # network/IO: NextcloudService, LoginFlowService,
                          # AccountStore, AppLockService
   theme/                 # AppTheme (Material 3 ThemeData)
@@ -23,91 +25,119 @@ lib/
 `views/` files are screens routed to directly (a tab, or pushed via
 `Navigator`). `widgets/` files are building blocks used by more than one
 view (or complex enough to warrant their own file) — nothing in `widgets/`
-owns app state itself; it reads it from the `ServerProvider` passed down or
-read via `context.watch`/`context.read`.
+owns app state itself; it reads whichever controller(s) it needs via
+`context.watch`/`context.read`.
 
 ## State management
 
-There is exactly one `ChangeNotifier`: [`ServerProvider`](../../lib/providers/server_provider.dart)
-(~1500 lines). It is created once in `main()` and provided at the root with
-`provider`'s `ChangeNotifierProvider`. It owns:
+State used to live in one 2300+ line `ServerProvider` god object. It's now
+split into ten focused `ChangeNotifier`s plus one plain coordinator, all
+registered in `main()`'s `MultiProvider` in dependency order (later
+providers read earlier ones via `context.read` in their `create` callback —
+safe since none of these providers are ever recreated for the app's
+lifetime; account switching is internal state on `SessionController`, not a
+new provider instance):
 
-- **Multi-account state**: the list of saved accounts (`accounts`), which one
-  is active (`activeAccountId`/`activeAccount`), and a `_sessionGeneration`
-  counter incremented on every account switch so an in-flight fetch from the
-  account just left can recognize it's stale and discard its result instead
-  of writing into the newly-active account's state — every method that
-  writes fetched data into a shared field (`refreshData`, `fetchAllMedia`,
-  `fetchTrash`, `fetchShares`, `fetchRecent`,
-  `_applyCredentialsForAccount`) captures the generation at entry and checks
-  it before each write. See `server.md` for the full account-switch/storage
-  story.
-- auth/session state for whichever account is active (`isLoggedIn`,
-  `isRestoringSession`, login-flow status)
-- the active `NextcloudService` instance (null until logged in)
-- all fetched data, scoped to the active account (`items`, `quota`,
-  `activities`, `photoItems`, `trashItems`, `shares`, `recentItems`) — all
-  torn down and refetched fresh on every account switch (no simultaneous
-  multi-account state; only one account's content is ever live in memory)
-- navigation-within-files state (`currentFolderPath`, `pathStack`), plus an
-  in-memory `_directoryCache` keyed by folder path (see `CachePolicy`)
-- UI settings that persist across launches — split into **global** (theme
-  mode, seed color, dynamic-color toggle, bottom-bar opacity/blur,
-  tap-tab-to-scroll-top, seek bar style, tab order/visibility/default, swipe
-  actions, login lock, sync-on-cellular — see below) and **per-account**
-  (grid/list view, favorites-only, show-hidden, storage scope, Photos sort,
-  Files' per-folder sort map, cache policy, synced folders) — see
-  `server.md` for exactly which is which and why
-- **Login lock** (`loginLockEnabled`/`lockAccountSwitching`/
-  `lockHiddenFiles`/`needsUnlock`): an app-wide PIN/biometric gate via
-  `AppLockService` (a thin wrapper over `local_auth` — this app never
-  stores or hashes a PIN itself, it delegates entirely to whatever
-  credential the OS already has configured). `needsUnlock` is
-  `loginLockEnabled && !_isUnlocked`, where `_isUnlocked` is transient
-  (never persisted) and reset to `false` on every backgrounding
-  (`didChangeAppLifecycleState`, `AppLifecycleState.paused`) so the lock has
-  real value rather than only firing once per cold start. `switchAccount`/
-  `cycleToNextAccount`/`cycleToPreviousAccount` and *enabling* (not
-  disabling) `showHiddenFiles`/`showHiddenPhotos` each call the shared
-  `_passGate` helper, which no-ops unless both `loginLockEnabled` and the
-  relevant per-feature toggle are on.
+- [`SessionController`](../../lib/providers/session_controller.dart) — the
+  foundation everything else depends on. Owns multi-account state (the
+  saved-accounts list, which one is active, `sessionGeneration` — see
+  below), auth/login-flow state (`isLoggedIn`, `isRestoringSession`,
+  `loginFlowStatus`), the active `NextcloudService` instance, and login lock
+  (`loginLockEnabled`/`lockAccountSwitching`/`lockHiddenFiles`/
+  `needsUnlock`/`passGate`). Exposes `addAccountClearedListener`/
+  `addAccountActivatedListener` (plain `List<VoidCallback>`) so sibling
+  controllers — constructed after `SessionController` and unable to hold a
+  forward reference to it — can react to login/logout/account-switch
+  without a circular dependency.
+- [`SettingsController`](../../lib/providers/settings_controller.dart) —
+  global UI prefs independent of login state: theme mode/seed color/dynamic
+  color, bottom-bar opacity/blur, tap-tab-to-scroll-top, seek bar style, tab
+  order/visibility/default (`requestedTab`/`requestTab`/
+  `consumeRequestedTab`), swipe actions.
+- [`FilesController`](../../lib/providers/files_controller.dart) — the
+  Files tab: `items`/`currentFolderPath`/`pathStack`, the in-memory
+  `_directoryCache` (see `CachePolicy`), per-account display prefs
+  (grid/list, hidden files, storage scope, sort field/order, per-folder
+  sort map), and the shared `applyCommonFilters`/`applyFilesDisplayPrefs`
+  helpers Photos/Favorites reuse rather than duplicating the same
+  filter/sort logic.
+- [`PhotosController`](../../lib/providers/photos_controller.dart) /
+  [`FavoritesController`](../../lib/providers/favorites_controller.dart) —
+  each depends on `FilesController` for the shared storage-scope toggle and
+  display-prefs helpers, but owns its own account-wide item list and
+  independent favorites-only/hidden/sort state.
+- [`TrashController`](../../lib/providers/trash_controller.dart) /
+  [`SharesController`](../../lib/providers/shares_controller.dart) /
+  [`RecentController`](../../lib/providers/recent_controller.dart) — one
+  per remaining tab, each just `items`/`isLoading`/`errorMessage` plus that
+  tab's own fetch/mutate methods. All three (plus Photos/Favorites) share
+  one shape: capture `session.sessionGeneration` at fetch entry, set
+  loading/clear error, fetch, check the generation before writing the
+  result, `notifyListeners()`.
+- [`SyncStatusController`](../../lib/providers/sync_status_controller.dart)
+  — device-sync settings and live status (`syncStatusFor(item)`,
+  `syncHeaderStatus`, conflicts), subscribed to `SyncService`'s status
+  stream directly rather than living inside the same object as the item
+  lists it decorates.
+- [`PickController`](../../lib/providers/pick_controller.dart) — "being
+  picked by another app" state (`pickRequest`/`isPicking`/`confirmPick`/
+  `itemMatchesPickFilter`) — see `server.md`.
+- [`ItemOperations`](../../lib/providers/item_operations.dart) — not a
+  `ChangeNotifier`; a plain, `const`-constructible class holding direct
+  references to `SessionController`/`FilesController`/`PhotosController`/
+  `FavoritesController`. The one place that knows how a mutation
+  (delete/rename/move/copy/favorite-toggle/create-folder) ripples across
+  those three tabs' independent item lists — deliberately direct
+  references rather than a generic event bus, so a caller can `await` a
+  mutation and know every affected list has already been reconciled by the
+  time it returns, the same guarantee the old god object gave for free.
+  Also home to the file-details sheet's per-item pass-throughs
+  (shares/activity/versions/restore) — stateless, so they don't need a
+  controller of their own.
 
-New **global** state belongs on `ServerProvider` as a private field + getter
-+ a method that mutates it, calls `notifyListeners()`, and persists via
-`_prefsFuture`. New **per-account** state follows the same shape but
-persists through `_persistAccountPref` (namespaces the pref key under
+`sessionGeneration` (on `SessionController`, read by every other
+controller) is incremented on every account switch so an in-flight fetch
+from the account just left can recognize it's stale and discard its result
+instead of writing into the newly-active account's state — see `server.md`
+for the full account-switch/storage story.
+
+New **global** state belongs on `SettingsController` as a private field +
+getter + a method that mutates it, calls `notifyListeners()`, and persists
+via its own prefs future. New **per-account** state follows the same shape
+on whichever controller owns that domain, but persists through
+`_persistAccountPref` (namespaces the pref key under
 `acct_<activeAccountId>_...` via `AccountStore.accountPrefKey`) and must be
-reset/reloaded in `_applyAccountPrefs` so it's correct after a switch.
-Screen-local state (e.g. a `TextEditingController`, an expanded/collapsed
-flag) stays in that view's own `State` class — see `standards.md` for the
-split.
+reset/reloaded on `SessionController`'s account-activated listener so it's
+correct after a switch. Screen-local state (e.g. a `TextEditingController`,
+an expanded/collapsed flag) stays in that view's own `State` class — see
+`standards.md` for the split.
 
-There's no separate repository/data layer: views call `ServerProvider`
-methods directly, which call `NextcloudService`/`LoginFlowService`/
-`AccountStore`/`AppLockService`.
+There's no separate repository/data layer: views call controller methods
+directly, which call `NextcloudService`/`LoginFlowService`/`AccountStore`/
+`AppLockService`.
 
 ## Navigation / screen flow
 
-`main.dart`'s `NextcloudApp` picks the app's `home` screen from provider
-state, no named routes:
+`main.dart`'s `NextcloudApp` picks the app's `home` screen from
+`SessionController` state, no named routes:
 
-- `provider.isRestoringSession` → `_SplashView` (monochrome app icon,
+- `session.isRestoringSession` → `_SplashView` (monochrome app icon,
   tinted via `ColorFiltered` to the theme's `onSurface` so it works in both
   light/dark, plus a small spinner, while `flutter_secure_storage`/
   `shared_preferences` are read on startup)
-- else `!provider.isLoggedIn` → `LoginView` (server-address entry + Login
+- else `!session.isLoggedIn` → `LoginView` (server-address entry + Login
   Flow v2) — `isLoggedIn` is only ever false here or after the last saved
   account is removed; switching between multiple saved accounts never
   routes through this screen (see `server.md`)
-- else `provider.needsUnlock` → `LockScreenView` (login lock — see above)
+- else `session.needsUnlock` → `LockScreenView` (login lock — see above)
 - else `MainShellView`
 
 `MainShellView` is a bottom-nav `IndexedStack` over up to 7 tabs — Files,
 Photos, Favorites, Activity, Trash, Shares, Recent — user-configurable
 (order, visibility up to `maxVisibleTabs`, default tab) via
-`AppTab`/`ServerProvider` and rendered through `buildAppTabView`
+`AppTab`/`SettingsController` and rendered through `buildAppTabView`
 (`widgets/app_tab_view_builder.dart`). `maxVisibleTabs` (5) is less than the
-total tab count, and `ServerProvider._enforceMaxVisibleTabs` already
+total tab count, and `SettingsController._enforceMaxVisibleTabs` already
 auto-hides overflow on load (fresh install, or - as when Favorites was
 added - an existing saved tab order from before a new tab existed), so
 adding a tab to the `AppTab` enum needs no extra migration.
@@ -125,7 +155,7 @@ result `Uri`s instead of a share intent's) rather than a separate
 in-app-only upload, so both entry points get the same destination picker
 and the same durable background-service upload. It similarly owns the pick-intent listener
 (`PickIntentService` - see `server.md` for the full "being picked by
-another app" story) that feeds `ServerProvider.pickRequest`; while
+another app" story) that feeds `PickController.pickRequest`; while
 `isPicking`, the visible tab list is overridden to just Files and Photos
 regardless of the user's own hidden/reordered tab settings, since those
 are the only two views that know how to handle a picking-mode tap and the
@@ -170,9 +200,9 @@ The Move/Copy destination picker
 pushed from Files/Photos' selection toolbar - see `server.md` for the
 backend side) visually mirrors `ShareUploadView`'s browser the same way,
 but is a deliberately different case for state: it does **not** reuse
-`ServerProvider`'s shared `currentFolderPath`/`pathStack`/`items`, and
+`FilesController`'s shared `currentFolderPath`/`pathStack`/`items`, and
 owns its own local navigation state instead, fetching through the
-stateless `ServerProvider.fetchFolderListing`/`applyFilesDisplayPrefs`
+stateless `FilesController.fetchFolderListing`/`applyFilesDisplayPrefs`
 pair. `ShareUploadView` can get away with hijacking the shared state
 because it always resets to root on entry and pops all the way to the
 app's root route on completion - fine for a cold share-intent launch with

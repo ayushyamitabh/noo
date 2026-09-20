@@ -7,7 +7,11 @@ import 'package:share_plus/share_plus.dart';
 import '../models/app_tab.dart';
 import '../models/nextcloud_item.dart';
 import '../models/selection_action.dart';
-import '../providers/server_provider.dart';
+import '../providers/favorites_controller.dart';
+import '../providers/files_controller.dart';
+import '../providers/item_operations.dart';
+import '../providers/session_controller.dart';
+import '../providers/settings_controller.dart';
 import '../services/download_service.dart';
 import '../widgets/details/details_sheet.dart';
 import '../widgets/item_icon.dart';
@@ -24,7 +28,7 @@ import 'move_copy_destination_picker.dart';
 
 /// Every favorited file/folder across the whole account, account-wide - a
 /// real tab rather than a filter toggle scoped to whatever folder the
-/// Files tab happens to be browsing (see `ServerProvider.fetchAllFavorites`
+/// Files tab happens to be browsing (see `FavoritesController.fetchAll`
 /// for why: a favorited item several folders deep needs to show up
 /// regardless of whether its parent folders are themselves favorited,
 /// which a current-folder-only filter can never do, and a flat account-
@@ -32,7 +36,7 @@ import 'move_copy_destination_picker.dart';
 /// toggle had - the trail showing wherever Files was last browsing while
 /// the content showed something else entirely - simply can't happen).
 /// Shares Files' own sort/hidden/storage-scope/grid-list display prefs
-/// (via `ServerProvider.applyFilesDisplayPrefs`) rather than a separate
+/// (via `FilesController.applyFilesDisplayPrefs`) rather than a separate
 /// parallel settings dimension.
 class FavoritesView extends StatefulWidget {
   final ScrollController scrollController;
@@ -128,13 +132,12 @@ class _FavoritesViewState extends State<FavoritesView>
   /// back on this tab either way.
   void _openFavorite(
     BuildContext context,
-    ServerProvider provider,
     NextcloudItem item,
     List<NextcloudItem> siblings,
   ) {
     if (item.isFolder) {
-      provider.navigateToAbsoluteFolder(item.path);
-      provider.requestTab(AppTab.files);
+      context.read<FilesController>().navigateToAbsoluteFolder(item.path);
+      context.read<SettingsController>().requestTab(AppTab.files);
     } else {
       Navigator.push(
         context,
@@ -145,42 +148,39 @@ class _FavoritesViewState extends State<FavoritesView>
 
   /// The bulk actions shown in the sticky selection toolbar for the
   /// currently-selected items - same set Files/Photos offer.
-  List<SelectionAction> _buildSelectionActions(
-    ServerProvider provider,
-    List<NextcloudItem> selected,
-  ) {
+  List<SelectionAction> _buildSelectionActions(List<NextcloudItem> selected) {
     return [
       SelectionAction(
         icon: Icons.favorite_border_rounded,
         label: 'Remove from favorites',
-        onTap: () => _unfavoriteSelected(provider, selected),
+        onTap: () => _unfavoriteSelected(selected),
       ),
       SelectionAction(
         icon: Icons.share_rounded,
         label: 'Share',
         onTap: () => selected.length == 1
             ? ShareSheet.show(context, selected.single)
-            : _shareSelected(context, provider, selected),
+            : _shareSelected(context, selected),
       ),
       SelectionAction(
         icon: Icons.download_rounded,
         label: 'Download',
-        onTap: () => _downloadSelected(context, provider, selected),
+        onTap: () => _downloadSelected(context, selected),
       ),
       SelectionAction(
         icon: Icons.delete_outline_rounded,
         label: 'Delete',
-        onTap: () => _confirmDeleteSelected(context, provider, selected),
+        onTap: () => _confirmDeleteSelected(context, selected),
       ),
       SelectionAction(
         icon: Icons.copy_rounded,
         label: 'Copy',
-        onTap: () => _moveOrCopySelected(provider, selected, copy: true),
+        onTap: () => _moveOrCopySelected(selected, copy: true),
       ),
       SelectionAction(
         icon: Icons.drive_file_move_rounded,
         label: 'Move',
-        onTap: () => _moveOrCopySelected(provider, selected, copy: false),
+        onTap: () => _moveOrCopySelected(selected, copy: false),
       ),
       if (selected.length == 1)
         SelectionAction(
@@ -191,21 +191,19 @@ class _FavoritesViewState extends State<FavoritesView>
     ];
   }
 
-  Future<void> _unfavoriteSelected(
-    ServerProvider provider,
-    List<NextcloudItem> items,
-  ) async {
+  Future<void> _unfavoriteSelected(List<NextcloudItem> items) async {
+    final ops = context.read<ItemOperations>();
     for (final item in items) {
-      await provider.toggleItemFavorite(item);
+      await ops.toggleItemFavorite(item);
     }
     _clearSelection();
   }
 
   Future<void> _shareSelected(
     BuildContext context,
-    ServerProvider provider,
     List<NextcloudItem> items,
   ) async {
+    final ops = context.read<ItemOperations>();
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(
       const SnackBar(
@@ -216,7 +214,7 @@ class _FavoritesViewState extends State<FavoritesView>
 
     final lines = <String>[];
     for (final item in items) {
-      final link = await provider.createShareLink(item);
+      final link = await ops.createShareLink(item);
       if (link != null) {
         lines.add(items.length > 1 ? '${item.name}: $link' : link);
       }
@@ -252,16 +250,16 @@ class _FavoritesViewState extends State<FavoritesView>
   /// `FilesView._downloadSelected`'s identical doc comment for why.
   Future<void> _downloadSelected(
     BuildContext context,
-    ServerProvider provider,
     List<NextcloudItem> items,
   ) async {
+    final session = context.read<SessionController>();
     final files = items.where((i) => !i.isFolder).toList();
     _clearSelection();
     if (files.isEmpty) return;
 
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await DownloadService.startDownload(provider, files);
+      await DownloadService.startDownload(session, files);
       messenger.showSnackBar(
         SnackBar(
           content: Text(
@@ -284,7 +282,6 @@ class _FavoritesViewState extends State<FavoritesView>
 
   Future<void> _confirmDeleteSelected(
     BuildContext context,
-    ServerProvider provider,
     List<NextcloudItem> items,
   ) async {
     final confirmed = await showDialog<bool>(
@@ -313,10 +310,11 @@ class _FavoritesViewState extends State<FavoritesView>
     );
     if (confirmed != true || !context.mounted) return;
 
+    final ops = context.read<ItemOperations>();
     final messenger = ScaffoldMessenger.of(context);
     var succeeded = 0;
     for (final item in items) {
-      final success = await provider.deleteItem(item.path);
+      final success = await ops.deleteItem(item.path);
       if (success) succeeded++;
     }
 
@@ -330,7 +328,6 @@ class _FavoritesViewState extends State<FavoritesView>
   }
 
   Future<void> _moveOrCopySelected(
-    ServerProvider provider,
     List<NextcloudItem> items, {
     required bool copy,
   }) async {
@@ -351,7 +348,7 @@ class _FavoritesViewState extends State<FavoritesView>
     );
   }
 
-  Widget _buildControlsRow(ServerProvider provider) {
+  Widget _buildControlsRow(FilesController files) {
     return SizedBox(
       height: 44,
       child: SingleChildScrollView(
@@ -360,28 +357,28 @@ class _FavoritesViewState extends State<FavoritesView>
           children: [
             IconButton(
               icon: Icon(
-                provider.filesSortAscending
+                files.filesSortAscending
                     ? Icons.arrow_upward_rounded
                     : Icons.arrow_downward_rounded,
                 size: 20,
               ),
               visualDensity: VisualDensity.compact,
-              tooltip: provider.filesSortAscending ? 'Ascending' : 'Descending',
-              onPressed: provider.toggleFilesSortOrder,
+              tooltip: files.filesSortAscending ? 'Ascending' : 'Descending',
+              onPressed: files.toggleFilesSortOrder,
             ),
             SizedBox(
               width: 130,
               child: SortMenuButton(
-                field: provider.filesSortField,
-                onChanged: provider.setFilesSortField,
+                field: files.filesSortField,
+                onChanged: files.setFilesSortField,
               ),
             ),
             ToggleIconButton(
-              icon: provider.showHiddenFiles
+              icon: files.showHiddenFiles
                   ? Icons.visibility_rounded
                   : Icons.visibility_off_rounded,
-              isSelected: provider.showHiddenFiles,
-              onTap: () => provider.toggleShowHiddenFiles(),
+              isSelected: files.showHiddenFiles,
+              onTap: () => files.toggleShowHiddenFiles(),
               tooltip: 'Show hidden files',
             ),
             const SizedBox(width: 4),
@@ -389,14 +386,14 @@ class _FavoritesViewState extends State<FavoritesView>
               children: [
                 ToggleIconButton(
                   icon: Symbols.circles_rounded,
-                  isSelected: provider.storageScope == StorageScope.cloud,
-                  onTap: () => provider.setStorageScope(StorageScope.cloud),
+                  isSelected: files.storageScope == StorageScope.cloud,
+                  onTap: () => files.setStorageScope(StorageScope.cloud),
                   tooltip: 'Cloud storage',
                 ),
                 ToggleIconButton(
                   icon: Symbols.hard_drive_rounded,
-                  isSelected: provider.storageScope == StorageScope.external,
-                  onTap: () => provider.setStorageScope(StorageScope.external),
+                  isSelected: files.storageScope == StorageScope.external,
+                  onTap: () => files.setStorageScope(StorageScope.external),
                   tooltip: 'External storage',
                 ),
               ],
@@ -406,14 +403,14 @@ class _FavoritesViewState extends State<FavoritesView>
               children: [
                 ToggleIconButton(
                   icon: Icons.view_list_rounded,
-                  isSelected: !provider.isGridView,
-                  onTap: () => provider.setGridView(false),
+                  isSelected: !files.isGridView,
+                  onTap: () => files.setGridView(false),
                   tooltip: 'List view',
                 ),
                 ToggleIconButton(
                   icon: Icons.grid_view_rounded,
-                  isSelected: provider.isGridView,
-                  onTap: () => provider.setGridView(true),
+                  isSelected: files.isGridView,
+                  onTap: () => files.setGridView(true),
                   tooltip: 'Grid view',
                 ),
               ],
@@ -427,11 +424,11 @@ class _FavoritesViewState extends State<FavoritesView>
   Widget _buildListTile(
     BuildContext context,
     NextcloudItem item,
-    ServerProvider provider,
     List<NextcloudItem> siblings,
   ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final session = context.watch<SessionController>();
     final isSelected = _selectedIds.contains(item.id);
 
     return Padding(
@@ -447,7 +444,7 @@ class _FavoritesViewState extends State<FavoritesView>
               if (_isSelecting) {
                 _toggleSelection(item);
               } else {
-                _openFavorite(context, provider, item, siblings);
+                _openFavorite(context, item, siblings);
               }
             },
             onLongPress: () => _toggleSelection(item),
@@ -461,7 +458,7 @@ class _FavoritesViewState extends State<FavoritesView>
                     checkmarkSize: 24,
                     child: ItemThumbnail(
                       item: item,
-                      provider: provider,
+                      service: session.service,
                       size: 44,
                       borderRadius: 12,
                       iconSize: 22,
@@ -503,10 +500,10 @@ class _FavoritesViewState extends State<FavoritesView>
   Widget _buildGridCard(
     BuildContext context,
     NextcloudItem item,
-    ServerProvider provider,
     List<NextcloudItem> siblings,
   ) {
     final theme = Theme.of(context);
+    final session = context.watch<SessionController>();
     final isSelected = _selectedIds.contains(item.id);
     final isMedia =
         (item.type == NextcloudItemType.image ||
@@ -523,7 +520,7 @@ class _FavoritesViewState extends State<FavoritesView>
             if (_isSelecting) {
               _toggleSelection(item);
             } else {
-              _openFavorite(context, provider, item, siblings);
+              _openFavorite(context, item, siblings);
             }
           },
           onLongPress: () => _toggleSelection(item),
@@ -533,7 +530,7 @@ class _FavoritesViewState extends State<FavoritesView>
             child: isMedia
                 ? Image.network(
                     item.previewUrl!,
-                    headers: provider.service?.authHeaders,
+                    headers: session.service?.authHeaders,
                     fit: BoxFit.cover,
                     filterQuality: FilterQuality.low,
                     gaplessPlayback: true,
@@ -587,16 +584,17 @@ class _FavoritesViewState extends State<FavoritesView>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final provider = context.watch<ServerProvider>();
+    final favoritesController = context.watch<FavoritesController>();
+    final filesController = context.watch<FilesController>();
 
     if (!_requested) {
       _requested = true;
       WidgetsBinding.instance.addPostFrameCallback(
-        (_) => provider.fetchAllFavorites(),
+        (_) => favoritesController.fetchAll(),
       );
     }
 
-    final favorites = provider.favoriteItems;
+    final favorites = favoritesController.items;
     final siblings = favorites.where((i) => !i.isFolder).toList();
     final selectedItems = favorites
         .where((i) => _selectedIds.contains(i.id))
@@ -609,17 +607,17 @@ class _FavoritesViewState extends State<FavoritesView>
           height: 60,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-            child: _buildControlsRow(provider),
+            child: _buildControlsRow(filesController),
           ),
         ),
       ),
       const SliverToBoxAdapter(child: SizedBox(height: 8)),
-      if (provider.isFavoritesLoading && favorites.isEmpty)
+      if (favoritesController.isLoading && favorites.isEmpty)
         const SliverFillRemaining(
           hasScrollBody: false,
           child: Center(child: CircularProgressIndicator()),
         )
-      else if (provider.favoritesErrorMessage != null)
+      else if (favoritesController.errorMessage != null)
         SliverFillRemaining(
           hasScrollBody: false,
           child: Center(
@@ -643,7 +641,7 @@ class _FavoritesViewState extends State<FavoritesView>
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    provider.favoritesErrorMessage!,
+                    favoritesController.errorMessage!,
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: colorScheme.onSurfaceVariant,
@@ -651,7 +649,7 @@ class _FavoritesViewState extends State<FavoritesView>
                   ),
                   const SizedBox(height: 20),
                   FilledButton.icon(
-                    onPressed: provider.fetchAllFavorites,
+                    onPressed: favoritesController.fetchAll,
                     icon: const Icon(Icons.refresh_rounded),
                     label: const Text('Retry'),
                   ),
@@ -683,7 +681,7 @@ class _FavoritesViewState extends State<FavoritesView>
             ),
           ),
         )
-      else if (provider.isGridView)
+      else if (filesController.isGridView)
         SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           sliver: SliverGrid(
@@ -694,12 +692,7 @@ class _FavoritesViewState extends State<FavoritesView>
               mainAxisSpacing: 12,
             ),
             delegate: SliverChildBuilderDelegate((context, index) {
-              return _buildGridCard(
-                context,
-                favorites[index],
-                provider,
-                siblings,
-              );
+              return _buildGridCard(context, favorites[index], siblings);
             }, childCount: favorites.length),
           ),
         )
@@ -708,12 +701,7 @@ class _FavoritesViewState extends State<FavoritesView>
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate((context, index) {
-              return _buildListTile(
-                context,
-                favorites[index],
-                provider,
-                siblings,
-              );
+              return _buildListTile(context, favorites[index], siblings);
             }, childCount: favorites.length),
           ),
         ),
@@ -728,11 +716,10 @@ class _FavoritesViewState extends State<FavoritesView>
       },
       child: SyncedHeaderScaffold(
         scrollController: widget.scrollController,
-        provider: provider,
         actions: const [MoreTabsButton(), ProfileAvatarButton()],
-        onRefresh: provider.fetchAllFavorites,
+        onRefresh: favoritesController.fetchAll,
         selectionBar: _isSelecting
-            ? _buildSelectionBar(context, theme, provider, selectedItems)
+            ? _buildSelectionBar(context, theme, selectedItems)
             : null,
         contentSlivers: contentSlivers,
       ),
@@ -745,7 +732,6 @@ class _FavoritesViewState extends State<FavoritesView>
   Widget _buildSelectionBar(
     BuildContext context,
     ThemeData theme,
-    ServerProvider provider,
     List<NextcloudItem> selectedItems,
   ) {
     return Padding(
@@ -783,10 +769,7 @@ class _FavoritesViewState extends State<FavoritesView>
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  for (final action in _buildSelectionActions(
-                    provider,
-                    selectedItems,
-                  ))
+                  for (final action in _buildSelectionActions(selectedItems))
                     IconButton(
                       icon: Icon(action.icon, size: 20),
                       tooltip: action.label,

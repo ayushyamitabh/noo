@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import '../providers/server_provider.dart';
+import '../providers/session_controller.dart';
 
 /// Every Login Flow v2 page - first login or an additional account -
 /// rendered in Flutter's own WebView rather than a Chrome Custom Tab or
@@ -13,7 +13,7 @@ import '../providers/server_provider.dart';
 /// exactly like every other screen in the app - and unlike a Custom Tab,
 /// this screen can close itself automatically once login succeeds.
 ///
-/// See ServerProvider.startLoginFlow's doc comment for the full rationale.
+/// See SessionController.startLoginFlow's doc comment for the full rationale.
 class LoginWebViewView extends StatefulWidget {
   final Uri url;
 
@@ -56,19 +56,19 @@ class _LoginWebViewViewState extends State<LoginWebViewView> {
   }
 
   void _cancel() {
-    context.read<ServerProvider>().cancelLoginFlow();
+    context.read<SessionController>().cancelLoginFlow();
     Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<ServerProvider>();
+    final session = context.watch<SessionController>();
 
     // The login flow finished (success or error) or was cancelled
     // elsewhere - close this screen automatically rather than leaving it
     // sitting open over a flow that's no longer awaiting the browser.
     if (!_popped &&
-        provider.loginFlowStatus != LoginFlowStatus.awaitingBrowser) {
+        session.loginFlowStatus != LoginFlowStatus.awaitingBrowser) {
       _popped = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) Navigator.of(context).pop();

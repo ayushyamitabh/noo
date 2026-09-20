@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/server_provider.dart';
+import '../providers/session_controller.dart';
 
-/// Shown in place of the main shell whenever [ServerProvider.needsUnlock] is
+/// Shown in place of the main shell whenever [SessionController.needsUnlock] is
 /// true - a fresh app launch with login lock configured, or returning to the
 /// foreground after being backgrounded. Prompts automatically on first show
 /// and again whenever the app resumes while still locked (e.g. the user
@@ -36,13 +36,13 @@ class _LockScreenViewState extends State<LockScreenView>
     if (state != AppLifecycleState.resumed || !mounted || _authenticating) {
       return;
     }
-    if (context.read<ServerProvider>().needsUnlock) _attemptUnlock();
+    if (context.read<SessionController>().needsUnlock) _attemptUnlock();
   }
 
   Future<void> _attemptUnlock() async {
     if (_authenticating || !mounted) return;
     setState(() => _authenticating = true);
-    await context.read<ServerProvider>().attemptUnlock();
+    await context.read<SessionController>().attemptUnlock();
     if (mounted) setState(() => _authenticating = false);
   }
 

@@ -4,7 +4,9 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
 import '../models/app_tab.dart';
 import '../models/nextcloud_item.dart';
-import '../providers/server_provider.dart';
+import '../providers/files_controller.dart';
+import '../providers/session_controller.dart';
+import '../providers/settings_controller.dart';
 import '../services/share_intent_service.dart';
 import '../services/upload_service.dart';
 import '../widgets/breadcrumbs.dart';
@@ -43,7 +45,7 @@ class _ShareUploadViewState extends State<ShareUploadView> {
     // Shared files have no relationship to wherever the user was last
     // browsing, so start the destination picker fresh at the root.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) context.read<ServerProvider>().navigateToAbsoluteFolder('/');
+      if (mounted) context.read<FilesController>().navigateToAbsoluteFolder('/');
     });
   }
 
@@ -53,11 +55,13 @@ class _ShareUploadViewState extends State<ShareUploadView> {
     super.dispose();
   }
 
-  Future<void> _uploadHere(ServerProvider provider) async {
+  Future<void> _uploadHere(SessionController session) async {
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
+    final files = context.read<FilesController>();
+    final settings = context.read<SettingsController>();
     try {
-      await UploadService.startUpload(provider, widget.files);
+      await UploadService.startUpload(session, files, widget.files);
     } catch (e) {
       messenger.showSnackBar(
         SnackBar(
@@ -68,7 +72,7 @@ class _ShareUploadViewState extends State<ShareUploadView> {
       return;
     }
 
-    provider.requestTab(AppTab.files);
+    settings.requestTab(AppTab.files);
     navigator.popUntil((route) => route.isFirst);
     messenger.showSnackBar(
       SnackBar(
@@ -82,7 +86,7 @@ class _ShareUploadViewState extends State<ShareUploadView> {
     );
   }
 
-  Widget _buildControlsRow(ServerProvider provider) {
+  Widget _buildControlsRow(FilesController files) {
     return SizedBox(
       height: 44,
       child: SingleChildScrollView(
@@ -91,28 +95,28 @@ class _ShareUploadViewState extends State<ShareUploadView> {
           children: [
             IconButton(
               icon: Icon(
-                provider.filesSortAscending
+                files.filesSortAscending
                     ? Icons.arrow_upward_rounded
                     : Icons.arrow_downward_rounded,
                 size: 20,
               ),
               visualDensity: VisualDensity.compact,
-              tooltip: provider.filesSortAscending ? 'Ascending' : 'Descending',
-              onPressed: provider.toggleFilesSortOrder,
+              tooltip: files.filesSortAscending ? 'Ascending' : 'Descending',
+              onPressed: files.toggleFilesSortOrder,
             ),
             SizedBox(
               width: 130,
               child: SortMenuButton(
-                field: provider.filesSortField,
-                onChanged: provider.setFilesSortField,
+                field: files.filesSortField,
+                onChanged: files.setFilesSortField,
               ),
             ),
             ToggleIconButton(
-              icon: provider.showHiddenFiles
+              icon: files.showHiddenFiles
                   ? Icons.visibility_rounded
                   : Icons.visibility_off_rounded,
-              isSelected: provider.showHiddenFiles,
-              onTap: () => provider.toggleShowHiddenFiles(),
+              isSelected: files.showHiddenFiles,
+              onTap: () => files.toggleShowHiddenFiles(),
               tooltip: 'Show hidden files',
             ),
             const SizedBox(width: 4),
@@ -120,14 +124,14 @@ class _ShareUploadViewState extends State<ShareUploadView> {
               children: [
                 ToggleIconButton(
                   icon: Symbols.circles_rounded,
-                  isSelected: provider.storageScope == StorageScope.cloud,
-                  onTap: () => provider.setStorageScope(StorageScope.cloud),
+                  isSelected: files.storageScope == StorageScope.cloud,
+                  onTap: () => files.setStorageScope(StorageScope.cloud),
                   tooltip: 'Cloud storage',
                 ),
                 ToggleIconButton(
                   icon: Symbols.hard_drive_rounded,
-                  isSelected: provider.storageScope == StorageScope.external,
-                  onTap: () => provider.setStorageScope(StorageScope.external),
+                  isSelected: files.storageScope == StorageScope.external,
+                  onTap: () => files.setStorageScope(StorageScope.external),
                   tooltip: 'External storage',
                 ),
               ],
@@ -137,24 +141,24 @@ class _ShareUploadViewState extends State<ShareUploadView> {
               children: [
                 ToggleIconButton(
                   icon: Icons.select_all_rounded,
-                  isSelected: provider.filesTypeFilter == FilesTypeFilter.all,
-                  onTap: () => provider.setFilesTypeFilter(FilesTypeFilter.all),
+                  isSelected: files.filesTypeFilter == FilesTypeFilter.all,
+                  onTap: () => files.setFilesTypeFilter(FilesTypeFilter.all),
                   tooltip: 'Files & folders',
                 ),
                 ToggleIconButton(
                   icon: Icons.insert_drive_file_outlined,
                   isSelected:
-                      provider.filesTypeFilter == FilesTypeFilter.filesOnly,
+                      files.filesTypeFilter == FilesTypeFilter.filesOnly,
                   onTap: () =>
-                      provider.setFilesTypeFilter(FilesTypeFilter.filesOnly),
+                      files.setFilesTypeFilter(FilesTypeFilter.filesOnly),
                   tooltip: 'Files only',
                 ),
                 ToggleIconButton(
                   icon: Icons.folder_outlined,
                   isSelected:
-                      provider.filesTypeFilter == FilesTypeFilter.foldersOnly,
+                      files.filesTypeFilter == FilesTypeFilter.foldersOnly,
                   onTap: () =>
-                      provider.setFilesTypeFilter(FilesTypeFilter.foldersOnly),
+                      files.setFilesTypeFilter(FilesTypeFilter.foldersOnly),
                   tooltip: 'Folders only',
                 ),
               ],
@@ -164,14 +168,14 @@ class _ShareUploadViewState extends State<ShareUploadView> {
               children: [
                 ToggleIconButton(
                   icon: Icons.view_list_rounded,
-                  isSelected: !provider.isGridView,
-                  onTap: () => provider.setGridView(false),
+                  isSelected: !files.isGridView,
+                  onTap: () => files.setGridView(false),
                   tooltip: 'List view',
                 ),
                 ToggleIconButton(
                   icon: Icons.grid_view_rounded,
-                  isSelected: provider.isGridView,
-                  onTap: () => provider.setGridView(true),
+                  isSelected: files.isGridView,
+                  onTap: () => files.setGridView(true),
                   tooltip: 'Grid view',
                 ),
               ],
@@ -185,13 +189,11 @@ class _ShareUploadViewState extends State<ShareUploadView> {
   // Only folders are valid upload destinations - files still show (so the
   // listing matches what the Files tab itself would show for this folder)
   // but are visually dimmed and inert rather than hidden outright.
-  Widget _buildListTile(
-    BuildContext context,
-    NextcloudItem item,
-    ServerProvider provider,
-  ) {
+  Widget _buildListTile(BuildContext context, NextcloudItem item) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final files = context.read<FilesController>();
+    final session = context.watch<SessionController>();
     final isFolder = item.isFolder;
 
     return Padding(
@@ -203,9 +205,7 @@ class _ShareUploadViewState extends State<ShareUploadView> {
           child: Material(
             color: colorScheme.surfaceContainerLow,
             child: InkWell(
-              onTap: isFolder
-                  ? () => provider.navigateToFolder(item.path)
-                  : null,
+              onTap: isFolder ? () => files.navigateToFolder(item.path) : null,
               child: Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -215,7 +215,7 @@ class _ShareUploadViewState extends State<ShareUploadView> {
                   children: [
                     ItemThumbnail(
                       item: item,
-                      provider: provider,
+                      service: session.service,
                       size: 44,
                       borderRadius: 12,
                       iconSize: 22,
@@ -255,13 +255,10 @@ class _ShareUploadViewState extends State<ShareUploadView> {
     );
   }
 
-  Widget _buildGridCard(
-    BuildContext context,
-    NextcloudItem item,
-    ServerProvider provider,
-  ) {
+  Widget _buildGridCard(BuildContext context, NextcloudItem item) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final files = context.read<FilesController>();
     final isFolder = item.isFolder;
     final iconColor = getIconColor(context, item.type);
 
@@ -272,7 +269,7 @@ class _ShareUploadViewState extends State<ShareUploadView> {
         borderRadius: BorderRadius.circular(20),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: isFolder ? () => provider.navigateToFolder(item.path) : null,
+          onTap: isFolder ? () => files.navigateToFolder(item.path) : null,
           child: Padding(
             padding: const EdgeInsets.all(14),
             child: Column(
@@ -326,13 +323,14 @@ class _ShareUploadViewState extends State<ShareUploadView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final provider = context.watch<ServerProvider>();
-    final hasBreadcrumbs = provider.pathStack.length > 1;
-    final currentPath = provider.pathStack.last;
+    final files = context.watch<FilesController>();
+    final session = context.watch<SessionController>();
+    final hasBreadcrumbs = files.pathStack.length > 1;
+    final currentPath = files.pathStack.last;
     final currentLabel = currentPath == '/'
         ? 'Home'
         : currentPath.split('/').where((s) => s.isNotEmpty).last;
-    final items = provider.items;
+    final items = files.items;
 
     // Mirrors FilesView's own controls-row + breadcrumbs sticky header
     // exactly (padding, heights) so this reads as the same browser, just
@@ -342,14 +340,14 @@ class _ShareUploadViewState extends State<ShareUploadView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildControlsRow(provider),
+          _buildControlsRow(files),
           if (hasBreadcrumbs) ...[
             const SizedBox(height: 10),
             SizedBox(
               height: 32,
               child: Breadcrumbs(
-                pathStack: provider.pathStack,
-                onTap: (index) => provider.navigateToPathIndex(index),
+                pathStack: files.pathStack,
+                onTap: (index) => files.navigateToPathIndex(index),
               ),
             ),
           ],
@@ -365,7 +363,7 @@ class _ShareUploadViewState extends State<ShareUploadView> {
           child: controlsColumn,
         ),
       ),
-      if (provider.isLoading)
+      if (files.isLoading)
         const SliverFillRemaining(
           hasScrollBody: false,
           child: Center(child: CircularProgressIndicator()),
@@ -380,7 +378,7 @@ class _ShareUploadViewState extends State<ShareUploadView> {
             ),
           ),
         )
-      else if (provider.isGridView)
+      else if (files.isGridView)
         SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           sliver: SliverGrid(
@@ -391,7 +389,7 @@ class _ShareUploadViewState extends State<ShareUploadView> {
               mainAxisSpacing: 12,
             ),
             delegate: SliverChildBuilderDelegate((context, index) {
-              return _buildGridCard(context, items[index], provider);
+              return _buildGridCard(context, items[index]);
             }, childCount: items.length),
           ),
         )
@@ -400,7 +398,7 @@ class _ShareUploadViewState extends State<ShareUploadView> {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate((context, index) {
-              return _buildListTile(context, items[index], provider);
+              return _buildListTile(context, items[index]);
             }, childCount: items.length),
           ),
         ),
@@ -411,7 +409,6 @@ class _ShareUploadViewState extends State<ShareUploadView> {
     return Scaffold(
       body: SyncedHeaderScaffold(
         scrollController: _scrollController,
-        provider: provider,
         // Same trailing actions as every other tab except "More tabs" -
         // there's nowhere useful for it to go while mid-upload (jumping to
         // Trash/Shares/etc. would abandon this destination picker), so the
@@ -494,7 +491,7 @@ class _ShareUploadViewState extends State<ShareUploadView> {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed: () => _uploadHere(provider),
+                    onPressed: () => _uploadHere(session),
                     icon: const Icon(Icons.upload_rounded),
                     label: Text('Upload to $currentLabel'),
                   ),

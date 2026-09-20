@@ -5,7 +5,8 @@ import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import '../models/app_tab.dart';
 import '../models/nextcloud_item.dart';
-import '../providers/server_provider.dart';
+import '../providers/files_controller.dart';
+import '../providers/settings_controller.dart';
 import 'file_viewer_screen.dart';
 
 class SearchView extends StatefulWidget {
@@ -50,13 +51,13 @@ class _SearchViewState extends State<SearchView> {
   }
 
   Future<void> _runSearch(String query) async {
-    final provider = context.read<ServerProvider>();
+    final files = context.read<FilesController>();
     setState(() {
       _isSearching = true;
       _error = null;
     });
     try {
-      final results = await provider.searchFiles(query);
+      final results = await files.searchFiles(query);
       if (!mounted) return;
       setState(() {
         _results = results;
@@ -98,12 +99,13 @@ class _SearchViewState extends State<SearchView> {
   /// browsing before), switches the shell to the Files tab, and closes
   /// search. For a file, also opens it once back on Files.
   Future<void> _openResult(NextcloudItem item) async {
-    final provider = context.read<ServerProvider>();
+    final files = context.read<FilesController>();
+    final settings = context.read<SettingsController>();
     final navigator = Navigator.of(context);
 
     final folderPath = item.isFolder ? item.path : p.dirname(item.path);
-    await provider.navigateToAbsoluteFolder(folderPath);
-    provider.requestTab(AppTab.files);
+    await files.navigateToAbsoluteFolder(folderPath);
+    settings.requestTab(AppTab.files);
     navigator.popUntil((route) => route.isFirst);
 
     if (!item.isFolder) {

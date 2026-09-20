@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import '../providers/server_provider.dart';
+import '../providers/settings_controller.dart';
 
 /// Draws a video seek bar in one of the four [MediaProgressBarStyle]
 /// presets. Shared by the actual in-player seek bar and the small previews

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../providers/server_provider.dart';
+import '../providers/files_controller.dart';
 
 String sortFieldLabel(FileSortField field) {
   switch (field) {

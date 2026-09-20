@@ -29,28 +29,35 @@ class/method already makes obvious.
 - Private helpers/widgets are prefixed with `_` and live in the same file as
   their one caller; promote to `widgets/` only once something is reused
   across files.
-- Read provider state with `context.watch<ServerProvider>()` in `build`,
-  and `context.read<ServerProvider>()` for one-off calls from callbacks
-  (matches `LoginView._handleContinue`).
+- Read controller state with `context.watch<XController>()` in `build`, and
+  `context.read<XController>()` for one-off calls from callbacks (matches
+  `LoginView._handleContinue`). Pull in only the specific controller(s) a
+  widget actually needs (e.g. `FilesController` + `SyncStatusController`
+  for a Files tile), not a catch-all — see `architecture.md`'s "State
+  management" section for the full controller split and what each one owns.
 
-## `ServerProvider` conventions
+## Controller conventions
 
 - Any method that fetches data and writes it into a shared field
-  (`refreshData`, `fetchAllMedia`, `fetchTrash`, `fetchShares`,
-  `fetchRecent`, `_applyCredentialsForAccount`) must guard against a stale
-  write from an account the user has since switched away from: capture
-  `final gen = _sessionGeneration;` at entry, and check
-  `if (gen != _sessionGeneration) return;` immediately after each `await`
-  before touching any field or calling `notifyListeners()`. Follow this
-  pattern for any new fetch method added to the provider.
-- New persisted state on `ServerProvider` must be classified global vs.
-  per-account (see `architecture.md`/`server.md`) up front — global state
-  uses a plain `_prefsFuture.then((p) => p.setX(key, value))`; per-account
-  state goes through `_persistAccountPref(key, (p, namespacedKey) =>
-  p.setX(namespacedKey, value))` and must also be handled in
-  `_applyAccountPrefs` (both the "reset to default when no account" and the
-  "load for this account" branches) so it's correct immediately after a
-  switch, not just at startup.
+  (`FilesController.refreshData`, `PhotosController.fetchAllMedia`,
+  `TrashController.fetchAll`, `SharesController.fetchAll`,
+  `RecentController.fetchAll`, `SessionController._applyCredentialsForAccount`)
+  must guard against a stale write from an account the user has since
+  switched away from: capture `final gen = session.sessionGeneration;` at
+  entry, and check `if (gen != session.sessionGeneration) return;`
+  immediately after each `await` before touching any field or calling
+  `notifyListeners()`. Follow this pattern for any new fetch method added
+  to any controller.
+- New persisted state must be classified global vs. per-account (see
+  `architecture.md`/`server.md`) up front and live on whichever controller
+  owns that domain — global state (`SettingsController`) uses a plain
+  `_prefsFuture.then((p) => p.setX(key, value))`; per-account state goes
+  through `_persistAccountPref(key, (p, namespacedKey) =>
+  p.setX(namespacedKey, value))` and must also be handled in that
+  controller's own `_onAccountCleared`/`_onAccountActivated` listeners
+  (registered via `SessionController.addAccountClearedListener`/
+  `addAccountActivatedListener` in the controller's constructor) so it's
+  correct immediately after a switch, not just at startup.
 
 ## Testing
 
@@ -59,7 +66,7 @@ class/method already makes obvious.
   `MethodChannel('plugins.it_nomads.com/flutter_secure_storage')` handler —
   and disable Google Fonts network fetching
   (`GoogleFonts.config.allowRuntimeFetching = false`) in `setUpAll`. Without
-  these, `ServerProvider`'s session restore never resolves in the test
+  these, `SessionController`'s session restore never resolves in the test
   sandbox (no plugin implementation is registered, so the read future just
   never completes) and the app stays on `_SplashView`'s indeterminate
   spinner, which makes `pumpAndSettle()` hang until its own timeout instead

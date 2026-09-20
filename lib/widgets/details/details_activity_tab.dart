@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../models/nextcloud_item.dart';
-import '../../providers/server_provider.dart';
+import '../../providers/item_operations.dart';
 
 /// Per-file activity feed — same list-item look as the account-wide
 /// Activity tab (activity_view.dart), scoped to a single item.
@@ -21,8 +21,8 @@ class _DetailsActivityTabState extends State<DetailsActivityTab> {
   List<NextcloudActivity> _activities = [];
 
   Future<void> _load() async {
-    final provider = context.read<ServerProvider>();
-    final result = await provider.fetchFileActivity(widget.item);
+    final ops = context.read<ItemOperations>();
+    final result = await ops.fetchFileActivity(widget.item);
     if (!mounted) return;
     setState(() {
       _activities = result;

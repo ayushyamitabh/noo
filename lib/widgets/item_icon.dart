@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/nextcloud_item.dart';
-import '../providers/server_provider.dart';
+import '../services/nextcloud_service.dart';
 
 /// The icon/color/thumbnail treatment for a file or folder, shared by any
 /// screen that lists [NextcloudItem]s the same way the Files tab does (see
@@ -51,7 +51,7 @@ Color getIconColor(BuildContext context, NextcloudItemType type) {
 /// the Photos tab.
 class ItemThumbnail extends StatelessWidget {
   final NextcloudItem item;
-  final ServerProvider provider;
+  final NextcloudService? service;
   final double size;
   final double borderRadius;
   final double iconSize;
@@ -59,7 +59,7 @@ class ItemThumbnail extends StatelessWidget {
   const ItemThumbnail({
     super.key,
     required this.item,
-    required this.provider,
+    required this.service,
     required this.size,
     required this.borderRadius,
     required this.iconSize,
@@ -92,7 +92,7 @@ class ItemThumbnail extends StatelessWidget {
               children: [
                 Image.network(
                   item.previewUrl!,
-                  headers: provider.service?.authHeaders,
+                  headers: service?.authHeaders,
                   fit: BoxFit.cover,
                   cacheWidth: cachePixels,
                   cacheHeight: cachePixels,

@@ -6,7 +6,17 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'models/app_tab.dart';
 import 'models/pick_request.dart';
-import 'providers/server_provider.dart';
+import 'providers/favorites_controller.dart';
+import 'providers/files_controller.dart';
+import 'providers/item_operations.dart';
+import 'providers/photos_controller.dart';
+import 'providers/pick_controller.dart';
+import 'providers/recent_controller.dart';
+import 'providers/session_controller.dart';
+import 'providers/settings_controller.dart';
+import 'providers/shares_controller.dart';
+import 'providers/sync_status_controller.dart';
+import 'providers/trash_controller.dart';
 import 'services/pick_intent_service.dart';
 import 'services/share_intent_service.dart';
 import 'theme/app_theme.dart';
@@ -20,8 +30,51 @@ import 'widgets/floating_bottom_bar.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => ServerProvider(),
+    MultiProvider(
+      // Split out of the former single `ServerProvider` god object - see
+      // `.claude/context/architecture.md`'s "State management" section.
+      // Order matters: each `create` below reads earlier providers via
+      // `context.read`, which is safe here since none of them are ever
+      // replaced/recreated for the app's lifetime (account switching is
+      // internal state on SessionController, not a new provider instance).
+      providers: [
+        ChangeNotifierProvider(create: (_) => SessionController()),
+        ChangeNotifierProvider(create: (_) => SettingsController()),
+        ChangeNotifierProvider(
+          create: (context) => SyncStatusController(context.read()),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => FilesController(context.read()),
+        ),
+        ChangeNotifierProvider(
+          create: (context) =>
+              PhotosController(context.read(), context.read()),
+        ),
+        ChangeNotifierProvider(
+          create: (context) =>
+              FavoritesController(context.read(), context.read()),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => TrashController(context.read()),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => SharesController(context.read()),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => RecentController(context.read()),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => PickController(context.read()),
+        ),
+        Provider(
+          create: (context) => ItemOperations(
+            session: context.read(),
+            files: context.read(),
+            photos: context.read(),
+            favorites: context.read(),
+          ),
+        ),
+      ],
       child: const NextcloudApp(),
     ),
   );
@@ -32,7 +85,8 @@ class NextcloudApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<ServerProvider>();
+    final settings = context.watch<SettingsController>();
+    final session = context.watch<SessionController>();
 
     return DynamicColorBuilder(
       builder: (lightDynamic, darkDynamic) {
@@ -40,22 +94,22 @@ class NextcloudApp extends StatelessWidget {
           title: 'Noo',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light(
-            provider.seedColor,
+            settings.seedColor,
             dynamicScheme: lightDynamic,
-            useDynamicColor: provider.useDynamicColor,
+            useDynamicColor: settings.useDynamicColor,
           ),
           darkTheme: AppTheme.dark(
-            provider.seedColor,
+            settings.seedColor,
             dynamicScheme: darkDynamic,
-            useDynamicColor: provider.useDynamicColor,
-            amoled: provider.amoledDark,
+            useDynamicColor: settings.useDynamicColor,
+            amoled: settings.amoledDark,
           ),
-          themeMode: provider.themeMode,
-          home: provider.isRestoringSession
+          themeMode: settings.themeMode,
+          home: session.isRestoringSession
               ? const _SplashView()
-              : (!provider.isLoggedIn
+              : (!session.isLoggedIn
                     ? const LoginView()
-                    : (provider.needsUnlock
+                    : (session.needsUnlock
                           ? const LockScreenView()
                           : const MainShellView())),
         );
@@ -128,7 +182,7 @@ class _MainShellViewState extends State<MainShellView> {
     // Preferences load asynchronously, but in practice finish well before
     // session restore (which also has to hit the network) does, so by the
     // time this shell mounts `defaultTab` already reflects the saved value.
-    _currentTab = context.read<ServerProvider>().defaultTab;
+    _currentTab = context.read<SettingsController>().defaultTab;
 
     // Handles both a cold start via another app's "Share to..." sheet
     // (getInitialShare) and a share arriving while the app is already
@@ -143,11 +197,11 @@ class _MainShellViewState extends State<MainShellView> {
     // another app may have launched Noo as its GET_CONTENT picker.
     PickIntentService.getPickRequest().then((request) {
       if (request != null && mounted) {
-        context.read<ServerProvider>().setPickRequest(request);
+        context.read<PickController>().setPickRequest(request);
       }
     });
     _pickSub = PickIntentService.onNewPickRequest.listen((request) {
-      if (mounted) context.read<ServerProvider>().setPickRequest(request);
+      if (mounted) context.read<PickController>().setPickRequest(request);
     });
 
     WidgetsBinding.instance.addPostFrameCallback(
@@ -220,20 +274,21 @@ class _MainShellViewState extends State<MainShellView> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<ServerProvider>();
+    final settings = context.watch<SettingsController>();
+    final pick = context.watch<PickController>();
 
     // A one-shot request (e.g. tapping a search result) to switch tabs -
     // consumed here so it only fires once, then cleared after this frame
     // (clearing it synchronously would call notifyListeners mid-build).
-    final requestedTab = provider.requestedTab;
+    final requestedTab = settings.requestedTab;
     if (requestedTab != null) {
       _currentTab = requestedTab;
       WidgetsBinding.instance.addPostFrameCallback(
-        (_) => provider.consumeRequestedTab(),
+        (_) => settings.consumeRequestedTab(),
       );
     }
 
-    final pickRequest = provider.pickRequest;
+    final pickRequest = pick.pickRequest;
     // While acting as another app's picker, only Files and Photos make
     // sense as browsable sources - Trash/Shares/Activity/Recent aren't
     // real "pick a file from here" destinations, and only these two tabs'
@@ -242,7 +297,7 @@ class _MainShellViewState extends State<MainShellView> {
     // them, since picking is a separate mode from normal browsing.
     final visible = pickRequest != null
         ? [AppTab.files, AppTab.photos]
-        : provider.visibleTabs;
+        : settings.visibleTabs;
     final selectedTab = visible.contains(_currentTab)
         ? _currentTab
         : (visible.isNotEmpty ? visible.first : AppTab.files);
@@ -260,7 +315,7 @@ class _MainShellViewState extends State<MainShellView> {
       // there's no Navigator route to pop at this, the root screen.
       canPop: pickRequest == null,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop && pickRequest != null) provider.cancelPick();
+        if (!didPop && pickRequest != null) pick.cancelPick();
       },
       child: Scaffold(
         body: Stack(
@@ -271,7 +326,7 @@ class _MainShellViewState extends State<MainShellView> {
                   .map((tab) => buildAppTabView(tab, _scrollControllers[tab]!))
                   .toList(),
             ),
-            if (provider.isDownloadingForPick) const _PickingProgressOverlay(),
+            if (pick.isDownloadingForPick) const _PickingProgressOverlay(),
             // Each tab now renders its own sticky selection toolbar inline
             // (right under its sort/filter row) instead of this shell
             // swapping in a shared floating bar - the bottom nav stays put
@@ -279,12 +334,12 @@ class _MainShellViewState extends State<MainShellView> {
             FloatingBottomNavBar(
               selectedIndex: selectedIndex,
               items: navItems,
-              opacity: provider.bottomBarOpacity,
-              blurSigma: provider.bottomBarBlur,
+              opacity: settings.bottomBarOpacity,
+              blurSigma: settings.bottomBarBlur,
               onDestinationSelected: (index) {
                 final tappedTab = visible[index];
                 if (tappedTab == _currentTab) {
-                  if (provider.tapTabToScrollTop) {
+                  if (settings.tapTabToScrollTop) {
                     final controller = _scrollControllers[tappedTab];
                     if (controller != null && controller.hasClients) {
                       controller.animateTo(
@@ -315,7 +370,7 @@ class _MainShellViewState extends State<MainShellView> {
 
 /// Blocks interaction while the selected file(s) download to a local cache
 /// folder before being handed back to the caller (see
-/// `ServerProvider.confirmPick`) - can take a moment for a large file/video.
+/// `PickController.confirmPick`) - can take a moment for a large file/video.
 class _PickingProgressOverlay extends StatelessWidget {
   const _PickingProgressOverlay();
 

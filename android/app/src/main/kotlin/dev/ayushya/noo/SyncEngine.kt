@@ -10,7 +10,6 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.net.HttpURLConnection
 import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -258,33 +257,17 @@ object SyncEngine {
         remotePath: String,
         destination: File,
     ): Boolean {
-        val encodedPath = remotePath.split("/").joinToString("/") { Uri.encode(it) }
-        val url = URL("${serverUrl.trimEnd('/')}/remote.php/dav/files/$username$encodedPath")
-        val connection = url.openConnection() as HttpURLConnection
-        return try {
-            connection.requestMethod = "GET"
-            connection.setRequestProperty("Authorization", authHeader)
-            connection.connectTimeout = 15000
-            connection.readTimeout = 30000
-            connection.connect()
-            val code = connection.responseCode
-            if (code !in 200..299) {
-                Log.w(TAG, "GET $url failed: $code")
-                return false
-            }
-
-            destination.parentFile?.mkdirs()
-            connection.inputStream.use { input ->
-                destination.outputStream().use { output -> input.copyTo(output) }
-            }
-            Log.d(TAG, "GET $url -> saved to ${destination.absolutePath} (${destination.length()} bytes)")
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "GET $url threw", e)
-            false
-        } finally {
-            connection.disconnect()
-        }
+        val url = davUrl(serverUrl, username, remotePath)
+        val ok = DavTransfer.get(url, authHeader, destination)
+        Log.d(
+            TAG,
+            if (ok) {
+                "GET $url -> saved to ${destination.absolutePath} (${destination.length()} bytes)"
+            } else {
+                "GET $url failed"
+            },
+        )
+        return ok
     }
 
     fun uploadFile(
@@ -294,26 +277,13 @@ object SyncEngine {
         remotePath: String,
         source: File,
     ): Boolean {
+        val url = davUrl(serverUrl, username, remotePath)
+        return DavTransfer.put(url, authHeader, source)
+    }
+
+    private fun davUrl(serverUrl: String, username: String, remotePath: String): URL {
         val encodedPath = remotePath.split("/").joinToString("/") { Uri.encode(it) }
-        val url = URL("${serverUrl.trimEnd('/')}/remote.php/dav/files/$username$encodedPath")
-        val connection = url.openConnection() as HttpURLConnection
-        return try {
-            connection.requestMethod = "PUT"
-            connection.setRequestProperty("Authorization", authHeader)
-            connection.setFixedLengthStreamingMode(source.length())
-            connection.doOutput = true
-            connection.connectTimeout = 15000
-            connection.readTimeout = 60000
-            connection.connect()
-            source.inputStream().use { input ->
-                connection.outputStream.use { output -> input.copyTo(output) }
-            }
-            connection.responseCode in 200..299
-        } catch (e: Exception) {
-            false
-        } finally {
-            connection.disconnect()
-        }
+        return URL("${serverUrl.trimEnd('/')}/remote.php/dav/files/$username$encodedPath")
     }
 
     /**

@@ -3,7 +3,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 /// Every destination the bottom nav bar can show. Order here is only the
 /// fallback default — actual order/visibility/default-tab are user
-/// configurable and persisted in [ServerProvider].
+/// configurable and persisted in `SettingsController`.
 enum AppTab { files, photos, favorites, activity, trash, shares, recent }
 
 /// At most this many tabs may be visible in the bottom nav bar at once —

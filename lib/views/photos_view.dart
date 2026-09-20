@@ -5,7 +5,11 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/nextcloud_item.dart';
 import '../models/selection_action.dart';
-import '../providers/server_provider.dart';
+import '../providers/files_controller.dart';
+import '../providers/item_operations.dart';
+import '../providers/photos_controller.dart';
+import '../providers/pick_controller.dart';
+import '../providers/session_controller.dart';
 import '../services/download_service.dart';
 import '../widgets/details/details_sheet.dart';
 import '../widgets/more_tabs_button.dart';
@@ -111,10 +115,10 @@ class _PhotosViewState extends State<PhotosView>
   /// just the matching/toggle/immediate-confirm branch.
   void _handlePickTap(
     BuildContext context,
-    ServerProvider provider,
+    PickController pick,
     NextcloudItem item,
   ) {
-    if (!provider.itemMatchesPickFilter(item)) {
+    if (!pick.itemMatchesPickFilter(item)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("This app can't accept this file type"),
@@ -123,25 +127,25 @@ class _PhotosViewState extends State<PhotosView>
       );
       return;
     }
-    if (provider.pickRequest!.allowMultiple) {
+    if (pick.pickRequest!.allowMultiple) {
       _toggleSelection(item);
     } else {
-      provider.confirmPick([item]);
+      pick.confirmPick([item]);
     }
   }
 
   /// The bulk actions shown in the sticky selection toolbar for the
   /// currently-selected items.
   List<SelectionAction> _buildSelectionActions(
-    ServerProvider provider,
+    PickController pick,
     List<NextcloudItem> selected,
   ) {
-    if (provider.isPicking) {
+    if (pick.isPicking) {
       return [
         SelectionAction(
           icon: Icons.check_rounded,
           label: 'Use ${selected.length} item(s)',
-          onTap: () => provider.confirmPick(selected),
+          onTap: () => pick.confirmPick(selected),
         ),
       ];
     }
@@ -153,34 +157,34 @@ class _PhotosViewState extends State<PhotosView>
         label: selected.every((i) => i.isFavorite)
             ? 'Remove from favorites'
             : 'Favorite',
-        onTap: () => _favoriteSelected(provider, selected),
+        onTap: () => _favoriteSelected(selected),
       ),
       SelectionAction(
         icon: Icons.share_rounded,
         label: 'Share',
         onTap: () => selected.length == 1
             ? ShareSheet.show(context, selected.single)
-            : _shareSelected(context, provider, selected),
+            : _shareSelected(context, selected),
       ),
       SelectionAction(
         icon: Icons.download_rounded,
         label: 'Download',
-        onTap: () => _downloadSelected(context, provider, selected),
+        onTap: () => _downloadSelected(context, selected),
       ),
       SelectionAction(
         icon: Icons.delete_outline_rounded,
         label: 'Delete',
-        onTap: () => _confirmDeleteSelected(context, provider, selected),
+        onTap: () => _confirmDeleteSelected(context, selected),
       ),
       SelectionAction(
         icon: Icons.copy_rounded,
         label: 'Copy',
-        onTap: () => _moveOrCopySelected(provider, selected, copy: true),
+        onTap: () => _moveOrCopySelected(selected, copy: true),
       ),
       SelectionAction(
         icon: Icons.drive_file_move_rounded,
         label: 'Move',
-        onTap: () => _moveOrCopySelected(provider, selected, copy: false),
+        onTap: () => _moveOrCopySelected(selected, copy: false),
       ),
       if (selected.length == 1)
         SelectionAction(
@@ -195,16 +199,18 @@ class _PhotosViewState extends State<PhotosView>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final provider = context.watch<ServerProvider>();
+    final photosController = context.watch<PhotosController>();
+    final filesController = context.watch<FilesController>();
+    final pick = context.watch<PickController>();
 
     if (!_requested) {
       _requested = true;
       WidgetsBinding.instance.addPostFrameCallback(
-        (_) => provider.fetchAllMedia(),
+        (_) => photosController.fetchAllMedia(),
       );
     }
 
-    final photos = provider.photoItems;
+    final photos = photosController.items;
     final selectedItems = photos
         .where((i) => _selectedIds.contains(i.id))
         .toList();
@@ -217,38 +223,38 @@ class _PhotosViewState extends State<PhotosView>
           children: [
             IconButton(
               icon: Icon(
-                provider.photosSortAscending
+                photosController.sortAscending
                     ? Icons.arrow_upward_rounded
                     : Icons.arrow_downward_rounded,
                 size: 20,
               ),
               visualDensity: VisualDensity.compact,
-              tooltip: provider.photosSortAscending
+              tooltip: photosController.sortAscending
                   ? 'Ascending'
                   : 'Descending',
-              onPressed: provider.togglePhotosSortOrder,
+              onPressed: photosController.toggleSortOrder,
             ),
             Expanded(
               child: SortMenuButton(
-                field: provider.photosSortField,
-                onChanged: provider.setPhotosSortField,
+                field: photosController.sortField,
+                onChanged: photosController.setSortField,
               ),
             ),
             ToggleIconButton(
-              icon: provider.showFavoritesOnlyPhotos
+              icon: photosController.showFavoritesOnly
                   ? Icons.favorite_rounded
                   : Icons.favorite_border_rounded,
-              isSelected: provider.showFavoritesOnlyPhotos,
-              onTap: provider.toggleFavoritesFilterPhotos,
+              isSelected: photosController.showFavoritesOnly,
+              onTap: photosController.toggleFavoritesFilter,
               tooltip: 'Favorites only',
             ),
             const SizedBox(width: 4),
             ToggleIconButton(
-              icon: provider.showHiddenPhotos
+              icon: photosController.showHidden
                   ? Icons.visibility_rounded
                   : Icons.visibility_off_rounded,
-              isSelected: provider.showHiddenPhotos,
-              onTap: () => provider.toggleShowHiddenPhotos(),
+              isSelected: photosController.showHidden,
+              onTap: () => photosController.toggleShowHidden(),
               tooltip: 'Show hidden files',
             ),
             const SizedBox(width: 4),
@@ -256,14 +262,17 @@ class _PhotosViewState extends State<PhotosView>
               children: [
                 ToggleIconButton(
                   icon: Symbols.circles_rounded,
-                  isSelected: provider.storageScope == StorageScope.cloud,
-                  onTap: () => provider.setStorageScope(StorageScope.cloud),
+                  isSelected: filesController.storageScope == StorageScope.cloud,
+                  onTap: () =>
+                      filesController.setStorageScope(StorageScope.cloud),
                   tooltip: 'Cloud storage',
                 ),
                 ToggleIconButton(
                   icon: Symbols.hard_drive_rounded,
-                  isSelected: provider.storageScope == StorageScope.external,
-                  onTap: () => provider.setStorageScope(StorageScope.external),
+                  isSelected:
+                      filesController.storageScope == StorageScope.external,
+                  onTap: () =>
+                      filesController.setStorageScope(StorageScope.external),
                   tooltip: 'External storage',
                 ),
               ],
@@ -283,12 +292,12 @@ class _PhotosViewState extends State<PhotosView>
       ),
       const SliverToBoxAdapter(child: SizedBox(height: 8)),
 
-      if (provider.isMediaLoading && photos.isEmpty)
+      if (photosController.isLoading && photos.isEmpty)
         const SliverFillRemaining(
           hasScrollBody: false,
           child: Center(child: CircularProgressIndicator()),
         )
-      else if (provider.mediaErrorMessage != null)
+      else if (photosController.errorMessage != null)
         SliverFillRemaining(
           hasScrollBody: false,
           child: Center(
@@ -312,7 +321,7 @@ class _PhotosViewState extends State<PhotosView>
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    provider.mediaErrorMessage!,
+                    photosController.errorMessage!,
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: colorScheme.onSurfaceVariant,
@@ -320,7 +329,7 @@ class _PhotosViewState extends State<PhotosView>
                   ),
                   const SizedBox(height: 20),
                   FilledButton.icon(
-                    onPressed: provider.fetchAllMedia,
+                    onPressed: photosController.fetchAllMedia,
                     icon: const Icon(Icons.refresh_rounded),
                     label: const Text('Retry'),
                   ),
@@ -364,7 +373,7 @@ class _PhotosViewState extends State<PhotosView>
             ),
             delegate: SliverChildBuilderDelegate((context, index) {
               final photo = photos[index];
-              return _buildPhotoTile(context, photo, provider);
+              return _buildPhotoTile(context, photo);
             }, childCount: photos.length),
           ),
         ),
@@ -385,11 +394,10 @@ class _PhotosViewState extends State<PhotosView>
       },
       child: SyncedHeaderScaffold(
         scrollController: widget.scrollController,
-        provider: provider,
         actions: const [MoreTabsButton(), ProfileAvatarButton()],
-        onRefresh: provider.fetchAllMedia,
+        onRefresh: photosController.fetchAllMedia,
         selectionBar: _isSelecting
-            ? _buildSelectionBar(context, theme, provider, selectedItems)
+            ? _buildSelectionBar(context, theme, pick, selectedItems)
             : null,
         contentSlivers: contentSlivers,
       ),
@@ -402,7 +410,7 @@ class _PhotosViewState extends State<PhotosView>
   Widget _buildSelectionBar(
     BuildContext context,
     ThemeData theme,
-    ServerProvider provider,
+    PickController pick,
     List<NextcloudItem> selectedItems,
   ) {
     return Padding(
@@ -445,7 +453,7 @@ class _PhotosViewState extends State<PhotosView>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   for (final action in _buildSelectionActions(
-                    provider,
+                    pick,
                     selectedItems,
                   ))
                     IconButton(
@@ -463,12 +471,10 @@ class _PhotosViewState extends State<PhotosView>
     );
   }
 
-  Widget _buildPhotoTile(
-    BuildContext context,
-    NextcloudItem photo,
-    ServerProvider provider,
-  ) {
+  Widget _buildPhotoTile(BuildContext context, NextcloudItem photo) {
     final colorScheme = Theme.of(context).colorScheme;
+    final pick = context.watch<PickController>();
+    final session = context.watch<SessionController>();
     final isSelected = _selectedIds.contains(photo.id);
 
     // No border radius on the tile itself — the outer ClipRRect below is
@@ -476,15 +482,15 @@ class _PhotosViewState extends State<PhotosView>
     // floating rounded corner mid-drag (see the same fix in files_view).
     final tile = GestureDetector(
       onTap: () {
-        if (provider.isPicking) {
-          _handlePickTap(context, provider, photo);
+        if (pick.isPicking) {
+          _handlePickTap(context, pick, photo);
         } else if (_isSelecting) {
           _toggleSelection(photo);
         } else {
-          _openLightbox(context, photo, provider);
+          _openLightbox(context, photo);
         }
       },
-      onLongPress: provider.isPicking && !provider.pickRequest!.allowMultiple
+      onLongPress: pick.isPicking && !pick.pickRequest!.allowMultiple
           ? null
           : () => _toggleSelection(photo),
       child: ColoredBox(
@@ -507,7 +513,7 @@ class _PhotosViewState extends State<PhotosView>
                                 .round();
                         return Image.network(
                           photo.previewUrl!,
-                          headers: provider.service?.authHeaders,
+                          headers: session.service?.authHeaders,
                           fit: BoxFit.cover,
                           cacheWidth: cachePixels,
                           cacheHeight: cachePixels,
@@ -571,25 +577,20 @@ class _PhotosViewState extends State<PhotosView>
     );
   }
 
-  void _openLightbox(
-    BuildContext context,
-    NextcloudItem photo,
-    ServerProvider provider,
-  ) {
+  void _openLightbox(BuildContext context, NextcloudItem photo) {
+    final photos = context.read<PhotosController>().items;
     Navigator.push(
       context,
-      FileViewerScreen.route(item: photo, siblings: provider.photoItems),
+      FileViewerScreen.route(item: photo, siblings: photos),
     );
   }
 
-  Future<void> _favoriteSelected(
-    ServerProvider provider,
-    List<NextcloudItem> items,
-  ) async {
+  Future<void> _favoriteSelected(List<NextcloudItem> items) async {
+    final ops = context.read<ItemOperations>();
     final allFavorited = items.every((i) => i.isFavorite);
     for (final item in items) {
       if (item.isFavorite == allFavorited) {
-        await provider.toggleItemFavorite(item);
+        await ops.toggleItemFavorite(item);
       }
     }
     _clearSelection();
@@ -597,9 +598,9 @@ class _PhotosViewState extends State<PhotosView>
 
   Future<void> _shareSelected(
     BuildContext context,
-    ServerProvider provider,
     List<NextcloudItem> items,
   ) async {
+    final ops = context.read<ItemOperations>();
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(
       const SnackBar(
@@ -610,7 +611,7 @@ class _PhotosViewState extends State<PhotosView>
 
     final lines = <String>[];
     for (final item in items) {
-      final link = await provider.createShareLink(item);
+      final link = await ops.createShareLink(item);
       if (link != null) {
         lines.add(items.length > 1 ? '${item.name}: $link' : link);
       }
@@ -646,13 +647,13 @@ class _PhotosViewState extends State<PhotosView>
   /// `FilesView._downloadSelected`'s identical doc comment for why.
   Future<void> _downloadSelected(
     BuildContext context,
-    ServerProvider provider,
     List<NextcloudItem> items,
   ) async {
+    final session = context.read<SessionController>();
     _clearSelection();
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await DownloadService.startDownload(provider, items);
+      await DownloadService.startDownload(session, items);
       messenger.showSnackBar(
         SnackBar(
           content: Text(
@@ -675,7 +676,6 @@ class _PhotosViewState extends State<PhotosView>
 
   Future<void> _confirmDeleteSelected(
     BuildContext context,
-    ServerProvider provider,
     List<NextcloudItem> items,
   ) async {
     final confirmed = await showDialog<bool>(
@@ -704,10 +704,11 @@ class _PhotosViewState extends State<PhotosView>
     );
     if (confirmed != true || !context.mounted) return;
 
+    final ops = context.read<ItemOperations>();
     final messenger = ScaffoldMessenger.of(context);
     var succeeded = 0;
     for (final item in items) {
-      final success = await provider.deleteItem(item.path);
+      final success = await ops.deleteItem(item.path);
       if (success) succeeded++;
     }
 
@@ -721,7 +722,6 @@ class _PhotosViewState extends State<PhotosView>
   }
 
   Future<void> _moveOrCopySelected(
-    ServerProvider provider,
     List<NextcloudItem> items, {
     required bool copy,
   }) async {

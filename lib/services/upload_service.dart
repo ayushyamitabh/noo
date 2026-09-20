@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/services.dart';
-import '../providers/server_provider.dart';
+import '../providers/files_controller.dart';
+import '../providers/session_controller.dart';
+import 'native_channel.dart';
 import 'share_intent_service.dart';
 
 /// Hands a "Share to Noo" upload off to `ShareUploadService.kt`'s Android
@@ -18,25 +20,21 @@ class UploadService {
   /// service owns the rest and reports progress/completion/cancellation
   /// through its own notification, not back to the app.
   static Future<void> startUpload(
-    ServerProvider provider,
-    List<SharedFileRef> files,
+    SessionController session,
+    FilesController files,
+    List<SharedFileRef> sharedFiles,
   ) async {
-    final service = provider.service;
-    final authHeader = service?.authHeaders['Authorization'];
-    if (service == null || authHeader == null) {
-      throw Exception('Not logged in.');
-    }
-
+    final args = baseChannelArgs(session);
     final filesJson = jsonEncode(
-      files.map((f) => {'uri': f.uri, 'name': f.name, 'size': f.size}).toList(),
+      sharedFiles
+          .map((f) => {'uri': f.uri, 'name': f.name, 'size': f.size})
+          .toList(),
     );
 
     await _channel.invokeMethod('startUpload', {
+      ...args,
       'files': filesJson,
-      'serverUrl': provider.serverUrl,
-      'username': provider.username,
-      'authHeader': authHeader,
-      'remoteFolder': provider.currentFolderPath,
+      'remoteFolder': files.currentFolderPath,
     });
   }
 }

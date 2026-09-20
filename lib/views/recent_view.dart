@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/nextcloud_item.dart';
-import '../providers/server_provider.dart';
+import '../providers/recent_controller.dart';
 import '../widgets/more_tabs_button.dart';
 import '../widgets/profile_avatar_button.dart';
 import '../widgets/synced_header_scaffold.dart';
@@ -48,7 +48,7 @@ Color _recentItemIconColor(BuildContext context, NextcloudItemType type) {
 }
 
 /// Recently modified files across the whole account (not folders), newest
-/// first — see [ServerProvider.fetchRecent].
+/// first — see [RecentController.fetchAll].
 class RecentView extends StatefulWidget {
   final ScrollController scrollController;
 
@@ -65,26 +65,24 @@ class _RecentViewState extends State<RecentView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final provider = context.watch<ServerProvider>();
+    final recent = context.watch<RecentController>();
 
     if (!_requested) {
       _requested = true;
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => provider.fetchRecent(),
-      );
+      WidgetsBinding.instance.addPostFrameCallback((_) => recent.fetchAll());
     }
 
-    final items = provider.recentItems;
+    final items = recent.items;
 
     final List<Widget> contentSlivers = [
       const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
-      if (provider.isRecentLoading && items.isEmpty)
+      if (recent.isLoading && items.isEmpty)
         const SliverFillRemaining(
           hasScrollBody: false,
           child: Center(child: CircularProgressIndicator()),
         )
-      else if (provider.recentErrorMessage != null)
+      else if (recent.errorMessage != null)
         SliverFillRemaining(
           hasScrollBody: false,
           child: Center(
@@ -108,7 +106,7 @@ class _RecentViewState extends State<RecentView> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    provider.recentErrorMessage!,
+                    recent.errorMessage!,
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: colorScheme.onSurfaceVariant,
@@ -116,7 +114,7 @@ class _RecentViewState extends State<RecentView> {
                   ),
                   const SizedBox(height: 20),
                   FilledButton.icon(
-                    onPressed: provider.fetchRecent,
+                    onPressed: recent.fetchAll,
                     icon: const Icon(Icons.refresh_rounded),
                     label: const Text('Retry'),
                   ),
@@ -154,7 +152,7 @@ class _RecentViewState extends State<RecentView> {
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate((context, index) {
               final item = items[index];
-              return _buildTile(context, item, provider);
+              return _buildTile(context, item);
             }, childCount: items.length),
           ),
         ),
@@ -165,18 +163,13 @@ class _RecentViewState extends State<RecentView> {
 
     return SyncedHeaderScaffold(
       scrollController: widget.scrollController,
-      provider: provider,
       actions: const [MoreTabsButton(), ProfileAvatarButton()],
-      onRefresh: provider.fetchRecent,
+      onRefresh: recent.fetchAll,
       contentSlivers: contentSlivers,
     );
   }
 
-  Widget _buildTile(
-    BuildContext context,
-    NextcloudItem item,
-    ServerProvider provider,
-  ) {
+  Widget _buildTile(BuildContext context, NextcloudItem item) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final iconColor = _recentItemIconColor(context, item.type);
@@ -192,7 +185,7 @@ class _RecentViewState extends State<RecentView> {
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: () => _openFile(context, item, provider),
+          onTap: () => _openFile(context, item),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
@@ -248,12 +241,9 @@ class _RecentViewState extends State<RecentView> {
     );
   }
 
-  void _openFile(
-    BuildContext context,
-    NextcloudItem item,
-    ServerProvider provider,
-  ) {
-    final siblings = provider.recentItems.where((i) => i.isMedia).toList();
+  void _openFile(BuildContext context, NextcloudItem item) {
+    final recent = context.read<RecentController>();
+    final siblings = recent.items.where((i) => i.isMedia).toList();
     Navigator.push(
       context,
       FileViewerScreen.route(item: item, siblings: siblings),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../providers/server_provider.dart';
+import '../providers/settings_controller.dart';
 
 /// Wraps [child] with the user's configured swipe-left/swipe-right actions
 /// (favorite, delete, share, or none) — shared between the Files list view
@@ -10,7 +10,7 @@ import '../providers/server_provider.dart';
 class SwipeableItem extends StatelessWidget {
   final Key itemKey;
   final String itemName;
-  final ServerProvider provider;
+  final SettingsController settings;
   final Future<void> Function() onFavorite;
   final Future<void> Function() onShare;
   final Future<void> Function() onDelete;
@@ -20,7 +20,7 @@ class SwipeableItem extends StatelessWidget {
     super.key,
     required this.itemKey,
     required this.itemName,
-    required this.provider,
+    required this.settings,
     required this.onFavorite,
     required this.onShare,
     required this.onDelete,
@@ -69,8 +69,8 @@ class SwipeableItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final rightAction = provider.swipeRightAction;
-    final leftAction = provider.swipeLeftAction;
+    final rightAction = settings.swipeRightAction;
+    final leftAction = settings.swipeLeftAction;
     final direction = _directionFor(leftAction, rightAction);
     if (direction == DismissDirection.none) return child;
 

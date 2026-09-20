@@ -1,7 +1,6 @@
 package dev.ayushya.noo
 
 import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
@@ -16,9 +15,7 @@ import androidx.core.app.ServiceCompat
 import org.json.JSONArray
 import java.io.File
 import java.io.FileOutputStream
-import java.net.HttpURLConnection
 import java.net.URL
-import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Foreground service that prepares (copies from a content:// Uri) and
@@ -28,19 +25,18 @@ import java.util.concurrent.atomic.AtomicBoolean
  * doesn't interrupt the upload, the same way a file-manager app's own
  * upload notification survives the app being closed.
  *
- * Re-implements a plain WebDAV PUT here in Kotlin (HttpURLConnection, no
- * new HTTP dependency) rather than reusing NextcloudService/Dio from Dart,
- * since a Dart isolate doesn't keep running once the Flutter engine/
- * Activity are gone - only a real Android Service does. This does mean the
- * PUT request itself is duplicated logic (see NextcloudService.
- * uploadFileFromPath); keep both in sync if the upload semantics change.
+ * PUT itself is [DavTransfer.put]; this file owns only what's specific to
+ * a share-upload - materializing the source content:// Uri into a real
+ * file first (WebDAV PUT needs a known Content-Length, which streaming
+ * straight from a content:// Uri can't always provide) and the
+ * notification/queue plumbing.
  *
  * Started via the `dev.ayushya.noo/upload_service` MethodChannel
  * (MainActivity.kt) with credentials/destination passed as Intent extras -
  * never has an Activity in the loop after that. Shows one persistent,
- * cancellable notification for the whole batch; the Cancel action re-enters
- * this same running service instance with [ACTION_CANCEL], which the
- * copy/upload loops poll.
+ * cancellable notification for the whole batch; a second share arriving
+ * mid-upload queues behind the first (see [TransferQueue]) instead of
+ * being dropped.
  */
 class ShareUploadService : Service() {
     companion object {
@@ -55,16 +51,26 @@ class ShareUploadService : Service() {
         private const val NOTIFICATION_ID = 4201
     }
 
-    private val cancelled = AtomicBoolean(false)
-    private var uploadThread: Thread? = null
-
     private data class ShareFile(val uri: String, val name: String, val size: Long?)
+
+    private data class UploadBatch(
+        val files: List<ShareFile>,
+        val serverUrl: String,
+        val username: String,
+        val authHeader: String,
+        val remoteFolder: String,
+    )
+
+    @Volatile
+    private var cancelled = false
+    private val queue = TransferQueue<UploadBatch> { runUploads(it) }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_CANCEL) {
-            cancelled.set(true)
+            cancelled = true
+            queue.clearPending()
             return START_NOT_STICKY
         }
 
@@ -80,7 +86,13 @@ class ShareUploadService : Service() {
             return START_NOT_STICKY
         }
 
-        createNotificationChannel()
+        NooNotificationChannels.ensure(
+            this,
+            CHANNEL_ID,
+            "File uploads",
+            NotificationManager.IMPORTANCE_LOW,
+            "Progress for files shared to Noo",
+        )
         ServiceCompat.startForeground(
             this,
             NOTIFICATION_ID,
@@ -92,16 +104,7 @@ class ShareUploadService : Service() {
             },
         )
 
-        // A second share arriving mid-upload is dropped rather than queued -
-        // rare in practice (sharing again before the first batch finishes),
-        // not worth a real queue for.
-        if (uploadThread == null) {
-            val files = parseFiles(filesJson)
-            uploadThread = Thread {
-                runUploads(files, serverUrl, username, authHeader, remoteFolder)
-            }.also { it.start() }
-        }
-
+        queue.enqueue(UploadBatch(parseFiles(filesJson), serverUrl, username, authHeader, remoteFolder))
         return START_NOT_STICKY
     }
 
@@ -117,23 +120,22 @@ class ShareUploadService : Service() {
         }
     }
 
-    private fun runUploads(
-        files: List<ShareFile>,
-        serverUrl: String,
-        username: String,
-        authHeader: String,
-        remoteFolder: String,
-    ) {
+    private fun runUploads(batch: UploadBatch) {
+        cancelled = false
         var succeeded = 0
         var failed = 0
-        val cleanServer = serverUrl.trimEnd('/')
-        var cleanFolder = remoteFolder.trim()
+        val cleanServer = batch.serverUrl.trimEnd('/')
+        var cleanFolder = batch.remoteFolder.trim()
         if (!cleanFolder.startsWith("/")) cleanFolder = "/$cleanFolder"
         if (!cleanFolder.endsWith("/")) cleanFolder = "$cleanFolder/"
 
-        for ((index, file) in files.withIndex()) {
-            if (cancelled.get()) break
-            val label = if (files.size == 1) file.name else "${file.name} (${index + 1}/${files.size})"
+        for ((index, file) in batch.files.withIndex()) {
+            if (cancelled) break
+            val label = if (batch.files.size == 1) {
+                file.name
+            } else {
+                "${file.name} (${index + 1}/${batch.files.size})"
+            }
             var tempFile: File? = null
             try {
                 notify(buildProgressNotification("Preparing $label…", null, indeterminate = true))
@@ -146,19 +148,26 @@ class ShareUploadService : Service() {
                         ),
                     )
                 }
-                if (cancelled.get()) break
+                if (cancelled) break
 
                 val encodedName = Uri.encode(file.name)
-                val url = URL("$cleanServer/remote.php/dav/files/$username$cleanFolder$encodedName")
-                val ok = uploadFile(tempFile, url, authHeader) { sent, total ->
-                    notify(
-                        buildProgressNotification(
-                            "Uploading $label…",
-                            progressFraction(sent, total),
-                            indeterminate = false,
-                        ),
-                    )
-                }
+                val url = URL("$cleanServer/remote.php/dav/files/${batch.username}$cleanFolder$encodedName")
+                val ok = DavTransfer.put(
+                    url,
+                    batch.authHeader,
+                    tempFile,
+                    contentType = "application/octet-stream",
+                    onProgress = { sent, total ->
+                        notify(
+                            buildProgressNotification(
+                                "Uploading $label…",
+                                progressFraction(sent, total),
+                                indeterminate = false,
+                            ),
+                        )
+                    },
+                    isCancelled = { cancelled },
+                )
                 if (ok) succeeded++ else failed++
             } catch (e: Exception) {
                 failed++
@@ -167,17 +176,18 @@ class ShareUploadService : Service() {
             }
         }
 
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val finalText = when {
-            cancelled.get() -> "Upload cancelled"
-            failed == 0 && files.size == 1 -> "Uploaded ${files.first().name}"
-            failed == 0 -> "Uploaded $succeeded of ${files.size} files"
-            else -> "Uploaded $succeeded of ${files.size} files - $failed failed"
+            cancelled -> "Upload cancelled"
+            failed == 0 && batch.files.size == 1 -> "Uploaded ${batch.files.first().name}"
+            failed == 0 -> "Uploaded $succeeded of ${batch.files.size} files"
+            else -> "Uploaded $succeeded of ${batch.files.size} files - $failed failed"
         }
-        manager.notify(NOTIFICATION_ID, buildFinalNotification(finalText))
+        manager().notify(NOTIFICATION_ID, buildFinalNotification(finalText))
 
-        stopForeground(STOP_FOREGROUND_DETACH)
-        stopSelf()
+        if (queue.pendingCount == 0) {
+            stopForeground(STOP_FOREGROUND_DETACH)
+            stopSelf()
+        }
     }
 
     private fun progressFraction(sent: Long, total: Long?): Float? {
@@ -193,7 +203,7 @@ class ShareUploadService : Service() {
                 val buffer = ByteArray(256 * 1024)
                 var sent = 0L
                 var lastEmit = 0L
-                while (!cancelled.get()) {
+                while (!cancelled) {
                     val read = input.read(buffer)
                     if (read == -1) break
                     output.write(buffer, 0, read)
@@ -209,70 +219,11 @@ class ShareUploadService : Service() {
         return target
     }
 
-    private fun uploadFile(
-        file: File,
-        url: URL,
-        authHeader: String,
-        onProgress: (Long, Long) -> Unit,
-    ): Boolean {
-        val length = file.length()
-        val connection = url.openConnection() as HttpURLConnection
-        return try {
-            connection.requestMethod = "PUT"
-            connection.doOutput = true
-            connection.setFixedLengthStreamingMode(length)
-            connection.setRequestProperty("Authorization", authHeader)
-            connection.setRequestProperty("OCS-APIRequest", "true")
-            connection.setRequestProperty("Content-Type", "application/octet-stream")
-            connection.connectTimeout = 15000
-            connection.readTimeout = 30000
-
-            connection.outputStream.use { output ->
-                file.inputStream().use { input ->
-                    val buffer = ByteArray(256 * 1024)
-                    var sent = 0L
-                    var lastEmit = 0L
-                    while (!cancelled.get()) {
-                        val read = input.read(buffer)
-                        if (read == -1) break
-                        output.write(buffer, 0, read)
-                        sent += read
-                        val now = System.currentTimeMillis()
-                        if (now - lastEmit >= 200) {
-                            lastEmit = now
-                            onProgress(sent, length)
-                        }
-                    }
-                }
-            }
-            if (cancelled.get()) {
-                false
-            } else {
-                val code = connection.responseCode
-                code == 201 || code == 204 || code == 200
-            }
-        } catch (e: Exception) {
-            false
-        } finally {
-            connection.disconnect()
-        }
-    }
+    private fun manager() =
+        getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
     private fun notify(notification: Notification) {
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(NOTIFICATION_ID, notification)
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "File uploads",
-                NotificationManager.IMPORTANCE_LOW,
-            ).apply { description = "Progress for files shared to Noo" }
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.createNotificationChannel(channel)
-        }
+        manager().notify(NOTIFICATION_ID, notification)
     }
 
     private fun buildProgressNotification(text: String, progress: Float?, indeterminate: Boolean): Notification {
@@ -308,7 +259,7 @@ class ShareUploadService : Service() {
     }
 
     override fun onDestroy() {
-        cancelled.set(true)
+        cancelled = true
         super.onDestroy()
     }
 }

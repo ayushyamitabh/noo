@@ -9,7 +9,9 @@ import 'package:pdfx/pdfx.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 import '../models/nextcloud_item.dart';
-import '../providers/server_provider.dart';
+import '../providers/item_operations.dart';
+import '../providers/session_controller.dart';
+import '../providers/settings_controller.dart';
 import '../services/download_service.dart';
 import '../widgets/details/details_sheet.dart';
 import '../widgets/frosted_glass_container.dart';
@@ -148,13 +150,13 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
   }
 
   Future<String> _downloadToTemp(
-    ServerProvider provider,
+    SessionController session,
     NextcloudItem item,
   ) async {
     final tempDir = await getTemporaryDirectory();
     final savePath = p.join(tempDir.path, item.name);
     setState(() => _downloadProgress = 0);
-    await provider.service!.downloadToFile(
+    await session.service!.downloadToFile(
       item.path,
       savePath,
       onProgress: (received, total) {
@@ -167,11 +169,11 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
     return savePath;
   }
 
-  Future<void> _openExternally(ServerProvider provider) async {
+  Future<void> _openExternally(SessionController session) async {
     final item = _currentItem;
     setState(() => _isBusy = true);
     try {
-      final path = await _downloadToTemp(provider, item);
+      final path = await _downloadToTemp(session, item);
       final result = await OpenFile.open(path);
       if (mounted && result.type != ResultType.done) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -194,10 +196,10 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
   /// `UploadService`/`ShareUploadService.kt` on the upload side: a real
   /// Android Service survives the app being closed mid-download, and one
   /// notification covers progress/cancel instead of blocking this screen.
-  Future<void> _downloadToDevice(ServerProvider provider) async {
+  Future<void> _downloadToDevice(SessionController session) async {
     final item = _currentItem;
     try {
-      await DownloadService.startDownload(provider, [item]);
+      await DownloadService.startDownload(session, [item]);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -216,16 +218,16 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
     }
   }
 
-  Future<void> _toggleFavorite(ServerProvider provider) async {
+  Future<void> _toggleFavorite(ItemOperations ops) async {
     final item = _currentItem;
-    await provider.toggleItemFavorite(item);
+    await ops.toggleItemFavorite(item);
     if (!mounted) return;
     setState(() {
       _mediaItems[_currentIndex] = item.copyWith(isFavorite: !item.isFavorite);
     });
   }
 
-  Future<void> _deleteCurrentItem(ServerProvider provider) async {
+  Future<void> _deleteCurrentItem(ItemOperations ops) async {
     final item = _currentItem;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -254,7 +256,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
     if (confirmed != true || !mounted) return;
 
     setState(() => _isBusy = true);
-    final success = await provider.deleteItem(item.path);
+    final success = await ops.deleteItem(item.path);
     if (!mounted) return;
     setState(() => _isBusy = false);
 
@@ -283,7 +285,9 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.read<ServerProvider>();
+    final session = context.read<SessionController>();
+    final settings = context.read<SettingsController>();
+    final ops = context.read<ItemOperations>();
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -296,7 +300,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
             Positioned.fill(
               child: Container(
                 color: colorScheme.surface,
-                child: _buildBody(context, provider),
+                child: _buildBody(context, session),
               ),
             ),
             if (_downloadProgress != null)
@@ -322,8 +326,8 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
                     child: FrostedGlassContainer(
-                      opacity: provider.bottomBarOpacity,
-                      blurSigma: provider.bottomBarBlur,
+                      opacity: settings.bottomBarOpacity,
+                      blurSigma: settings.bottomBarBlur,
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 6,
@@ -367,13 +371,13 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                   child: _MediaActionBar(
                     isFavorite: _currentItem.isFavorite,
                     isBusy: _isBusy,
-                    opacity: provider.bottomBarOpacity,
-                    blurSigma: provider.bottomBarBlur,
+                    opacity: settings.bottomBarOpacity,
+                    blurSigma: settings.bottomBarBlur,
                     onShare: () => ShareSheet.show(context, _currentItem),
-                    onFavorite: () => _toggleFavorite(provider),
-                    onDelete: () => _deleteCurrentItem(provider),
-                    onOpenExternally: () => _openExternally(provider),
-                    onDownload: () => _downloadToDevice(provider),
+                    onFavorite: () => _toggleFavorite(ops),
+                    onDelete: () => _deleteCurrentItem(ops),
+                    onOpenExternally: () => _openExternally(session),
+                    onDownload: () => _downloadToDevice(session),
                     onDetails: () => DetailsSheet.show(context, _currentItem),
                   ),
                 ),
@@ -385,10 +389,11 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
     );
   }
 
-  Widget _buildBody(BuildContext context, ServerProvider provider) {
+  Widget _buildBody(BuildContext context, SessionController session) {
     if (!_isSwipeable) {
-      return _buildStaticPreview(context, provider);
+      return _buildStaticPreview(context, session);
     }
+    final settings = context.read<SettingsController>();
 
     return PageView.builder(
       controller: _pageController,
@@ -399,24 +404,24 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
         if (mediaItem.type == NextcloudItemType.image) {
           return _ImagePreview(
             key: ValueKey(mediaItem.id),
-            url: provider.service!.fileUrl(mediaItem.path),
-            headers: provider.service!.authHeaders,
+            url: session.service!.fileUrl(mediaItem.path),
+            headers: session.service!.authHeaders,
           );
         }
         return _VideoPreview(
           key: ValueKey(mediaItem.id),
-          url: provider.service!.fileUrl(mediaItem.path),
-          headers: provider.service!.authHeaders,
+          url: session.service!.fileUrl(mediaItem.path),
+          headers: session.service!.authHeaders,
           isActive: index == _currentIndex,
           controlsBottomOffset: _controlsVisible ? 108 : 24,
-          opacity: provider.bottomBarOpacity,
-          blurSigma: provider.bottomBarBlur,
+          opacity: settings.bottomBarOpacity,
+          blurSigma: settings.bottomBarBlur,
         );
       },
     );
   }
 
-  Widget _buildStaticPreview(BuildContext context, ServerProvider provider) {
+  Widget _buildStaticPreview(BuildContext context, SessionController session) {
     switch (widget.item.type) {
       case NextcloudItemType.image:
       case NextcloudItemType.video:
@@ -424,15 +429,15 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
         return const SizedBox.shrink();
       default:
         if (_isPdf) {
-          return _PdfPreview(item: widget.item, provider: provider);
+          return _PdfPreview(item: widget.item, session: session);
         }
         if (_isText) {
-          return _TextPreview(item: widget.item, provider: provider);
+          return _TextPreview(item: widget.item, session: session);
         }
         return _UnsupportedPreview(
           item: widget.item,
           isBusy: _isBusy,
-          onOpenExternally: () => _openExternally(provider),
+          onOpenExternally: () => _openExternally(session),
           onOpenDetails: () => DetailsSheet.show(context, widget.item),
         );
     }
@@ -752,7 +757,7 @@ class _VideoPreviewState extends State<_VideoPreview> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final progressBarStyle = context
-        .watch<ServerProvider>()
+        .watch<SettingsController>()
         .mediaProgressBarStyle;
     if (_error != null) {
       return Center(
@@ -966,9 +971,9 @@ class _WavySeekBarState extends State<_WavySeekBar>
 
 class _PdfPreview extends StatefulWidget {
   final NextcloudItem item;
-  final ServerProvider provider;
+  final SessionController session;
 
-  const _PdfPreview({required this.item, required this.provider});
+  const _PdfPreview({required this.item, required this.session});
 
   @override
   State<_PdfPreview> createState() => _PdfPreviewState();
@@ -986,7 +991,7 @@ class _PdfPreviewState extends State<_PdfPreview> {
 
   Future<void> _load() async {
     try {
-      final bytes = await widget.provider.service!.fetchBytes(widget.item.path);
+      final bytes = await widget.session.service!.fetchBytes(widget.item.path);
       if (!mounted) return;
       setState(() {
         _controller = PdfControllerPinch(
@@ -1033,9 +1038,9 @@ class _PdfPreviewState extends State<_PdfPreview> {
 
 class _TextPreview extends StatefulWidget {
   final NextcloudItem item;
-  final ServerProvider provider;
+  final SessionController session;
 
-  const _TextPreview({required this.item, required this.provider});
+  const _TextPreview({required this.item, required this.session});
 
   @override
   State<_TextPreview> createState() => _TextPreviewState();
@@ -1053,7 +1058,7 @@ class _TextPreviewState extends State<_TextPreview> {
 
   Future<void> _load() async {
     try {
-      final bytes = await widget.provider.service!.fetchBytes(widget.item.path);
+      final bytes = await widget.session.service!.fetchBytes(widget.item.path);
       if (mounted) {
         setState(() => _content = utf8.decode(bytes, allowMalformed: true));
       }
