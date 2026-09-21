@@ -1,16 +1,18 @@
+import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
-import 'package:material_symbols_icons/symbols.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/nextcloud_item.dart';
 import '../models/selection_action.dart';
 import '../providers/files_controller.dart';
+import '../providers/folder_browser.dart';
 import '../providers/item_operations.dart';
+import '../providers/offline_controller.dart';
 import '../providers/pick_controller.dart';
 import '../providers/session_controller.dart';
 import '../providers/settings_controller.dart';
@@ -19,13 +21,14 @@ import '../services/download_service.dart';
 import '../services/share_intent_service.dart';
 import '../widgets/breadcrumbs.dart';
 import '../widgets/details/details_sheet.dart';
+import '../widgets/files_controls_row.dart';
 import '../widgets/item_icon.dart';
+import '../widgets/manage_synced_folders_sheet.dart';
+import '../widgets/media_grid_tile.dart';
 import '../widgets/more_tabs_button.dart';
 import '../widgets/profile_avatar_button.dart';
-import '../widgets/segmented_icon_toggle.dart';
 import '../widgets/selectable_thumbnail.dart';
 import '../widgets/share_sheet.dart';
-import '../widgets/sort_menu_button.dart';
 import '../widgets/sticky_header_delegate.dart';
 import '../widgets/swipeable_item.dart';
 import '../widgets/sync_status_badge.dart';
@@ -34,10 +37,23 @@ import 'file_viewer_screen.dart';
 import 'move_copy_destination_picker.dart';
 import 'share_upload_view.dart';
 
+/// The Files tab - and, with [offline] set, the Offline tab, which is the
+/// same view over the device-sync mirror instead of the server: the Files
+/// tab's folders filtered down to what's available offline. The two share
+/// every display pref/control, the header, breadcrumbs, list/grid tiles and
+/// thumbnails; [offline] only swaps the data source (`FolderBrowser`),
+/// reads images from the local file instead of a server preview, and turns
+/// off everything that needs the server (selection and its bulk actions,
+/// swipe actions, sync badges, the "+" menu, pick mode).
 class FilesView extends StatefulWidget {
   final ScrollController scrollController;
+  final bool offline;
 
-  const FilesView({super.key, required this.scrollController});
+  const FilesView({
+    super.key,
+    required this.scrollController,
+    this.offline = false,
+  });
 
   @override
   State<FilesView> createState() => _FilesViewState();
@@ -115,6 +131,35 @@ class _FilesViewState extends State<FilesView>
   final List<AnimationController> _scrollHintControllers = [];
 
   bool get _isSelecting => _selectedIds.isNotEmpty;
+
+  bool get _offline => widget.offline;
+
+  /// The folder data source for this tab. Watches the concrete controller
+  /// (that's what's registered as a provider), then hands it back as the
+  /// [FolderBrowser] the rest of the view actually needs.
+  FolderBrowser _browserOf(BuildContext context) => _offline
+      ? context.watch<OfflineController>()
+      : context.watch<FilesController>();
+
+  /// The on-device copy of [item] for the Offline tab; null online, where
+  /// thumbnails come from server previews instead.
+  File? _localFileFor(BuildContext context, NextcloudItem item) => _offline
+      ? context.read<OfflineController>().localFileFor(item)
+      : null;
+
+  // (Online only - the Offline tab always reloads on first build, since a
+  // local listing has no cheap "already loaded" signal.)
+  // Normally FilesController's own account-activation listener fetches the
+  // first listing (see FilesController._onAccountActivated) - but the
+  // bottom nav collapses to just the Offline tab while
+  // ConnectivityController briefly (mis)reports offline right after a cold
+  // start, which stops this view (and therefore FilesController, a lazily-
+  // constructed provider) from ever being built during the window that
+  // listener fires in. Photos/Favorites already guard against exactly this
+  // with their own one-shot self-fetch on first build; Files needs the same
+  // fallback so a folder that's genuinely empty is distinguishable from one
+  // that just never got its initial fetch.
+  bool _requestedInitialLoad = false;
 
   @override
   void initState() {
@@ -411,14 +456,26 @@ class _FilesViewState extends State<FilesView>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    // Display prefs (grid/list, filters, sort) live on FilesController for
+    // both tabs; `browser` is the tab's own folder listing.
     final files = context.watch<FilesController>();
+    final browser = _browserOf(context);
 
-    final pathDepth = files.pathStack.length;
+    if (!_requestedInitialLoad) {
+      _requestedInitialLoad = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_offline || (browser.items.isEmpty && !browser.isLoading)) {
+          browser.reload();
+        }
+      });
+    }
+
+    final pathDepth = browser.pathStack.length;
     final navigatingDeeper = pathDepth > _lastPathDepth;
     _lastPathDepth = pathDepth;
 
-    final hasBreadcrumbs = files.pathStack.length > 1;
-    final selectedItems = files.items
+    final hasBreadcrumbs = browser.pathStack.length > 1;
+    final selectedItems = browser.items
         .where((i) => _selectedIds.contains(i.id))
         .toList();
 
@@ -430,134 +487,20 @@ class _FilesViewState extends State<FilesView>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            height: 44,
-            // No persistent hint widget here - instead, a one-shot nudge
-            // (see _playControlsScrollHint, triggered from initState) just
-            // scrolls this row a little to the right and back, once, right
-            // after it first appears. Two static attempts before this -
-            // fading the controls' own opacity via ShaderMask, then a
-            // chevron badge overlaid on the edge - both add a
-            // permanent element competing with the actual controls; a
-            // motion cue that plays once and gets out of the way reads
-            // just as clearly without that cost.
-            child: SingleChildScrollView(
-              controller: _controlsScrollController,
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: Icon(
-                      files.filesSortAscending
-                          ? Icons.arrow_upward_rounded
-                          : Icons.arrow_downward_rounded,
-                      size: 20,
-                    ),
-                    visualDensity: VisualDensity.compact,
-                    tooltip: files.filesSortAscending
-                        ? 'Ascending'
-                        : 'Descending',
-                    onPressed: files.toggleFilesSortOrder,
-                  ),
-                  // A plain width, not Expanded - this row scrolls
-                  // horizontally now, which gives every control unbounded
-                  // width to lay out in, so a flex child would throw.
-                  SizedBox(
-                    width: 130,
-                    child: SortMenuButton(
-                      field: files.filesSortField,
-                      onChanged: files.setFilesSortField,
-                    ),
-                  ),
-                  ToggleIconButton(
-                    icon: files.showHiddenFiles
-                        ? Icons.visibility_rounded
-                        : Icons.visibility_off_rounded,
-                    isSelected: files.showHiddenFiles,
-                    onTap: () => files.toggleShowHiddenFiles(),
-                    tooltip: 'Show hidden files',
-                  ),
-                  const SizedBox(width: 4),
-                  SegmentedIconGroup(
-                    children: [
-                      ToggleIconButton(
-                        icon: Symbols.circles_rounded,
-                        isSelected: files.storageScope == StorageScope.cloud,
-                        onTap: () =>
-                            files.setStorageScope(StorageScope.cloud),
-                        tooltip: 'Cloud storage',
-                      ),
-                      ToggleIconButton(
-                        icon: Symbols.hard_drive_rounded,
-                        isSelected:
-                            files.storageScope == StorageScope.external,
-                        onTap: () =>
-                            files.setStorageScope(StorageScope.external),
-                        tooltip: 'External storage',
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 8),
-                  SegmentedIconGroup(
-                    children: [
-                      ToggleIconButton(
-                        icon: Icons.select_all_rounded,
-                        isSelected:
-                            files.filesTypeFilter == FilesTypeFilter.all,
-                        onTap: () =>
-                            files.setFilesTypeFilter(FilesTypeFilter.all),
-                        tooltip: 'Files & folders',
-                      ),
-                      ToggleIconButton(
-                        icon: Icons.insert_drive_file_outlined,
-                        isSelected:
-                            files.filesTypeFilter ==
-                            FilesTypeFilter.filesOnly,
-                        onTap: () => files.setFilesTypeFilter(
-                          FilesTypeFilter.filesOnly,
-                        ),
-                        tooltip: 'Files only',
-                      ),
-                      ToggleIconButton(
-                        icon: Icons.folder_outlined,
-                        isSelected:
-                            files.filesTypeFilter ==
-                            FilesTypeFilter.foldersOnly,
-                        onTap: () => files.setFilesTypeFilter(
-                          FilesTypeFilter.foldersOnly,
-                        ),
-                        tooltip: 'Folders only',
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 8),
-                  SegmentedIconGroup(
-                    children: [
-                      ToggleIconButton(
-                        icon: Icons.view_list_rounded,
-                        isSelected: !files.isGridView,
-                        onTap: () => files.setGridView(false),
-                        tooltip: 'List view',
-                      ),
-                      ToggleIconButton(
-                        icon: Icons.grid_view_rounded,
-                        isSelected: files.isGridView,
-                        onTap: () => files.setGridView(true),
-                        tooltip: 'Grid view',
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+          // The scroll-hint nudge (see _playScrollHint) plays on this row
+          // once, right after it first appears.
+          FilesControlsRow(
+            folderPath: browser.currentFolderPath,
+            showStorageScope: !_offline,
+            scrollController: _controlsScrollController,
           ),
           if (hasBreadcrumbs) ...[
             const SizedBox(height: 10),
             SizedBox(
               height: 32,
               child: Breadcrumbs(
-                pathStack: files.pathStack,
-                onTap: (index) => files.navigateToPathIndex(index),
+                pathStack: browser.pathStack,
+                onTap: (index) => browser.navigateToPathIndex(index),
               ),
             ),
           ],
@@ -577,12 +520,12 @@ class _FilesViewState extends State<FilesView>
         ),
       ),
       // Files List / Grid
-      if (files.isLoading)
+      if (browser.isLoading)
         const SliverFillRemaining(
           hasScrollBody: false,
           child: Center(child: CircularProgressIndicator()),
         )
-      else if (files.errorMessage != null)
+      else if (browser.errorMessage != null)
         SliverFillRemaining(
           hasScrollBody: false,
           child: Center(
@@ -598,7 +541,7 @@ class _FilesViewState extends State<FilesView>
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'WebDAV Sync Error',
+                    _offline ? 'Could not read local files' : 'WebDAV Sync Error',
                     style: theme.textTheme.titleLarge?.copyWith(
                       color: colorScheme.error,
                       fontWeight: FontWeight.bold,
@@ -606,7 +549,7 @@ class _FilesViewState extends State<FilesView>
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    files.errorMessage!,
+                    browser.errorMessage!,
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: colorScheme.onSurfaceVariant,
@@ -614,16 +557,16 @@ class _FilesViewState extends State<FilesView>
                   ),
                   const SizedBox(height: 20),
                   FilledButton.icon(
-                    onPressed: files.refreshData,
+                    onPressed: browser.reload,
                     icon: const Icon(Icons.refresh_rounded),
-                    label: const Text('Retry Connection'),
+                    label: Text(_offline ? 'Retry' : 'Retry Connection'),
                   ),
                 ],
               ),
             ),
           ),
         )
-      else if (files.items.isEmpty)
+      else if (browser.items.isEmpty)
         SliverFillRemaining(
           hasScrollBody: false,
           child: Center(
@@ -631,13 +574,17 @@ class _FilesViewState extends State<FilesView>
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
-                  Icons.folder_open_rounded,
+                  _offline
+                      ? Icons.offline_pin_outlined
+                      : Icons.folder_open_rounded,
                   size: 64,
                   color: colorScheme.outlineVariant,
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Folder is empty',
+                  _offline && !hasBreadcrumbs
+                      ? 'Nothing downloaded yet'
+                      : 'Folder is empty',
                   style: theme.textTheme.titleMedium?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),
@@ -658,14 +605,14 @@ class _FilesViewState extends State<FilesView>
               mainAxisSpacing: 12,
             ),
             delegate: SliverChildBuilderDelegate((context, index) {
-              final item = files.items[index];
+              final item = browser.items[index];
               return _FolderEnterAnimation(
-                key: ValueKey('${files.currentFolderPath}::${item.id}'),
+                key: ValueKey('${browser.currentFolderPath}::${item.id}'),
                 index: index,
                 fromRight: navigatingDeeper,
                 child: _buildGridCard(context, item),
               );
-            }, childCount: files.items.length),
+            }, childCount: browser.items.length),
           ),
         )
       else
@@ -674,14 +621,14 @@ class _FilesViewState extends State<FilesView>
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate((context, index) {
-              final item = files.items[index];
+              final item = browser.items[index];
               return _FolderEnterAnimation(
-                key: ValueKey('${files.currentFolderPath}::${item.id}'),
+                key: ValueKey('${browser.currentFolderPath}::${item.id}'),
                 index: index,
                 fromRight: navigatingDeeper,
                 child: _buildListTile(context, item),
               );
-            }, childCount: files.items.length),
+            }, childCount: browser.items.length),
           ),
         ),
 
@@ -696,23 +643,31 @@ class _FilesViewState extends State<FilesView>
     ];
 
     return PopScope(
-      canPop: !_isSelecting && files.pathStack.length <= 1,
+      canPop: !_isSelecting && browser.pathStack.length <= 1,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         if (_isSelecting) {
           _clearSelection();
         } else {
-          files.navigateUp();
+          browser.navigateUp();
         }
       },
       child: SyncedHeaderScaffold(
         scrollController: widget.scrollController,
+        onRefresh: browser.reload,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.add_rounded),
-            tooltip: 'New',
-            onPressed: () => _showCreateMenu(context),
-          ),
+          if (_offline)
+            IconButton(
+              icon: const Icon(Icons.sync_rounded),
+              tooltip: 'Manage synced folders',
+              onPressed: () => ManageSyncedFoldersSheet.show(context),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.add_rounded),
+              tooltip: 'New',
+              onPressed: () => _showCreateMenu(context),
+            ),
           const MoreTabsButton(),
           const ProfileAvatarButton(),
         ],
@@ -815,15 +770,17 @@ class _FilesViewState extends State<FilesView>
   ) {
     final allSynced = items.every((i) => sync.isPathSynced(i.path));
     if (allSynced) {
-      for (final item in items) {
-        sync.removeSyncedPath(item.path);
-      }
+      // Batched (not one removeSyncedPath call per item) so the
+      // reschedule/native side effects fire once for the whole selection
+      // instead of racing each other - see addSyncedPaths' doc comment
+      // for why a per-item loop caused only the first item to actually
+      // sync.
+      sync.removeSyncedPaths(items.map((i) => i.path).toList());
     } else {
-      for (final item in items) {
-        if (!sync.isPathSynced(item.path)) {
-          sync.addSyncedPath(item.path, isFolder: item.isFolder);
-        }
-      }
+      sync.addSyncedPaths({
+        for (final item in items)
+          if (!sync.isPathSynced(item.path)) item.path: item.isFolder,
+      });
     }
     _clearSelection();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -989,13 +946,15 @@ class _FilesViewState extends State<FilesView>
   Widget _buildListTile(BuildContext context, NextcloudItem item) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final files = context.watch<FilesController>();
+    final browser = _browserOf(context);
     final pick = context.watch<PickController>();
     final sync = context.watch<SyncStatusController>();
     final session = context.watch<SessionController>();
     final settings = context.watch<SettingsController>();
     final ops = context.read<ItemOperations>();
     final isSelected = _selectedIds.contains(item.id);
+    // Pick mode and selection are server-side features - never on Offline.
+    final picking = !_offline && pick.isPicking;
 
     // No border radius here — the outer ClipRRect below is the only place
     // that rounds this tile's corners. Rounding it here too would give the
@@ -1007,17 +966,17 @@ class _FilesViewState extends State<FilesView>
           : colorScheme.surfaceContainerLow,
       child: InkWell(
         onTap: () {
-          if (pick.isPicking) {
+          if (picking) {
             _handlePickTap(context, item);
           } else if (_isSelecting) {
             _toggleSelection(item);
           } else if (item.isFolder) {
-            files.navigateToFolder(item.path);
+            browser.navigateToFolder(item.path);
           } else {
             _openFile(context, item);
           }
         },
-        onLongPress: pick.isPicking && !pick.pickRequest!.allowMultiple
+        onLongPress: _offline || (picking && !pick.pickRequest!.allowMultiple)
             ? null
             : () => _toggleSelection(item),
         child: Padding(
@@ -1034,18 +993,21 @@ class _FilesViewState extends State<FilesView>
                     child: ItemThumbnail(
                       item: item,
                       service: session.service,
+                      localFile: _localFileFor(context, item),
                       size: 44,
                       borderRadius: 12,
                       iconSize: 22,
                     ),
                   ),
-                  Positioned(
-                    right: -2,
-                    bottom: -2,
-                    child: SyncStatusBadge(
-                      status: sync.syncStatusFor(item),
+                  // Everything on the Offline tab is synced by definition.
+                  if (!_offline)
+                    Positioned(
+                      right: -2,
+                      bottom: -2,
+                      child: SyncStatusBadge(
+                        status: sync.syncStatusFor(item),
+                      ),
                     ),
-                  ),
                 ],
               ),
               const SizedBox(width: 14),
@@ -1078,7 +1040,7 @@ class _FilesViewState extends State<FilesView>
       ),
     );
 
-    final content = _isSelecting || pick.isPicking
+    final content = _isSelecting || picking || _offline
         ? card
         : SwipeableItem(
             itemKey: ValueKey('file-${item.id}'),
@@ -1111,14 +1073,19 @@ class _FilesViewState extends State<FilesView>
   }
 
   Widget _buildGridCard(BuildContext context, NextcloudItem item) {
-    final files = context.watch<FilesController>();
+    final browser = _browserOf(context);
     final pick = context.watch<PickController>();
     final sync = context.watch<SyncStatusController>();
     final isSelected = _selectedIds.contains(item.id);
-    final isMedia =
-        (item.type == NextcloudItemType.image ||
-            item.type == NextcloudItemType.video) &&
-        item.previewUrl != null;
+    final picking = !_offline && pick.isPicking;
+    // Offline reads the image straight from the local mirror; videos have
+    // no local thumbnail (that would need a frame-extraction plugin), so
+    // they fall through to the plain icon card there.
+    final isMedia = _offline
+        ? item.type == NextcloudItemType.image
+        : (item.type == NextcloudItemType.image ||
+                  item.type == NextcloudItemType.video) &&
+              item.previewUrl != null;
 
     return Material(
       color: Theme.of(context).colorScheme.surfaceContainerLow,
@@ -1126,17 +1093,17 @@ class _FilesViewState extends State<FilesView>
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () {
-          if (pick.isPicking) {
+          if (picking) {
             _handlePickTap(context, item);
           } else if (_isSelecting) {
             _toggleSelection(item);
           } else if (item.isFolder) {
-            files.navigateToFolder(item.path);
+            browser.navigateToFolder(item.path);
           } else {
             _openFile(context, item);
           }
         },
-        onLongPress: pick.isPicking && !pick.pickRequest!.allowMultiple
+        onLongPress: _offline || (picking && !pick.pickRequest!.allowMultiple)
             ? null
             : () => _toggleSelection(item),
         child: Stack(
@@ -1148,92 +1115,36 @@ class _FilesViewState extends State<FilesView>
                   ? _buildMediaGridContent(context, item)
                   : _buildPlainGridContent(context, item),
             ),
-            Positioned(
-              right: 6,
-              bottom: 6,
-              child: SyncStatusBadge(status: sync.syncStatusFor(item)),
-            ),
+            if (!_offline)
+              Positioned(
+                right: 6,
+                bottom: 6,
+                child: SyncStatusBadge(status: sync.syncStatusFor(item)),
+              ),
           ],
         ),
       ),
     );
   }
 
-  /// Grid content for images/videos: the actual preview fills the whole
-  /// card as a background, with the name/size legible over a bottom scrim
-  /// — matching a Google Photos-style grid instead of a small icon badge.
+  /// Grid content for images/videos - see [MediaGridTile].
   Widget _buildMediaGridContent(BuildContext context, NextcloudItem item) {
     final session = context.watch<SessionController>();
-    final theme = Theme.of(context);
+    final localFile = _localFileFor(context, item);
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final cachePixels =
-            (constraints.maxWidth * MediaQuery.of(context).devicePixelRatio)
-                .round();
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            Image.network(
-              item.previewUrl!,
-              headers: session.service?.authHeaders,
-              fit: BoxFit.cover,
-              cacheWidth: cachePixels,
-              cacheHeight: cachePixels,
-              filterQuality: FilterQuality.low,
-              gaplessPlayback: true,
-              errorBuilder: (ctx, err, stack) =>
-                  _buildPlainGridContent(context, item),
-            ),
-            if (item.type == NextcloudItemType.video)
-              const Center(
-                child: Icon(
-                  Icons.play_circle_fill_rounded,
-                  color: Colors.white,
-                  size: 36,
-                ),
+    return MediaGridTile(
+      item: item,
+      imageBuilder: (cachePixels) => ResizeImage(
+        localFile != null
+            ? FileImage(localFile)
+            : NetworkImage(
+                item.previewUrl!,
+                headers: session.service?.authHeaders,
               ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(10, 20, 10, 8),
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Colors.transparent, Colors.black87],
-                  ),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 12,
-                      ),
-                    ),
-                    Text(
-                      formatBytes(item.size),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: Colors.white70,
-                        fontSize: 10,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        );
-      },
+        width: cachePixels,
+        height: cachePixels,
+      ),
+      fallbackBuilder: (ctx) => _buildPlainGridContent(ctx, item),
     );
   }
 
@@ -1287,6 +1198,21 @@ class _FilesViewState extends State<FilesView>
   }
 
   void _openFile(BuildContext context, NextcloudItem item) {
+    if (_offline) {
+      // Same in-app viewer (including swiping between the folder's media),
+      // just reading from disk instead of the server - see
+      // `FileViewerScreen.localPathResolver`'s doc comment.
+      final offline = context.read<OfflineController>();
+      Navigator.push(
+        context,
+        FileViewerScreen.route(
+          item: item,
+          siblings: offline.items,
+          localPathResolver: offline.localPathFor,
+        ),
+      );
+      return;
+    }
     final files = context.read<FilesController>();
     Navigator.push(
       context,

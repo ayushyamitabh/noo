@@ -132,9 +132,11 @@ class MainActivity : FlutterFragmentActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "reschedule" -> rescheduleSyncWork(call, result)
-                    "cancel" -> cancelSyncWork(result)
+                    "cancel" -> cancelSyncWork(call, result)
                     "syncNow" -> syncNow(call, result)
-                    "getSyncStatus" -> result.success(syncStatusMap(SyncStatusBus.snapshot()))
+                    "getSyncStatus" -> result.success(
+                        syncStatusMap(SyncStatusBus.snapshot(), call.argument<String>("accountId")),
+                    )
                     "resolveConflict" -> resolveConflict(call, result)
                     "removeLocalSync" -> removeLocalSync(call, result)
                     else -> result.notImplemented()
@@ -157,16 +159,31 @@ class MainActivity : FlutterFragmentActivity() {
             })
     }
 
-    private fun syncStatusMap(status: SyncStatusBus.Status): Map<String, Any?> {
-        val syncedFileIds = status.accountId?.let {
+    /// [accountIdOverride] is the account Dart is asking about - needed
+    /// because [SyncStatusBus] only learns an account once a sync pass has
+    /// run in this process, so on a fresh app start its `accountId` is null
+    /// and the durable per-file synced state (which is what actually says
+    /// "this file is mirrored") would otherwise be reported as empty.
+    private fun syncStatusMap(
+        status: SyncStatusBus.Status,
+        accountIdOverride: String? = null,
+    ): Map<String, Any?> {
+        val accountId = accountIdOverride ?: status.accountId
+        // Live syncing/conflict state on the bus belongs to whichever
+        // account last synced - don't attribute it to a different one.
+        val busMatches = status.accountId == null || status.accountId == accountId
+        val syncedFileIds = accountId?.let {
             SyncEngine.loadState(applicationContext, it).keys.toList()
         } ?: emptyList()
         return mapOf(
-            "accountId" to status.accountId,
-            "syncing" to status.syncing,
-            "syncingFileIds" to status.syncingFileIds.toList(),
+            "accountId" to accountId,
+            "syncing" to (busMatches && status.syncing),
+            "syncingFileIds" to if (busMatches) status.syncingFileIds.toList() else emptyList(),
             "syncedFileIds" to syncedFileIds,
-            "conflicts" to status.conflicts.map {
+            "missingRoots" to (accountId?.let {
+                SyncEngine.loadMissingRoots(applicationContext, it).toList()
+            } ?: emptyList()),
+            "conflicts" to (if (busMatches) status.conflicts else emptyList()).map {
                 mapOf(
                     "accountId" to it.accountId,
                     "fileId" to it.fileId,
@@ -346,7 +363,7 @@ class MainActivity : FlutterFragmentActivity() {
 
     /// Shared arg-parsing for `reschedule`/`syncNow` - both need the same
     /// account/credentials/folder-list shape, just enqueue differently.
-    private fun syncWorkData(call: MethodCall): androidx.work.Data? {
+    private fun syncWorkData(call: MethodCall, force: Boolean = false): androidx.work.Data? {
         val accountId = call.argument<String>("accountId")
         val serverUrl = call.argument<String>("serverUrl")
         val username = call.argument<String>("username")
@@ -363,6 +380,8 @@ class MainActivity : FlutterFragmentActivity() {
             SyncWorker.KEY_USERNAME to username,
             SyncWorker.KEY_AUTH_HEADER to authHeader,
             SyncWorker.KEY_FOLDERS to foldersJson,
+            SyncWorker.KEY_FORCE to force,
+            SyncWorker.KEY_NOTIFY to (call.argument<Boolean>("notify") ?: true),
         )
     }
 
@@ -372,13 +391,26 @@ class MainActivity : FlutterFragmentActivity() {
     /// periodic WorkRequest's input Data/constraints are fixed at enqueue
     /// time and can only be changed by cancelling and re-enqueueing.
     private fun rescheduleSyncWork(call: MethodCall, result: MethodChannel.Result) {
+        val accountId = call.argument<String>("accountId")
+        if (accountId == null) {
+            result.error("bad_args", "Missing accountId", null)
+            return
+        }
         val data = syncWorkData(call)
         val foldersJson = call.argument<String>("folders")
         val wifiOnly = call.argument<Boolean>("wifiOnly") ?: true
+        // Null = periodic background sync is off (Files Cache set to
+        // "never"/"manual") - only foreground triggers and pull-to-refresh
+        // sync then. See SyncStatusController's doc comment.
+        val intervalMinutes = call.argument<Int>("intervalMinutes")
         val workManager = WorkManager.getInstance(this)
+        // The single shared job from before per-account scheduling.
+        workManager.cancelUniqueWork(SyncWorker.UNIQUE_PERIODIC_NAME)
 
-        if (data == null || foldersJson == null || JSONArray(foldersJson).length() == 0) {
-            workManager.cancelUniqueWork(SyncWorker.UNIQUE_PERIODIC_NAME)
+        if (data == null || foldersJson == null || JSONArray(foldersJson).length() == 0 ||
+            intervalMinutes == null
+        ) {
+            workManager.cancelUniqueWork(SyncWorker.periodicNameFor(accountId))
             result.success(null)
             return
         }
@@ -386,23 +418,33 @@ class MainActivity : FlutterFragmentActivity() {
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
             .build()
-        // 1 hour is WorkManager's own practical floor for a "battery-
-        // friendly" cadence well above its hard 15-minute minimum; there's
-        // no per-user interval setting for this in v1.
-        val request = PeriodicWorkRequestBuilder<SyncWorker>(1, TimeUnit.HOURS)
+        // Follows the Files Cache "refresh periodically" interval. Android
+        // won't run periodic work more often than every 15 minutes, so
+        // shorter intervals are clamped up (the app's own in-foreground
+        // timer covers the shorter cadence while it's open).
+        val request = PeriodicWorkRequestBuilder<SyncWorker>(
+            maxOf(intervalMinutes, 15).toLong(),
+            TimeUnit.MINUTES,
+        )
             .setInputData(data)
             .setConstraints(constraints)
             .build()
         workManager.enqueueUniquePeriodicWork(
-            SyncWorker.UNIQUE_PERIODIC_NAME,
+            SyncWorker.periodicNameFor(accountId),
             ExistingPeriodicWorkPolicy.UPDATE,
             request,
         )
         result.success(null)
     }
 
-    private fun cancelSyncWork(result: MethodChannel.Result) {
-        WorkManager.getInstance(this).cancelUniqueWork(SyncWorker.UNIQUE_PERIODIC_NAME)
+    /// Cancels one account's periodic job (e.g. when it's removed).
+    private fun cancelSyncWork(call: MethodCall, result: MethodChannel.Result) {
+        val accountId = call.argument<String>("accountId")
+        val workManager = WorkManager.getInstance(this)
+        if (accountId != null) {
+            workManager.cancelUniqueWork(SyncWorker.periodicNameFor(accountId))
+        }
+        workManager.cancelUniqueWork(SyncWorker.UNIQUE_PERIODIC_NAME)
         result.success(null)
     }
 
@@ -427,16 +469,34 @@ class MainActivity : FlutterFragmentActivity() {
     /// One-off immediate run (Settings' "Sync now"), independent of the
     /// periodic schedule.
     private fun syncNow(call: MethodCall, result: MethodChannel.Result) {
-        val data = syncWorkData(call)
+        // `force` = an explicit "Sync now" / newly-added path: full walk,
+        // visible progress, and it supersedes any in-flight run. Otherwise
+        // (pull-to-refresh, foreground timer, app resume) it's a quiet
+        // check that never interrupts a run already in progress; those may
+        // additionally respect the Wi-Fi-only setting (`wifiOnly` present).
+        val force = call.argument<Boolean>("force") ?: true
+        val data = syncWorkData(call, force)
         if (data == null) {
             result.error("bad_args", "Missing required sync arguments", null)
             return
         }
-        val request = OneTimeWorkRequestBuilder<SyncWorker>().setInputData(data).build()
+        val wifiOnly = call.argument<Boolean>("wifiOnly")
+        val builder = OneTimeWorkRequestBuilder<SyncWorker>().setInputData(data)
+        if (wifiOnly != null) {
+            builder.setConstraints(
+                Constraints.Builder()
+                    .setRequiredNetworkType(
+                        if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED,
+                    )
+                    .build(),
+            )
+        }
         WorkManager.getInstance(this).enqueueUniqueWork(
-            SyncWorker.UNIQUE_ONE_OFF_NAME,
-            ExistingWorkPolicy.REPLACE,
-            request,
+            // Per account so switching accounts doesn't let one account's
+            // run replace/keep-out another's.
+            SyncWorker.oneOffNameFor(call.argument<String>("accountId")!!),
+            if (force) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP,
+            builder.build(),
         )
         result.success(null)
     }

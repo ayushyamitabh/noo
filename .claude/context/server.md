@@ -274,9 +274,13 @@ the whole engine is plain Kotlin using Android's WorkManager directly.
   `oc:fileid` - stable across renames/moves, unlike `path`) to decide, per
   file: download (new, or server `etag` changed), upload (local file's
   mtime/size changed and the server didn't), delete locally (missing
-  server-side, unchanged locally), respect a local deletion (file's gone
-  and the server didn't change either - don't recreate it), or flag a
-  **conflict** (both changed since the last recorded state).
+  server-side, unchanged locally), re-download a file whose local copy is
+  missing even though state says it was mirrored (stale state from an
+  earlier sync of the path - treating that as "user deleted it" used to
+  skip the download and report phantom removals), or flag a
+  **conflict** (both changed since the last recorded state). The
+  "removed" count in the summary notification only counts local files that
+  actually existed and were deleted.
 - [`SyncWorker.kt`](../../android/app/src/main/kotlin/dev/ayushya/noo/SyncWorker.kt)
   (`CoroutineWorker`) is both the periodic job and the one-off "Sync now":
   for each configured path, `propfindSelf`s it first to check whether it's
@@ -286,7 +290,16 @@ the whole engine is plain Kotlin using Android's WorkManager directly.
   came from a walk or a single lookup, so single-file sync needed no engine
   changes, just this one branch) - applies `diffFolder`'s decisions, then
   posts a summary notification (files updated/uploaded/removed) and, for
-  any conflicts, one notification per file with two actions.
+  any conflicts, one notification per file with two actions. A progress
+  notification (`notifyProgress`) is shown lazily - only once the first
+  actual download/upload starts, not unconditionally at the top of every
+  run, so a periodic pass that finds nothing to transfer never flashes a
+  notification at all. It shares the summary's notification ID
+  (`SUMMARY_NOTIFICATION_ID`) on purpose: the final `notifySummary` call
+  naturally replaces the ongoing progress notification in place once the
+  run finishes (no flicker of two separate notifications), and if nothing
+  ended up changing, `doWork` explicitly cancels that ID since there's no
+  summary to replace it with.
 - **Live status reaches Dart via a push channel, not polling** -
   [`SyncStatusBus.kt`](../../android/app/src/main/kotlin/dev/ayushya/noo/SyncStatusBus.kt)
   is a plain in-process pub/sub (no IPC needed - the workers and
@@ -299,8 +312,19 @@ the whole engine is plain Kotlin using Android's WorkManager directly.
   from `SyncEngine`'s durable per-account state map
   (`SyncEngine.loadState(accountId).keys`) each time a snapshot is built,
   so there's one source of truth for "synced" instead of two that could
-  drift. `SyncService.getStatus()` (one-shot, seeds `SyncStatusController`
-  right after login/account-switch) and `SyncService.statusStream` (live)
+  drift - which is also why `SyncWorker.doWork()` saves state *before*
+  its final `SyncStatusBus.setSyncing(accountId, false)` publish, not
+  after: that publish is what tells Dart's live listener to recompute
+  `syncedFileIds`, so publishing first would hand back a snapshot still
+  missing every file the run just downloaded, with no further event ever
+  arriving afterward to correct it - newly-synced files would sit with no
+  badge until the app restarted and force-refreshed via `getStatus()`.
+  `SyncService.getStatus(accountId)` (one-shot, seeds `SyncStatusController`
+  right after login/account-switch - the account id is passed explicitly
+  because `SyncStatusBus` only learns an account once a sync pass has run
+  in this process, so on a fresh app start it'd report empty
+  `syncedFileIds`; `SyncStatusController._applySnapshot` likewise ignores
+  the bus's initial null-account emission so it can't wipe that seed) and `SyncService.statusStream` (live)
   both return the same snapshot shape. `SyncStatusController.syncHeaderStatus`
   (off/syncing/done/alert - drives `SyncedHeaderScaffold`'s persistent
   chip/panel, replacing what used to be the WebDAV-refresh-loading
@@ -333,6 +357,37 @@ the whole engine is plain Kotlin using Android's WorkManager directly.
   [`ConflictResolveWorker`](../../android/app/src/main/kotlin/dev/ayushya/noo/ConflictResolveWorker.kt)
   to actually push the local copy up or pull the server copy down and
   refresh that file's recorded state.
+- **Keeping synced files current automatically - no "Sync now" needed.**
+  Synced paths follow the Files Cache rule (Settings, right under Device
+  Sync; default *Refresh periodically, 15 min*), driven by
+  `SyncStatusController` (see its doc comment): *periodically* = a
+  WorkManager `PeriodicWorkRequest` at `max(interval, 15)` min (Android's
+  floor) via `reschedule(intervalMinutes:)`, plus an in-app `Timer` at the
+  exact interval and a pass on app resume if one is due; *never cache* = no
+  background job, a pass on each app open/resume; *manual* = only
+  pull-to-refresh (`SyncedHeaderScaffold` calls `syncOnPull`, on any tab) and
+  "Sync now". **There's no server push:** Nextcloud's push options
+  (`notify_push` needs a server app plus a persistent WebSocket, which
+  Android kills in the background without a foreground service; Nextcloud's
+  FCM/UnifiedPush proxy needs a registered app identity) aren't viable for
+  a self-hosted-server client, so it polls - and polling is made cheap by the
+  **root-etag shortcut**: Nextcloud propagates any descendant change up
+  through every ancestor folder's `getetag`, so each run first does one
+  Depth-0 PROPFIND per synced root and skips the recursive walk if the etag
+  matches the stored `SyncEngine.RootMarker` *and* every local file still
+  matches its recorded size/mtime (`localMatchesState` - nothing to upload or
+  re-download). A root is only marked after a fully clean pass (no failed
+  transfer, no conflict), a full walk is forced at least every 6 h
+  (`FULL_WALK_MAX_AGE_MS`; etag propagation is unreliable on external
+  storage), and "Sync now" (`KEY_FORCE`) always walks. Automatic/pull passes
+  are `force: false`: silent (progress notification only once a transfer
+  starts), `ExistingWorkPolicy.KEEP` (never cancel a run in progress), and
+  automatic ones also carry the Wi-Fi-only constraint. **Safety:** PROPFIND
+  failures (network error, 5xx) throw `RemoteUnavailableException` and the
+  path is skipped that run - previously they returned an empty listing,
+  which made every synced file look deleted server-side and the diff deleted
+  the local copies (a real risk once passes run every few minutes). Only a
+  clean 404 means "gone".
 - `MainActivity.kt`'s `dev.ayushya.noo/sync_service` channel
   (`reschedule`/`cancel`/`syncNow`/`removeLocalSync`) is the only bridge
   from Dart: a periodic `WorkRequest`'s input `Data` and `Constraints` are
@@ -341,8 +396,46 @@ the whole engine is plain Kotlin using Android's WorkManager directly.
   not updating in place. [`SyncService`](../../lib/services/sync_service.dart)
   (Dart) wraps this - `SyncStatusController` calls `SyncService.reschedule`
   after every successful login/account switch and every synced-folder/
-  `syncOnCellular` change, and `SyncService.cancel` on logout/last-account-
-  removed. The network constraint is `NetworkType.UNMETERED` by default
+  cache-rule/`syncOnCellular` change. `reschedule` covers **every saved
+  account**, not just the active one: each account with sync enabled gets its
+  own periodic job (`SyncWorker.periodicNameFor(accountId)`) carrying that
+  account's own credentials (read from `AccountStore`), paths and interval -
+  the active account's from live `SyncStatusController` state, the others'
+  from their persisted per-account prefs (`_SyncConfig.fromPrefs`). Logging
+  out stops that account's background sync: `SessionController.logout`
+  records it in `AccountStore`'s signed-out set (so a later `reschedule` for
+  another account doesn't resurrect its job) and cancels it via
+  `SyncService.cancelAccount`; activating the account again clears the flag.
+  Removing an account cancels its job too. One-off runs are per-account
+  (`oneOffNameFor`).
+- **Folders, not just files, are mirrored.** After applying a path's diff,
+  `SyncWorker` calls `SyncEngine.mirrorFolders` (a local directory for every
+  remote folder, so an empty folder created on the web appears on device) and
+  `pruneRemovedFolders` (removes local directories the server no longer has,
+  but only *empty* ones - the diff has already deleted the files that were in
+  them - and never the sync root). Root-etag markers carry a version
+  (`ROOTS_VERSION`) so bumping it forces one full walk after a change like this.
+  A configured path the server 404s (deleted on the web) is recorded via
+  `setRootMissing`; the snapshot's `missingRoots` lets
+  `SyncStatusController._applySnapshot` drop it from the synced list.
+- **Notifications.** Sync notifications are silent (channel `device_sync_v2`,
+  `IMPORTANCE_LOW` + `setSilent`), with ids and titles scoped per account
+  (`summaryNotificationId`/`conflictNotificationId`) so accounts don't
+  overwrite each other. "Background sync notifications" (Settings, global,
+  default on) gates progress/summary for automatic runs (`KEY_NOTIFY`,
+  baked into the periodic job input so it needs a reschedule); conflicts and
+  user-initiated "Sync now" always notify. Manual download/upload
+  notifications use `file_downloads_v2`/`share_upload_v2` at default importance
+  (progress silent, completion audible). Channel importance can't be changed
+  once created, so changing it means a new channel id plus
+  `NooNotificationChannels.ensure(legacyIds = ...)` deleting the old one.
+- **One sync at a time.** `SyncEngine.syncLock` (a process-wide coroutine
+  `Mutex`) wraps both `SyncWorker` and `ConflictResolveWorker`. WorkManager
+  runs differently-named jobs concurrently, and both workers load the whole
+  sync-state map, mutate it and save it back - so overlapping runs (periodic
+  + a pull, two accounts due at once) silently discarded each other's
+  updates, and `SyncStatusBus` only tracks one account at a time. A run that
+  has to wait simply starts when the current one finishes. The network constraint is `NetworkType.UNMETERED` by default
   (`!syncOnCellular`, Wi-Fi only) or `NetworkType.CONNECTED` if the user's
   opted into cellular sync. Turning sync off for a path
   (`SyncStatusController.removeSyncedPath`) also calls
@@ -362,20 +455,89 @@ the whole engine is plain Kotlin using Android's WorkManager directly.
   tracks which of those paths are folders vs individual files for the sync
   header's folder/item counts, defaulting missing entries to folder (the
   common case, and what any path added before this map existed will look
-  like). `syncEverything` (`ui_sync_everything`, per account) works the
+  like). **`addSyncedPaths`/`removeSyncedPaths` gate on
+  `_accountLoadedGate`** (a `Completer`, deliberately starting
+  *incomplete* - not pre-completed - completed once
+  `_onAccountActivated`'s async per-account prefs load actually finishes,
+  re-armed on `_onAccountCleared`) before touching `_syncedPaths` at all -
+  without this, syncing a folder soon enough after opening the app (or an
+  account switch) could race that load: the mutator spreads the *current
+  in-memory* `_syncedPaths` (still `[]`, the pre-load default) and
+  immediately persists the result, silently overwriting the
+  previously-saved list and losing every other folder that had been
+  synced before. Starting the gate pre-completed was an actual bug here -
+  it meant only account *switches* (which call `_onAccountCleared`,
+  re-arming it) were protected, leaving the very first cold-start load
+  completely exposed to the race. A second, related guard,
+  `_hasLoadedSyncedPathsForAccount`, stops `_onAccountActivated` from
+  re-reading `_syncedPaths` from storage more than once per account -
+  activation can fire again for the same account (e.g.
+  `SessionController` re-verifying a provisional/offline login once
+  connectivity returns), and a second read could clobber an in-memory
+  mutation made between the first load and that one if its own persist
+  hadn't landed yet. `syncEverything`
+  (`ui_sync_everything`, per account) works the
   same way - when on, `SyncService` sends `['/']` as the path list instead
   of `syncedPaths`, mirroring the whole account rather than requiring
-  per-item opt-in. `syncOnCellular` is a plain global pref. All three are
-  managed from
-  Settings → Device Sync (a "Sync everything" switch, the path list with
-  remove buttons - hidden while "Sync everything" is on - the cellular
-  toggle, and a manual "Sync now"); individual files or folders are
-  additionally toggled from Files' selection toolbar ("Sync to device",
-  works over the whole selection at once - either item type, folders or
-  files - not just a single item; the action reads as "stop syncing" only
-  once every selected item is already synced, otherwise it syncs whichever
-  ones aren't yet, and either direction ends with a confirmation
-  SnackBar).
+  per-item opt-in. `syncOnCellular` is a plain global pref. `syncEverything`
+  and `syncOnCellular` are managed from Settings → Device Sync (a "Sync
+  everything" switch, the cellular toggle, a manual "Sync now", and a
+  "View offline files" row that pushes the Offline tab - see below); the
+  configured path list itself, with its remove buttons, lives on the
+  Offline tab now, not Settings. Individual files or folders are toggled
+  from Files' selection toolbar ("Sync to device", works over the whole
+  selection at once - either item type, folders or files - not just a
+  single item; the action reads as "stop syncing" only once every selected
+  item is already synced, otherwise it syncs whichever ones aren't yet,
+  and either direction ends with a confirmation SnackBar). Multi-item
+  add/remove goes through `SyncStatusController.addSyncedPaths`/
+  `removeSyncedPaths` (batched), never a per-item loop of
+  `addSyncedPath`/`removeSyncedPath` - looping was an actual bug: each
+  `addSyncedPath` call fires its own `SyncService.syncNow`, and
+  `syncNow`'s native side enqueues via `WorkManager.enqueueUniqueWork(...,
+  ExistingWorkPolicy.REPLACE, ...)`, so a second item's call cancelled the
+  first item's still-in-flight sync pass instead of letting it finish -
+  only ever syncing the last item enqueued. The batched methods mutate
+  `_syncedPaths` for the whole set and call `reschedule`/`syncNow` exactly
+  once, with the complete folder list, so `SyncWorker` handles every item
+  in one run (it already loops its whole `folders` list sequentially
+  within a single `doWork()` call - see above).
+- **The Offline tab** (`FilesView(offline: true)` over
+  [`OfflineController`](../../lib/providers/offline_controller.dart), see
+  `architecture.md`'s `FolderBrowser`) is the Files tab itself - same
+  breadcrumbs, controls, tiles and thumbnails - over whatever device-sync
+  has actually landed on disk - deliberately no selection/multi-select
+  toolbar, since delete/share/move don't make sense for an already-synced
+  local mirror.
+  Reads straight off `<externalFilesDir>/sync/<accountId>/<currentFolder>`
+  (non-recursive `Directory.list()` per folder) via `dart:io`, not fetched
+  from the server (mirrors `SyncEngine.kt#syncRoot`'s layout exactly), so
+  it works with no connection and never round-trips through a
+  MethodChannel just to list files. `OfflineController` refetches the
+  current folder automatically whenever a `SyncService.statusStream`
+  snapshot shows syncing just stopped, so newly-downloaded files show up
+  without a manual pull-to-refresh. Tapping an item opens
+  `FileViewerScreen` with `localPath` set (see below) - same in-app viewer
+  Files uses, just reading from disk instead of the server; tapping a
+  folder navigates into it, same as Files. Resolves the local path via
+  `OfflineController.localPathFor(item)`, a pure function of the item's
+  path - deliberately *not*
+  `SyncStatusController.localSyncedFilePath`, which additionally
+  re-verifies the item falls under a configured sync target
+  (`_isPathInSyncScope`). That check is redundant and was actually a bug
+  here: every item this controller ever hands out already came from
+  listing this exact directory tree, so it's definitionally already
+  local, and re-deriving "is this still in scope" from `syncedPaths`
+  could disagree with what's genuinely sitting on disk (e.g. nested
+  paths, timing right after a scope change) and report a visibly-listed
+  file as "no longer available". Pull-to-refresh triggers
+  `SyncService.syncNow` followed by a re-list. The
+  configured sync targets themselves (with "stop syncing" per target, what
+  used to be Settings' Device Sync card's own inline list) live in a
+  bottom sheet behind the app bar's sync icon (`_ManageSyncedFoldersSheet`)
+  rather than inline in the main view, so the browser itself stays a plain
+  Files-style listing; Settings' own "View offline files" row just pushes
+  this whole tab.
 - **`android/app/proguard-rules.pro` exists specifically for this feature,
   and keeps `androidx.work.**` wholesale rather than naming individual
   classes.** Flutter's own Gradle plugin auto-enables R8 minification for
@@ -418,6 +580,98 @@ the whole engine is plain Kotlin using Android's WorkManager directly.
   file directly" and `FilesView._downloadSelected` (only when *every*
   selected file is already synced - a mixed selection still goes through
   the normal `DownloadService` batch) both check it first.
+
+## Working offline
+
+[`ConnectivityController`](../../lib/providers/connectivity_controller.dart)
+wraps `connectivity_plus` (OS-level route detection - Wi-Fi/mobile/none,
+not a guarantee the Nextcloud server itself is reachable) and is the
+single source of truth every offline-aware decision in the app consults.
+**Its very first `checkConnectivity()` call is re-verified once more,
+~2 seconds later** - that first check can spuriously report "no network"
+while Android's connectivity stack is still attaching callbacks to a
+just-started process (a real cold-start quirk, not a genuine transition),
+and since `onConnectivityChanged` only fires on actual transitions, a
+false initial "offline" read would otherwise stick for the rest of the
+session with no further event ever correcting it - `SessionController`
+would keep treating the login as provisional indefinitely, and every
+network-fetching controller (Files/Photos/Favorites/Trash/Shares/Recent)
+would simply never receive its real activation signal, leaving every tab
+permanently empty despite the device being online the whole time. This
+was a real, previously-shipped regression, not a hypothetical.
+
+- **Session restore never makes a doomed HTTP request.**
+  `SessionController._applyCredentialsForAccount` checks
+  `connectivity.isOffline` *before* calling `NextcloudService.testConnection()`
+  - if there's no route at all, it skips the request entirely rather than
+  letting it fail (fast or slow) and parsing the exception. Either way (no
+  route, or a network-level exception once a request is attempted -
+  timeout, DNS, unreachable host, a transient 5xx), the session logs in
+  *provisionally*: `_isLoggedIn = true` with the already-constructed
+  `_service` kept around, `_isProvisionalLogin = true`. Only an actual 401
+  (`_errorMessage` contains "401") is treated as a real rejection - drops
+  the stored password and logs out for real. Provisional login exists
+  specifically so a genuinely offline cold start still lands on
+  `MainShellView` (restricted to the Offline tab - see below) instead of
+  bouncing to `LoginView`, which would strand the user with no way back in
+  short of Login Flow v2 again (`switchAccount` no-ops when "switching" to
+  the account that's already nominally active, and `activeAccountId` is
+  never cleared by a network failure).
+- **Two account-activation signals, not one**, precisely so a provisional
+  login doesn't cascade into a pile of doomed requests from every other
+  controller: `addAccountActivatedListener` (fires *only* on a real,
+  verified login - what `FilesController`/`PhotosController`/
+  `FavoritesController`/`TrashController`/`SharesController`/
+  `RecentController` all register for, since their own activation work is
+  a network fetch) vs. `addAccountReadyListener` (fires on *either* a
+  verified or a provisional login - what `SyncStatusController`/
+  `OfflineController` register for instead, since their own activation
+  work - loading prefs, listing local files, calling the native sync
+  MethodChannel - is local/native-only and safe with no connection at
+  all). A provisional login fires only `ready`, never `activated`; a
+  verified login fires both.
+- **Reconnecting re-verifies automatically.** `SessionController` listens
+  to `connectivity` itself; the moment it flips from offline to online
+  while `_isProvisionalLogin` is still true, it re-runs
+  `_applyCredentialsForAccount` with the same cached account/password. On
+  success this is what finally fires `_notifyAccountActivated` for real,
+  so Files/Photos/etc. get their first actual fetch without the user
+  having to force-quit/restart the app.
+- **`MainShellView` collapses the bottom nav to just the Offline tab**
+  while `connectivity.isOffline`, the same override mechanism already used
+  for picking mode (see `architecture.md`) - every other tab would just
+  show its own loading spinner or error state with no connection, so
+  there's nothing useful to switch to. `MoreTabsButton` hides entirely in
+  this state too, for the same reason it hides while picking - there's no
+  hidden tab it could usefully open either.
+- **The sync header's "Offline" label wins over everything else.**
+  `_syncHeaderDisplay`/`_syncSummary` (`synced_header_scaffold.dart`) both
+  take a `bool isOffline` and check it first, ahead of conflicts/syncing/
+  configured-targets - with no connection, *why* nothing's syncing right
+  now matters more than what would otherwise be shown, so "Sync off"
+  (nothing configured) and "Offline" (nothing *can* sync right now,
+  regardless of configuration) stay distinct messages.
+- **`FileViewerScreen` can read a file straight from disk.** Its optional
+  `localPathResolver` param (`Future<String?> Function(NextcloudItem)`,
+  only ever set by the Offline tab, passing `OfflineController.
+  localPathFor`) swaps every preview widget's data source -
+  `_ImagePreview`/`_VideoPreview` use `Image.file`/
+  `VideoPlayerController.file` instead of the `.network`/`.networkUrl`
+  variants, `_PdfPreview`/`_TextPreview` read via
+  `File(path).readAsBytes()` instead of `NextcloudService.fetchBytes` -
+  same in-app viewer either way, no separate "offline preview" screen.
+  Unlike a single up-front path, a *resolver* is what makes `siblings`
+  (swipe-between-media) behave identically to Files/Photos while offline:
+  the swipeable `PageView.builder` calls it again for whichever sibling
+  you've swiped to (wrapped in a `FutureBuilder`, since each resolution
+  is an async disk check), not just the item the viewer opened on - the
+  Offline tab passes its whole current folder's `items` as `siblings`,
+  same as Files does with its own. The action bar hides Favorite/Delete/
+  Download-to-device (`showServerActions: false`) since those need a live
+  server - Share and Open-externally still work (`_openExternally` calls
+  the resolver directly instead of downloading to a temp file first;
+  Share already prefers a local copy when one exists, see
+  `ShareSheet._shareFileDirectly`).
 
 ## Multi-account storage & session persistence
 

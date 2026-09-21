@@ -8,6 +8,7 @@ import '../services/app_lock_service.dart';
 import '../services/login_flow_service.dart';
 import '../services/nextcloud_service.dart';
 import '../services/sync_service.dart';
+import 'connectivity_controller.dart';
 
 enum LoginFlowStatus { idle, initiating, awaitingBrowser, error }
 
@@ -25,9 +26,20 @@ enum LoginFlowStatus { idle, initiating, awaitingBrowser, error }
 /// `.claude/context/architecture.md`'s "State management" section for the
 /// full rationale.
 class SessionController extends ChangeNotifier with WidgetsBindingObserver {
+  final ConnectivityController connectivity;
   final Future<SharedPreferences> prefsFuture =
       SharedPreferences.getInstance();
   final AccountStore accountStore = AccountStore();
+
+  // True from the moment a saved session is restored (or a network
+  // failure keeps it alive - see `_applyCredentialsForAccount`) without
+  // ever having actually reached the server, until a real
+  // `testConnection()` succeeds. Network-fetching controllers have no
+  // reason to check this themselves - they only ever hear about account
+  // activation via [addAccountActivatedListener], which simply doesn't
+  // fire while this is true (see [addAccountReadyListener] for the
+  // signal that *does* fire either way).
+  bool _isProvisionalLogin = false;
 
   String _serverUrl = '';
   String _username = '';
@@ -71,13 +83,23 @@ class SessionController extends ChangeNotifier with WidgetsBindingObserver {
   // them - it's constructed first, they depend on it. `cleared` fires
   // wherever `_clearActiveContent()` used to run (about to switch/log out -
   // reset your own state); `activated` fires only once credentials are
-  // actually verified (fetch your own data now).
+  // actually verified against the server, so it's safe to make network
+  // requests (fetch your own data now) - it deliberately does *not* fire
+  // for a provisional/offline login (see `_isProvisionalLogin`), so a
+  // network-fetching controller never has to check connectivity itself.
+  // `ready` fires in *both* cases - verified or provisional - for the
+  // handful of controllers (SyncStatusController/OfflineController) whose
+  // own activation work is local-only (prefs, on-disk files) and safe to
+  // run with no connection at all.
   final List<VoidCallback> _accountClearedListeners = [];
   final List<VoidCallback> _accountActivatedListeners = [];
+  final List<VoidCallback> _accountReadyListeners = [];
   void addAccountClearedListener(VoidCallback cb) =>
       _accountClearedListeners.add(cb);
   void addAccountActivatedListener(VoidCallback cb) =>
       _accountActivatedListeners.add(cb);
+  void addAccountReadyListener(VoidCallback cb) =>
+      _accountReadyListeners.add(cb);
   void _notifyAccountCleared() {
     for (final cb in _accountClearedListeners) {
       cb();
@@ -88,10 +110,20 @@ class SessionController extends ChangeNotifier with WidgetsBindingObserver {
     for (final cb in _accountActivatedListeners) {
       cb();
     }
+    for (final cb in _accountReadyListeners) {
+      cb();
+    }
   }
 
-  SessionController() {
+  void _notifyAccountProvisionallyReady() {
+    for (final cb in _accountReadyListeners) {
+      cb();
+    }
+  }
+
+  SessionController(this.connectivity) {
     WidgetsBinding.instance.addObserver(this);
+    connectivity.addListener(_onConnectivityChanged);
     _init();
   }
 
@@ -175,11 +207,16 @@ class SessionController extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Verifies [appPassword] for [account] and, on success, makes it the
   /// live session, firing [_notifyAccountActivated] so every other
-  /// controller fetches its own data. The password is expected to already
-  /// be durably saved by the caller (either freshly, via
-  /// [_completeLoginFlow], or previously, since this is also how a saved
-  /// session is restored/switched to) - this method only writes to
-  /// [AccountStore] to drop a password that turns out to no longer work.
+  /// controller fetches its own data. With no network route at all, or on
+  /// a network-level (not auth) failure, skips/gives up on verification
+  /// but still logs in *provisionally* - see [_isProvisionalLogin] - so
+  /// the app still opens into `MainShellView` (restricted to the Offline
+  /// tab while offline) instead of bouncing to `LoginView`. The password
+  /// is expected to already be durably saved by the caller (either
+  /// freshly, via [_completeLoginFlow], or previously, since this is also
+  /// how a saved session is restored/switched to) - this method only
+  /// writes to [AccountStore] to drop a password that turns out to no
+  /// longer work (an actual 401, never a network failure).
   Future<bool> _applyCredentialsForAccount(
     SavedAccount account,
     String appPassword,
@@ -199,10 +236,25 @@ class SessionController extends ChangeNotifier with WidgetsBindingObserver {
       password: _password,
     );
 
+    // No point even attempting the request with no network route at all -
+    // treat this exactly like the network-failure branch below (stay
+    // logged in provisionally, `service` already assigned) without paying
+    // for a doomed HTTP call first.
+    if (connectivity.isOffline) {
+      if (gen != _sessionGeneration) return false;
+      _isProvisionalLogin = true;
+      _isLoggedIn = true;
+      _isLoading = false;
+      notifyListeners();
+      _notifyAccountProvisionallyReady();
+      return true;
+    }
+
     try {
       final success = await _service!.testConnection();
       if (gen != _sessionGeneration) return false;
       if (success) {
+        _isProvisionalLogin = false;
         _isLoggedIn = true;
         _isLoading = false;
         notifyListeners();
@@ -212,25 +264,75 @@ class SessionController extends ChangeNotifier with WidgetsBindingObserver {
     } catch (e) {
       if (gen != _sessionGeneration) return false;
       _errorMessage = e.toString().replaceAll('Exception: ', '');
-      // Only drop the stored password on an actual auth rejection (401) -
-      // testConnection also throws for network-level failures (DNS,
-      // timeout, unreachable host), and those are transient: deleting a
-      // still-valid password on a dropped connection would permanently
-      // log the account out with no way back in short of Login Flow v2
-      // again, since activeAccountId is never cleared and switchAccount()
-      // no-ops when asked to "switch" to the account that's already
-      // (nominally) active.
+      // Only drop the stored password - and only actually log out - on an
+      // actual auth rejection (401). Every other failure (DNS, timeout,
+      // unreachable host, a transient 5xx) is provisional: staying
+      // "logged in" with the cached account/service lets the app still
+      // land on MainShellView instead of bouncing to LoginView, which
+      // would strand a genuinely offline user with no way back in short
+      // of Login Flow v2 again (activeAccountId is never cleared and
+      // switchAccount() no-ops when asked to "switch" to the account
+      // that's already nominally active). `_service` is already assigned
+      // above and needs no re-creation once connectivity returns.
       if (_errorMessage?.contains('401') == true) {
         await accountStore.deletePassword(account.id);
+        _isProvisionalLogin = false;
+        _isLoggedIn = false;
+        _service = null;
+        _isLoading = false;
+        notifyListeners();
+        return false;
       }
+      _isProvisionalLogin = true;
+      _isLoggedIn = true;
+      _isLoading = false;
+      notifyListeners();
+      _notifyAccountProvisionallyReady();
+      return true;
     }
 
     if (gen != _sessionGeneration) return false;
+    _isProvisionalLogin = false;
     _isLoggedIn = false;
     _service = null;
     _isLoading = false;
     notifyListeners();
     return false;
+  }
+
+  /// Once connectivity actually returns, re-verifies a provisional/offline
+  /// login for real - this is what finally fires [_notifyAccountActivated]
+  /// (not just [_notifyAccountProvisionallyReady]) so network-fetching
+  /// controllers get their first real fetch without requiring an app
+  /// restart.
+  void _onConnectivityChanged() {
+    _reverifyTimer?.cancel();
+    if (!_isProvisionalLogin || connectivity.isOffline) return;
+    unawaited(_reverify(0));
+  }
+
+  Timer? _reverifyTimer;
+
+  /// One re-verification attempt, retried with a growing delay if the
+  /// server still can't be reached. The OS reports "connected" a moment
+  /// before the route actually works (the first request right after
+  /// regaining Wi-Fi/data fails with "Network is unreachable"), and
+  /// `onConnectivityChanged` won't fire again to give a second chance - so
+  /// without retrying, the login stayed provisional and the Files tab showed
+  /// a connection error until the user tapped Retry.
+  Future<void> _reverify(int attempt) async {
+    if (!_isProvisionalLogin || connectivity.isOffline) return;
+    final id = _activeAccountId;
+    if (id == null) return;
+    final account = _accounts.where((a) => a.id == id).firstOrNull;
+    if (account == null) return;
+    await _applyCredentialsForAccount(account, _password);
+    if (_isProvisionalLogin && !connectivity.isOffline && attempt < 5) {
+      _reverifyTimer = Timer(
+        Duration(seconds: 2 * (attempt + 1)),
+        () => unawaited(_reverify(attempt + 1)),
+      );
+    }
   }
 
   /// Starts Nextcloud Login Flow v2: asks the server for a one-time login
@@ -370,6 +472,8 @@ class SessionController extends ChangeNotifier with WidgetsBindingObserver {
     _activeAccountId = accountId;
     final prefs = await prefsFuture;
     await accountStore.saveActiveAccountId(prefs, accountId);
+    // Signed back in (or switched to) - it syncs in the background again.
+    await accountStore.setSignedOut(prefs, accountId, false);
     notifyListeners();
 
     final account = _accounts.where((a) => a.id == accountId).firstOrNull;
@@ -377,6 +481,7 @@ class SessionController extends ChangeNotifier with WidgetsBindingObserver {
         ? null
         : await accountStore.readPassword(accountId);
     if (account == null || password == null) {
+      _isProvisionalLogin = false;
       _isLoading = false;
       _isLoggedIn = false;
       notifyListeners();
@@ -443,6 +548,9 @@ class SessionController extends ChangeNotifier with WidgetsBindingObserver {
     for (final key in AccountStore.perAccountPrefKeys) {
       await prefs.remove(accountStore.accountPrefKey(accountId, key));
     }
+    await accountStore.setSignedOut(prefs, accountId, false);
+    // Its background sync job holds that account's credentials - stop it.
+    unawaited(SyncService.cancelAccount(accountId));
 
     if (!wasActive) {
       notifyListeners();
@@ -466,6 +574,7 @@ class SessionController extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> _deactivateSession() async {
     _sessionGeneration++;
     _notifyAccountCleared();
+    _isProvisionalLogin = false;
     _isLoggedIn = false;
     _serverUrl = '';
     _username = '';
@@ -474,7 +583,6 @@ class SessionController extends ChangeNotifier with WidgetsBindingObserver {
     final prefs = await prefsFuture;
     await accountStore.saveActiveAccountId(prefs, null);
     notifyListeners();
-    unawaited(SyncService.cancel());
   }
 
   /// Ends the active session but keeps this account saved - unlike
@@ -484,8 +592,16 @@ class SessionController extends ChangeNotifier with WidgetsBindingObserver {
   /// Always lands on the login screen even if other accounts are saved -
   /// deliberately not the same as switching to one of them.
   Future<void> logout() async {
-    if (_activeAccountId == null) return;
+    final id = _activeAccountId;
+    if (id == null) return;
+    // Logging out stops that account's background sync (the other saved
+    // accounts keep syncing - each has its own job). It's remembered as
+    // signed out so a later reschedule for some other account doesn't
+    // bring its job back; signing in again re-enables it.
+    final prefs = await prefsFuture;
+    await accountStore.setSignedOut(prefs, id, true);
     await _deactivateSession();
+    unawaited(SyncService.cancelAccount(id));
   }
 
   /// Confirms the device can do local auth and prompts once to enable login
@@ -564,6 +680,8 @@ class SessionController extends ChangeNotifier with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    connectivity.removeListener(_onConnectivityChanged);
+    _reverifyTimer?.cancel();
     _pollTimer?.cancel();
     _pollTimeoutTimer?.cancel();
     super.dispose();

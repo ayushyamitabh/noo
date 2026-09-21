@@ -36,6 +36,15 @@ widgets. Key points:
 
 ## Reusable chrome
 
+- `MediaGridTile` (`lib/widgets/media_grid_tile.dart`): the full-bleed image/video
+  grid card with name/size scrim, shared by Files (server preview) and Offline
+  (local `FileImage`, images only - no video frame-extraction plugin, so offline
+  videos use the plain icon card). `ItemThumbnail` takes an optional `localFile`
+  for the same offline-image case in list tiles.
+- `FilesControlsRow` (`lib/widgets/files_controls_row.dart`): the
+  sort/hidden/scope/type-filter/view-mode row, shared by the Files and
+  Offline tabs (`showStorageScope: false` for Offline).
+
 - [`getItemIcon`/`getIconColor`/`ItemThumbnail`](../../lib/widgets/item_icon.dart)
   — the icon/color/thumbnail treatment for a file or folder, shared by any
   screen that lists `NextcloudItem`s the way the Files tab does (currently
@@ -61,7 +70,7 @@ widgets. Key points:
   pull new adjustable visual knobs from `SettingsController` the same way
   rather than hardcoding them.
 - [`SyncedHeaderScaffold`](../../lib/widgets/synced_header_scaffold.dart) —
-  the pull-to-sync `CustomScrollView` header shared by 5 of the 6 tabs (see
+  the pull-to-sync `CustomScrollView` header shared by all 8 tabs (see
   `architecture.md`); also where the pull-to-refresh gesture thresholds and
   the classic Material refresh spinner live. Its persistent compact chip
   (icon + "Sync off"/"Syncing…"/"Synced"/"Sync issue") reflects device-sync
@@ -70,10 +79,12 @@ widgets. Key points:
   separate floating spinner bubble, so nothing was lost by handing the
   persistent text/icon over. The expanded panel's headline is a separate,
   more detailed string (`_syncSummary` in `synced_header_scaffold.dart`) -
-  actual folder/item counts ("2 folders & 5 items synced") rather than
-  just repeating the chip's generic label, which would otherwise read
-  "Synced" even when a folder's just been added and nothing's downloaded
-  yet.
+  counts of what's actually configured to sync ("2 folders & 1 file
+  synced") rather than just repeating the chip's generic label.
+  Deliberately doesn't add up the individual files inside a synced folder
+  ("1 folder synced", not "1 folder & 4 items synced") - once a folder's
+  synced, its file count is an implementation detail, not something the
+  user picked.
 - [`SyncStatusBadge`](../../lib/widgets/sync_status_badge.dart) — the small
   corner badge over a thumbnail showing per-item device-sync status
   (`cloud_done`/`sync`, nothing for not-synced/conflict); used in Files'

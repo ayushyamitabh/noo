@@ -20,6 +20,7 @@ class AccountStore {
   static const _prefAccountsList = 'accounts_list';
   static const _prefActiveAccountId = 'active_account_id';
   static const _prefMigrationDone = 'account_migration_v1_done';
+  static const _prefSignedOutAccounts = 'signed_out_account_ids';
 
   /// The per-account browsing prefs that get namespaced under
   /// `acct_<id>_<key>` on migration/save - everything else (theme, tab
@@ -38,6 +39,7 @@ class AccountStore {
     'ui_cache_policy',
     'ui_cache_interval_minutes',
     'ui_synced_folders',
+    'ui_synced_folder_types',
     'ui_sync_everything',
   ];
 
@@ -127,6 +129,24 @@ class AccountStore {
     } else {
       await prefs.setString(_prefActiveAccountId, id);
     }
+  }
+
+  /// Accounts the user explicitly logged out of. They stay saved (password
+  /// and prefs intact, resumable from the login screen) but are treated as
+  /// signed out - notably, they don't sync in the background. Cleared again
+  /// the moment the account is activated.
+  Set<String> loadSignedOut(SharedPreferences prefs) =>
+      (prefs.getStringList(_prefSignedOutAccounts) ?? const []).toSet();
+
+  Future<void> setSignedOut(
+    SharedPreferences prefs,
+    String accountId,
+    bool signedOut,
+  ) async {
+    final current = loadSignedOut(prefs);
+    final changed = signedOut ? current.add(accountId) : current.remove(accountId);
+    if (!changed) return;
+    await prefs.setStringList(_prefSignedOutAccounts, current.toList());
   }
 
   Future<String?> readPassword(String accountId) =>

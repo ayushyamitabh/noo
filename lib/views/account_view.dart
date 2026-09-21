@@ -8,6 +8,7 @@ import '../providers/settings_controller.dart';
 import '../providers/sync_status_controller.dart';
 import '../services/sync_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_tab_view_builder.dart';
 import '../widgets/frosted_glass_container.dart';
 import '../widgets/seek_bar_painter.dart';
 import '../widgets/synced_header_scaffold.dart' show formatQuota;
@@ -254,6 +255,25 @@ class AccountView extends StatelessWidget {
             const _DeviceSyncCard(),
             const SizedBox(height: 24),
 
+            // Files Cache
+            Text(
+              'Files Cache',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'How often folder listings and synced files refresh from the server',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 10),
+            const _CacheSettingsCard(),
+            const SizedBox(height: 24),
+
+
             // Material You Design Settings
             Text(
               'Material You Aesthetics',
@@ -443,24 +463,6 @@ class AccountView extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             const _MediaPlayerCard(),
-            const SizedBox(height: 24),
-
-            // Files Cache
-            Text(
-              'Files Cache',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Reuse a folder\'s listing instead of refetching it on every visit',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 10),
-            const _CacheSettingsCard(),
           ],
         ),
       ),
@@ -772,8 +774,6 @@ class _DeviceSyncCardState extends State<_DeviceSyncCard> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
     final session = context.watch<SessionController>();
     final sync = context.watch<SyncStatusController>();
     final folders = sync.syncedPaths;
@@ -793,49 +793,37 @@ class _DeviceSyncCardState extends State<_DeviceSyncCard> {
             onChanged: sync.setSyncEverything,
           ),
           const Divider(height: 1, indent: 16, endIndent: 16),
-          if (everything)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-              child: Text(
-                'Every folder in this account is being synced to this '
-                'device.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
+          ListTile(
+            leading: const Icon(Icons.offline_pin_rounded),
+            title: const Text('View offline files'),
+            subtitle: Text(
+              everything
+                  ? 'Every folder in this account is synced'
+                  : folders.isEmpty
+                  ? 'Nothing synced yet'
+                  : '${folders.length} synced folder${folders.length == 1 ? '' : 's'}/file${folders.length == 1 ? '' : 's'}',
+            ),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    Scaffold(body: buildAppTabView(AppTab.offline, ScrollController())),
               ),
-            )
-          else if (folders.isEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-              child: Text(
-                'No folders synced yet - select a folder in Files and use '
-                '"Sync to device" to mirror it here for offline access.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ),
-            )
-          else
-            for (final folder in folders) ...[
-              ListTile(
-                leading: const Icon(Icons.sync_rounded),
-                title: Text(folder),
-                trailing: IconButton(
-                  icon: const Icon(Icons.close_rounded),
-                  tooltip: 'Stop syncing',
-                  onPressed: () {
-                    sync.removeSyncedPath(folder);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Removed from device sync'),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const Divider(height: 1, indent: 16, endIndent: 16),
-            ],
+            ),
+          ),
+          const Divider(height: 1, indent: 16, endIndent: 16),
+          SwitchListTile(
+            secondary: const Icon(Icons.notifications_outlined),
+            title: const Text('Background sync notifications'),
+            subtitle: const Text(
+              'Show a notification when a background sync updates files. '
+              'Conflicts and "Sync now" always notify.',
+            ),
+            value: sync.syncNotifications,
+            onChanged: sync.setSyncNotifications,
+          ),
+          const Divider(height: 1, indent: 16, endIndent: 16),
           SwitchListTile(
             secondary: const Icon(Icons.signal_cellular_alt_rounded),
             title: const Text('Sync on cellular'),
@@ -1359,11 +1347,14 @@ class _CacheSettingsCard extends StatelessWidget {
   String _description(CachePolicy policy) {
     switch (policy) {
       case CachePolicy.never:
-        return 'Every visit to a folder fetches it fresh';
+        return 'Every visit to a folder fetches it fresh; synced files are '
+            'checked each time you open the app';
       case CachePolicy.interval:
-        return 'Reuse a folder\'s listing until it\'s a few minutes old';
+        return 'Reuse a folder\'s listing until it\'s a few minutes old; '
+            'synced files update in the background on the same schedule';
       case CachePolicy.manual:
-        return 'Reuse a folder\'s listing until you pull to refresh';
+        return 'Reuse a folder\'s listing until you pull to refresh; synced '
+            'files only update when you pull down or tap Sync now';
     }
   }
 
@@ -1425,6 +1416,14 @@ class _CacheSettingsCard extends StatelessWidget {
                       onChanged: (value) =>
                           files.setCacheIntervalMinutes(value.round()),
                     ),
+                    if (files.cacheIntervalMinutes < 15)
+                      Text(
+                        'While the app is closed, synced files refresh at most '
+                        'every 15 min (an Android limit).',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
                   ],
                 ),
               ),

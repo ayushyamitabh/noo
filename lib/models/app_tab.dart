@@ -4,7 +4,16 @@ import 'package:material_symbols_icons/symbols.dart';
 /// Every destination the bottom nav bar can show. Order here is only the
 /// fallback default — actual order/visibility/default-tab are user
 /// configurable and persisted in `SettingsController`.
-enum AppTab { files, photos, favorites, activity, trash, shares, recent }
+enum AppTab {
+  files,
+  photos,
+  favorites,
+  activity,
+  trash,
+  shares,
+  recent,
+  offline,
+}
 
 /// At most this many tabs may be visible in the bottom nav bar at once —
 /// the rest are reachable through the "more" dropdown instead.
@@ -27,6 +36,8 @@ extension AppTabInfo on AppTab {
         return 'Shares';
       case AppTab.recent:
         return 'Recent';
+      case AppTab.offline:
+        return 'Offline';
     }
   }
 
@@ -46,6 +57,8 @@ extension AppTabInfo on AppTab {
         return Icons.groups_rounded;
       case AppTab.recent:
         return Symbols.search_activity_rounded;
+      case AppTab.offline:
+        return Icons.offline_pin_rounded;
     }
   }
 }

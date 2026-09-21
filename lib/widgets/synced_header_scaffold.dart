@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
 import '../models/nextcloud_item.dart';
 import '../models/sync_status.dart';
+import '../providers/connectivity_controller.dart';
 import '../providers/files_controller.dart';
 import '../providers/session_controller.dart';
 import '../providers/sync_status_controller.dart';
@@ -11,8 +13,12 @@ import '../providers/sync_status_controller.dart';
 /// status (see `SyncStatusController.syncHeaderStatus`), not the WebDAV
 /// directory-listing refresh the pull gesture itself triggers (that has
 /// its own, separate floating spinner bubble - see
-/// `_SyncedHeaderScaffoldState`'s `_isRefreshing`).
-(IconData, String) _syncHeaderDisplay(SyncHeaderStatus status) {
+/// `_SyncedHeaderScaffoldState`'s `_isRefreshing`). [isOffline] takes
+/// priority over everything else - with no connection at all, "nothing
+/// configured to sync" and "can't sync right now" are different facts,
+/// and the latter is the one actually worth surfacing.
+(IconData, String) _syncHeaderDisplay(SyncHeaderStatus status, bool isOffline) {
+  if (isOffline) return (Icons.cloud_off_rounded, 'Offline');
   return switch (status) {
     SyncHeaderStatus.off => (Icons.cloud_off_rounded, 'Sync off'),
     SyncHeaderStatus.syncing => (Icons.cloud_sync_rounded, 'Syncing…'),
@@ -21,25 +27,25 @@ import '../providers/sync_status_controller.dart';
   };
 }
 
-/// The expanded sync panel's headline - actual folder/item counts instead
-/// of just repeating the compact chip's generic "Synced" label, which reads
-/// as true even when nothing has actually finished syncing yet (e.g. right
-/// after adding a folder, before the first pass completes).
-String _syncSummary(SyncStatusController sync) {
+/// The expanded sync panel's headline - counts of what's actually
+/// *configured* to sync (folders/files) instead of just repeating the
+/// compact chip's generic "Synced" label. Deliberately doesn't add up the
+/// individual files inside a synced folder ("1 folder synced", not "1
+/// folder & 4 items synced") - once a folder's synced, its file count is
+/// an implementation detail, not something the user picked.
+String _syncSummary(SyncStatusController sync, bool isOffline) {
+  if (isOffline) return 'Offline';
   if (sync.syncConflicts.isNotEmpty) return 'Sync issue';
   if (sync.isSyncingNow) return 'Syncing…';
-  final items = sync.syncedItemCount;
-  if (sync.syncEverything) {
-    return items > 0 ? '$items item${items == 1 ? '' : 's'} synced' : 'Sync off';
-  }
+  if (sync.syncEverything) return 'Whole account synced';
   final folders = sync.syncedFolderCount;
-  if (folders == 0) return 'Sync off';
-  final folderWord = folders == 1 ? 'folder' : 'folders';
-  if (items == 0) {
-    return '$folders $folderWord selected — nothing synced yet';
-  }
-  final itemWord = items == 1 ? 'item' : 'items';
-  return '$folders $folderWord & $items $itemWord synced';
+  final files = sync.syncedPaths.length - folders;
+  if (folders == 0 && files == 0) return 'Sync off';
+  final parts = <String>[
+    if (folders > 0) '$folders folder${folders == 1 ? '' : 's'}',
+    if (files > 0) '$files file${files == 1 ? '' : 's'}',
+  ];
+  return '${parts.join(' & ')} synced';
 }
 
 String formatBytes(int bytes) {
@@ -143,6 +149,9 @@ class _SyncedHeaderScaffoldState extends State<SyncedHeaderScaffold> {
     final refresh =
         widget.onRefresh ?? context.read<FilesController>().refreshData;
     setState(() => _isRefreshing = true);
+    // A deliberate pull also checks synced folders/files for server changes
+    // - the "sync" header is exactly where you'd expect that to happen.
+    unawaited(context.read<SyncStatusController>().syncOnPull());
     refresh().whenComplete(() {
       if (mounted) setState(() => _isRefreshing = false);
     });
@@ -318,7 +327,8 @@ class _SyncStatusChip extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final status = context.watch<SyncStatusController>().syncHeaderStatus;
-    final (icon, label) = _syncHeaderDisplay(status);
+    final isOffline = context.watch<ConnectivityController>().isOffline;
+    final (icon, label) = _syncHeaderDisplay(status, isOffline);
     final iconColor = status == SyncHeaderStatus.alert
         ? colorScheme.error
         : colorScheme.primary;
@@ -372,6 +382,7 @@ class _SyncedStretchPanel extends StatelessWidget {
     final quota = context.watch<FilesController>().quota;
     final serverUrl = context.watch<SessionController>().serverUrl;
     final syncStatus = context.watch<SyncStatusController>();
+    final isOffline = context.watch<ConnectivityController>().isOffline;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -382,7 +393,7 @@ class _SyncedStretchPanel extends StatelessWidget {
         // Reaches 1.0 (title fully hidden) at 50px of pull — comfortably
         // before the 100px lock threshold.
         final progress = forceVisible ? 1.0 : (stretch / 50).clamp(0.0, 1.0);
-        final statusLabel = _syncSummary(syncStatus);
+        final statusLabel = _syncSummary(syncStatus, isOffline);
         final conflicts = syncStatus.syncConflicts;
 
         return Stack(

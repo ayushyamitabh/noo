@@ -76,18 +76,27 @@ class PhotosController extends ChangeNotifier {
   Future<void> _onAccountActivated() async {
     final id = session.activeAccountId;
     if (id != null) {
-      final prefs = await session.prefsFuture;
-      String k(String base) => session.accountStore.accountPrefKey(id, base);
-      _showFavoritesOnly =
-          prefs.getBool(k(_prefShowFavoritesOnlyPhotos)) ?? false;
-      _showHidden = prefs.getBool(k(_prefShowHiddenPhotos)) ?? false;
-      final sortFieldName = prefs.getString(k(_prefSortField));
-      _sortField = FileSortField.values.firstWhere(
-        (f) => f.name == sortFieldName,
-        orElse: () => FileSortField.name,
-      );
-      _sortAscending = prefs.getBool(k(_prefSortAscending)) ?? true;
-      notifyListeners();
+      // Wrapped so a single bad/mistyped stored pref value can't
+      // silently skip fetchAllMedia() below and leave Photos permanently
+      // empty on this activation with no error surfaced anywhere - see
+      // FilesController._onAccountActivated's identical guard for the
+      // real incident this mirrors.
+      try {
+        final prefs = await session.prefsFuture;
+        String k(String base) => session.accountStore.accountPrefKey(id, base);
+        _showFavoritesOnly =
+            prefs.getBool(k(_prefShowFavoritesOnlyPhotos)) ?? false;
+        _showHidden = prefs.getBool(k(_prefShowHiddenPhotos)) ?? false;
+        final sortFieldName = prefs.getString(k(_prefSortField));
+        _sortField = FileSortField.values.firstWhere(
+          (f) => f.name == sortFieldName,
+          orElse: () => FileSortField.name,
+        );
+        _sortAscending = prefs.getBool(k(_prefSortAscending)) ?? true;
+        notifyListeners();
+      } catch (e) {
+        debugPrint('[PhotosController] Account-activation prefs restore failed: $e');
+      }
     }
     unawaited(fetchAllMedia());
   }

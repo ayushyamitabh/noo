@@ -2,6 +2,10 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- For local_auth's biometric app-lock (Settings > Security). -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
+    <!-- For connectivity_plus (ConnectivityController), which gates the
+         Offline tab restriction and skips network requests entirely while
+         offline - see session_controller.dart/main.dart. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <!-- For ShareUploadService/DownloadService, which keep a "Share to Noo"
          upload/download going (and cancellable from its notification) even
          if the app is fully closed - see each service's own doc comment. -->

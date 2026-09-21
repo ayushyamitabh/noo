@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -53,10 +54,30 @@ class FileViewerScreen extends StatefulWidget {
   /// The other items in the same folder/album, so images and videos can be
   /// swiped through without leaving the viewer. Non-media items in this list
   /// are ignored. If omitted (or the item isn't an image/video), the viewer
-  /// just shows [item] on its own.
+  /// just shows [item] on its own. Works the same way whether or not
+  /// [localPathResolver] is set - swiping through offline media resolves
+  /// each sibling's local path on demand, exactly like Files/Photos.
   final List<NextcloudItem>? siblings;
 
-  const FileViewerScreen({super.key, required this.item, this.siblings});
+  /// When set, every preview (and "open externally") resolves its file
+  /// from local disk through this instead of fetching from the server -
+  /// used by the Offline tab, whose whole point is browsing already-
+  /// downloaded files with no connection. Called once per item actually
+  /// shown (the initial item and each swiped-to sibling), not just up
+  /// front. Actions that need a live server (favorite/delete/download-to-
+  /// device) hide themselves in this mode; Share/Open-externally/Details
+  /// still work (Share already prefers the local copy when one exists -
+  /// see `ShareSheet._shareFileDirectly` - and Details' shares/activity/
+  /// versions tabs degrade the same way any other offline server call
+  /// does).
+  final Future<String?> Function(NextcloudItem item)? localPathResolver;
+
+  const FileViewerScreen({
+    super.key,
+    required this.item,
+    this.siblings,
+    this.localPathResolver,
+  });
 
   /// Opens the viewer with no page transition — media should appear
   /// instantly, not fade/zoom in the way MaterialPageRoute normally would.
@@ -65,10 +86,14 @@ class FileViewerScreen extends StatefulWidget {
   static Route<void> route({
     required NextcloudItem item,
     List<NextcloudItem>? siblings,
+    Future<String?> Function(NextcloudItem item)? localPathResolver,
   }) {
     return _InstantOpenPageRoute<void>(
-      pageBuilder: (context) =>
-          FileViewerScreen(item: item, siblings: siblings),
+      pageBuilder: (context) => FileViewerScreen(
+        item: item,
+        siblings: siblings,
+        localPathResolver: localPathResolver,
+      ),
     );
   }
 
@@ -111,6 +136,8 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
   late final PageController _pageController;
 
   NextcloudItem get _currentItem => _mediaItems[_currentIndex];
+
+  bool get _isOffline => widget.localPathResolver != null;
 
   bool get _isPdf => _currentItem.name.toLowerCase().endsWith('.pdf');
   bool get _isText => _textPreviewExtensions.contains(
@@ -173,7 +200,19 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
     final item = _currentItem;
     setState(() => _isBusy = true);
     try {
-      final path = await _downloadToTemp(session, item);
+      final path = _isOffline
+          ? await widget.localPathResolver!(item)
+          : await _downloadToTemp(session, item);
+      if (path == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('This file is no longer available offline'),
+            ),
+          );
+        }
+        return;
+      }
       final result = await OpenFile.open(path);
       if (mounted && result.type != ResultType.done) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -371,6 +410,10 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                   child: _MediaActionBar(
                     isFavorite: _currentItem.isFavorite,
                     isBusy: _isBusy,
+                    // Favorite/delete/download-to-device all need a live
+                    // server - hidden rather than shown-and-failing while
+                    // browsing an already-local file from the Offline tab.
+                    showServerActions: !_isOffline,
                     opacity: settings.bottomBarOpacity,
                     blurSigma: settings.bottomBarBlur,
                     onShare: () => ShareSheet.show(context, _currentItem),
@@ -401,21 +444,59 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
       onPageChanged: (index) => setState(() => _currentIndex = index),
       itemBuilder: (context, index) {
         final mediaItem = _mediaItems[index];
-        if (mediaItem.type == NextcloudItemType.image) {
-          return _ImagePreview(
+        if (!_isOffline) {
+          if (mediaItem.type == NextcloudItemType.image) {
+            return _ImagePreview(
+              key: ValueKey(mediaItem.id),
+              url: session.service!.fileUrl(mediaItem.path),
+              headers: session.service!.authHeaders,
+            );
+          }
+          return _VideoPreview(
             key: ValueKey(mediaItem.id),
             url: session.service!.fileUrl(mediaItem.path),
             headers: session.service!.authHeaders,
+            isActive: index == _currentIndex,
+            controlsBottomOffset: _controlsVisible ? 108 : 24,
+            opacity: settings.bottomBarOpacity,
+            blurSigma: settings.bottomBarBlur,
           );
         }
-        return _VideoPreview(
+        // Offline: each swiped-to item resolves its own local path on
+        // demand (see FileViewerScreen.localPathResolver's doc comment) -
+        // this is what makes swiping through offline media behave exactly
+        // like Files/Photos instead of only ever showing the one item the
+        // viewer was opened on.
+        return FutureBuilder<String?>(
           key: ValueKey(mediaItem.id),
-          url: session.service!.fileUrl(mediaItem.path),
-          headers: session.service!.authHeaders,
-          isActive: index == _currentIndex,
-          controlsBottomOffset: _controlsVisible ? 108 : 24,
-          opacity: settings.bottomBarOpacity,
-          blurSigma: settings.bottomBarBlur,
+          future: widget.localPathResolver!(mediaItem),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final localPath = snapshot.data;
+            if (localPath == null) {
+              return Center(
+                child: Icon(
+                  Icons.cloud_off_rounded,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  size: 64,
+                ),
+              );
+            }
+            if (mediaItem.type == NextcloudItemType.image) {
+              return _ImagePreview(url: null, headers: const {}, localPath: localPath);
+            }
+            return _VideoPreview(
+              url: null,
+              headers: const {},
+              localPath: localPath,
+              isActive: index == _currentIndex,
+              controlsBottomOffset: _controlsVisible ? 108 : 24,
+              opacity: settings.bottomBarOpacity,
+              blurSigma: settings.bottomBarBlur,
+            );
+          },
         );
       },
     );
@@ -429,10 +510,18 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
         return const SizedBox.shrink();
       default:
         if (_isPdf) {
-          return _PdfPreview(item: widget.item, session: session);
+          return _PdfPreview(
+            item: widget.item,
+            session: session,
+            localPathResolver: widget.localPathResolver,
+          );
         }
         if (_isText) {
-          return _TextPreview(item: widget.item, session: session);
+          return _TextPreview(
+            item: widget.item,
+            session: session,
+            localPathResolver: widget.localPathResolver,
+          );
         }
         return _UnsupportedPreview(
           item: widget.item,
@@ -449,6 +538,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
 class _MediaActionBar extends StatelessWidget {
   final bool isFavorite;
   final bool isBusy;
+  final bool showServerActions;
   final double opacity;
   final double blurSigma;
   final VoidCallback onShare;
@@ -461,6 +551,7 @@ class _MediaActionBar extends StatelessWidget {
   const _MediaActionBar({
     required this.isFavorite,
     required this.isBusy,
+    required this.showServerActions,
     required this.opacity,
     required this.blurSigma,
     required this.onShare,
@@ -493,30 +584,33 @@ class _MediaActionBar extends StatelessWidget {
                     tooltip: 'Share',
                     onTap: isBusy ? null : onShare,
                   ),
-                  _ActionIconButton(
-                    icon: isFavorite
-                        ? Icons.favorite_rounded
-                        : Icons.favorite_border_rounded,
-                    tooltip: 'Favorite',
-                    color: isFavorite ? Colors.red : null,
-                    onTap: onFavorite,
-                  ),
+                  if (showServerActions)
+                    _ActionIconButton(
+                      icon: isFavorite
+                          ? Icons.favorite_rounded
+                          : Icons.favorite_border_rounded,
+                      tooltip: 'Favorite',
+                      color: isFavorite ? Colors.red : null,
+                      onTap: onFavorite,
+                    ),
                   _ActionIconButton(
                     icon: Icons.open_in_new_rounded,
                     tooltip: 'Open externally',
                     onTap: isBusy ? null : onOpenExternally,
                   ),
-                  _ActionIconButton(
-                    icon: Icons.download_rounded,
-                    tooltip: 'Download',
-                    onTap: isBusy ? null : onDownload,
-                  ),
-                  _ActionIconButton(
-                    icon: Icons.delete_outline_rounded,
-                    tooltip: 'Delete',
-                    color: colorScheme.error,
-                    onTap: isBusy ? null : onDelete,
-                  ),
+                  if (showServerActions)
+                    _ActionIconButton(
+                      icon: Icons.download_rounded,
+                      tooltip: 'Download',
+                      onTap: isBusy ? null : onDownload,
+                    ),
+                  if (showServerActions)
+                    _ActionIconButton(
+                      icon: Icons.delete_outline_rounded,
+                      tooltip: 'Delete',
+                      color: colorScheme.error,
+                      onTap: isBusy ? null : onDelete,
+                    ),
                   _ActionIconButton(
                     icon: Icons.info_outline_rounded,
                     tooltip: 'Details',
@@ -567,10 +661,20 @@ class _ActionIconButton extends StatelessWidget {
 }
 
 class _ImagePreview extends StatefulWidget {
-  final String url;
+  final String? url;
   final Map<String, String> headers;
 
-  const _ImagePreview({super.key, required this.url, required this.headers});
+  /// When set, read the image from this on-disk path instead of [url] -
+  /// already-resolved by the caller (see
+  /// `FileViewerScreen.localPathResolver`'s doc comment).
+  final String? localPath;
+
+  const _ImagePreview({
+    super.key,
+    required this.url,
+    required this.headers,
+    this.localPath,
+  });
 
   @override
   State<_ImagePreview> createState() => _ImagePreviewState();
@@ -646,24 +750,38 @@ class _ImagePreviewState extends State<_ImagePreview>
           minScale: 0.8,
           maxScale: 5.0,
           child: Center(
-            child: Image.network(
-              widget.url,
-              headers: widget.headers,
-              fit: BoxFit.contain,
-              loadingBuilder: (context, child, progress) {
-                if (progress == null) return child;
-                return Center(
-                  child: CircularProgressIndicator(color: colorScheme.primary),
-                );
-              },
-              errorBuilder: (context, error, stack) => Center(
-                child: Icon(
-                  Icons.broken_image_outlined,
-                  color: colorScheme.onSurfaceVariant,
-                  size: 64,
-                ),
-              ),
-            ),
+            child: widget.localPath != null
+                ? Image.file(
+                    File(widget.localPath!),
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stack) => Center(
+                      child: Icon(
+                        Icons.broken_image_outlined,
+                        color: colorScheme.onSurfaceVariant,
+                        size: 64,
+                      ),
+                    ),
+                  )
+                : Image.network(
+                    widget.url!,
+                    headers: widget.headers,
+                    fit: BoxFit.contain,
+                    loadingBuilder: (context, child, progress) {
+                      if (progress == null) return child;
+                      return Center(
+                        child: CircularProgressIndicator(
+                          color: colorScheme.primary,
+                        ),
+                      );
+                    },
+                    errorBuilder: (context, error, stack) => Center(
+                      child: Icon(
+                        Icons.broken_image_outlined,
+                        color: colorScheme.onSurfaceVariant,
+                        size: 64,
+                      ),
+                    ),
+                  ),
           ),
         ),
       ),
@@ -672,9 +790,14 @@ class _ImagePreviewState extends State<_ImagePreview>
 }
 
 class _VideoPreview extends StatefulWidget {
-  final String url;
+  final String? url;
   final Map<String, String> headers;
   final bool isActive;
+
+  /// When set, read the video from this on-disk path instead of [url] -
+  /// already-resolved by the caller (see
+  /// `FileViewerScreen.localPathResolver`'s doc comment).
+  final String? localPath;
 
   /// Distance from the bottom of the screen the transport controls should
   /// sit at. Passed in by the parent so the controls can track the floating
@@ -691,6 +814,7 @@ class _VideoPreview extends StatefulWidget {
     super.key,
     required this.url,
     required this.headers,
+    this.localPath,
     this.isActive = true,
     this.controlsBottomOffset = 24,
     this.opacity = 0.55,
@@ -713,10 +837,12 @@ class _VideoPreviewState extends State<_VideoPreview> {
 
   Future<void> _init() async {
     try {
-      final controller = VideoPlayerController.networkUrl(
-        Uri.parse(widget.url),
-        httpHeaders: widget.headers,
-      );
+      final controller = widget.localPath != null
+          ? VideoPlayerController.file(File(widget.localPath!))
+          : VideoPlayerController.networkUrl(
+              Uri.parse(widget.url!),
+              httpHeaders: widget.headers,
+            );
       await controller.initialize();
       if (!mounted) {
         controller.dispose();
@@ -973,7 +1099,16 @@ class _PdfPreview extends StatefulWidget {
   final NextcloudItem item;
   final SessionController session;
 
-  const _PdfPreview({required this.item, required this.session});
+  /// When set, read bytes from the local path it resolves to instead of
+  /// fetching from the server - see
+  /// `FileViewerScreen.localPathResolver`'s doc comment.
+  final Future<String?> Function(NextcloudItem item)? localPathResolver;
+
+  const _PdfPreview({
+    required this.item,
+    required this.session,
+    this.localPathResolver,
+  });
 
   @override
   State<_PdfPreview> createState() => _PdfPreviewState();
@@ -991,11 +1126,25 @@ class _PdfPreviewState extends State<_PdfPreview> {
 
   Future<void> _load() async {
     try {
-      final bytes = await widget.session.service!.fetchBytes(widget.item.path);
+      final Uint8List bytes;
+      if (widget.localPathResolver != null) {
+        final localPath = await widget.localPathResolver!(widget.item);
+        if (localPath == null) {
+          if (mounted) {
+            setState(() => _error = 'No longer available offline');
+          }
+          return;
+        }
+        bytes = await File(localPath).readAsBytes();
+      } else {
+        bytes = Uint8List.fromList(
+          await widget.session.service!.fetchBytes(widget.item.path),
+        );
+      }
       if (!mounted) return;
       setState(() {
         _controller = PdfControllerPinch(
-          document: PdfDocument.openData(Uint8List.fromList(bytes)),
+          document: PdfDocument.openData(bytes),
         );
       });
     } catch (e) {
@@ -1040,7 +1189,16 @@ class _TextPreview extends StatefulWidget {
   final NextcloudItem item;
   final SessionController session;
 
-  const _TextPreview({required this.item, required this.session});
+  /// When set, read bytes from the local path it resolves to instead of
+  /// fetching from the server - see
+  /// `FileViewerScreen.localPathResolver`'s doc comment.
+  final Future<String?> Function(NextcloudItem item)? localPathResolver;
+
+  const _TextPreview({
+    required this.item,
+    required this.session,
+    this.localPathResolver,
+  });
 
   @override
   State<_TextPreview> createState() => _TextPreviewState();
@@ -1058,7 +1216,19 @@ class _TextPreviewState extends State<_TextPreview> {
 
   Future<void> _load() async {
     try {
-      final bytes = await widget.session.service!.fetchBytes(widget.item.path);
+      final List<int> bytes;
+      if (widget.localPathResolver != null) {
+        final localPath = await widget.localPathResolver!(widget.item);
+        if (localPath == null) {
+          if (mounted) {
+            setState(() => _error = 'No longer available offline');
+          }
+          return;
+        }
+        bytes = await File(localPath).readAsBytes();
+      } else {
+        bytes = await widget.session.service!.fetchBytes(widget.item.path);
+      }
       if (mounted) {
         setState(() => _content = utf8.decode(bytes, allowMalformed: true));
       }

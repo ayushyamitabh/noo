@@ -6,9 +6,11 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'models/app_tab.dart';
 import 'models/pick_request.dart';
+import 'providers/connectivity_controller.dart';
 import 'providers/favorites_controller.dart';
 import 'providers/files_controller.dart';
 import 'providers/item_operations.dart';
+import 'providers/offline_controller.dart';
 import 'providers/photos_controller.dart';
 import 'providers/pick_controller.dart';
 import 'providers/recent_controller.dart';
@@ -38,13 +40,25 @@ void main() {
       // replaced/recreated for the app's lifetime (account switching is
       // internal state on SessionController, not a new provider instance).
       providers: [
-        ChangeNotifierProvider(create: (_) => SessionController()),
-        ChangeNotifierProvider(create: (_) => SettingsController()),
+        ChangeNotifierProvider(create: (_) => ConnectivityController()),
         ChangeNotifierProvider(
-          create: (context) => SyncStatusController(context.read()),
+          create: (context) => SessionController(context.read()),
         ),
+        ChangeNotifierProvider(create: (_) => SettingsController()),
+        // Before SyncStatusController, which follows its Files Cache rule
+        // for how often synced files refresh.
         ChangeNotifierProvider(
           create: (context) => FilesController(context.read()),
+        ),
+        ChangeNotifierProvider(
+          // Eager (`lazy: false`) - this controller only loads its persisted
+          // state when SessionController fires the account-ready event, and
+          // that fires once at startup, before any widget has read this
+          // provider. Lazily created, it would register its listener too
+          // late and stay empty ("Sync off") until an account switch.
+          lazy: false,
+          create: (context) =>
+              SyncStatusController(context.read(), context.read()),
         ),
         ChangeNotifierProvider(
           create: (context) =>
@@ -65,6 +79,12 @@ void main() {
         ),
         ChangeNotifierProvider(
           create: (context) => PickController(context.read()),
+        ),
+        ChangeNotifierProvider(
+          // Eager for the same reason as SyncStatusController above.
+          lazy: false,
+          create: (context) =>
+              OfflineController(context.read(), context.read()),
         ),
         Provider(
           create: (context) => ItemOperations(
@@ -276,6 +296,7 @@ class _MainShellViewState extends State<MainShellView> {
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsController>();
     final pick = context.watch<PickController>();
+    final connectivity = context.watch<ConnectivityController>();
 
     // A one-shot request (e.g. tapping a search result) to switch tabs -
     // consumed here so it only fires once, then cleared after this frame
@@ -294,9 +315,15 @@ class _MainShellViewState extends State<MainShellView> {
     // real "pick a file from here" destinations, and only these two tabs'
     // views even know how to handle picking-mode taps. This overrides the
     // user's own hidden/reordered tab settings rather than respecting
-    // them, since picking is a separate mode from normal browsing.
+    // them, since picking is a separate mode from normal browsing. With
+    // no network at all, every other tab would just show its own loading
+    // spinner forever/an error state, so the bottom nav collapses to just
+    // Offline - the one tab that works without a connection (see
+    // `FilesView(offline: true)`/`ConnectivityController`).
     final visible = pickRequest != null
         ? [AppTab.files, AppTab.photos]
+        : connectivity.isOffline
+        ? [AppTab.offline]
         : settings.visibleTabs;
     final selectedTab = visible.contains(_currentTab)
         ? _currentTab

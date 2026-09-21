@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/nextcloud_item.dart';
+import 'folder_browser.dart';
 import 'session_controller.dart';
 
 enum FileSortField { name, dateCreated, dateModified, size }
@@ -20,7 +21,8 @@ enum FilesTypeFilter { all, filesOnly, foldersOnly }
 /// content - just the list of names/sizes/dates) are reused across
 /// navigation instead of refetched from the server every time.
 enum CachePolicy {
-  /// Every navigation refetches - today's behavior.
+  /// Every navigation refetches. Synced files are checked each time the app
+  /// opens (and on pull-to-refresh), but not on a background schedule.
   never,
 
   /// A listing is reused until it's older than [FilesController.
@@ -29,8 +31,16 @@ enum CachePolicy {
   interval,
 
   /// A listing is reused indefinitely until the user pulls to refresh.
+  /// Synced files likewise only update on pull-to-refresh / "Sync now".
   manual,
 }
+
+/// New accounts (and anyone who's never touched the setting) refresh
+/// periodically - the Files Cache rule also drives how often synced
+/// folders/files are brought in line with the server, see
+/// `SyncStatusController`.
+const defaultCachePolicy = CachePolicy.interval;
+const defaultCacheIntervalMinutes = 15;
 
 /// One cached folder listing and when it was fetched.
 class _CachedDirectory {
@@ -52,7 +62,9 @@ class _CachedDirectory {
 /// comments for why they depend on this one.
 ///
 /// Split out of the former single `ServerProvider` god object.
-class FilesController extends ChangeNotifier with WidgetsBindingObserver {
+class FilesController extends ChangeNotifier
+    with WidgetsBindingObserver
+    implements FolderBrowser {
   final SessionController session;
 
   static const _prefGridView = 'ui_grid_view';
@@ -60,8 +72,8 @@ class FilesController extends ChangeNotifier with WidgetsBindingObserver {
   static const _prefFilesTypeFilter = 'ui_files_type_filter';
   static const _prefShowHiddenFiles = 'ui_show_hidden';
   static const _prefFolderSort = 'ui_folder_sort';
-  static const _prefCachePolicy = 'ui_cache_policy';
-  static const _prefCacheIntervalMinutes = 'ui_cache_interval_minutes';
+  static const prefCachePolicy = 'ui_cache_policy';
+  static const prefCacheIntervalMinutes = 'ui_cache_interval_minutes';
 
   String _currentFolderPath = '/';
   List<String> _pathStack = ['/'];
@@ -74,10 +86,15 @@ class FilesController extends ChangeNotifier with WidgetsBindingObserver {
   final Map<String, FileSortField> _folderSortField = {};
   final Map<String, bool> _folderSortAscending = {};
 
-  CachePolicy _cachePolicy = CachePolicy.never;
-  int _cacheIntervalMinutes = 5;
+  CachePolicy _cachePolicy = defaultCachePolicy;
+  int _cacheIntervalMinutes = defaultCacheIntervalMinutes;
   final Map<String, _CachedDirectory> _directoryCache = {};
   Timer? _cacheRefreshTimer;
+
+  // Auto-retry of a failed (not in-place) load that looks like a network
+  // hiccup - see [_scheduleNetworkRetry].
+  Timer? _retryTimer;
+  int _retryAttempt = 0;
 
   List<NextcloudItem> _items = [];
   NextcloudUserQuota? _quota;
@@ -89,26 +106,37 @@ class FilesController extends ChangeNotifier with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     session.addAccountClearedListener(_onAccountCleared);
     session.addAccountActivatedListener(_onAccountActivated);
+    session.addAccountReadyListener(_restoreDisplayPrefs);
   }
 
   // Getters
+  @override
   String get currentFolderPath => _currentFolderPath;
+  @override
   List<String> get pathStack => _pathStack;
   bool get isGridView => _isGridView;
   StorageScope get storageScope => _storageScope;
   FilesTypeFilter get filesTypeFilter => _filesTypeFilter;
   bool get showHiddenFiles => _showHiddenFiles;
-  FileSortField get filesSortField =>
-      _folderSortField[_currentFolderPath] ?? FileSortField.name;
-  bool get filesSortAscending =>
-      _folderSortAscending[_currentFolderPath] ?? true;
+  FileSortField get filesSortField => sortFieldFor(_currentFolderPath);
+  bool get filesSortAscending => sortAscendingFor(_currentFolderPath);
+
+  /// Per-folder sort prefs keyed by remote path - also what the Offline tab
+  /// reads for the same path in the local mirror, so a folder sorts the
+  /// same in both places.
+  FileSortField sortFieldFor(String path) =>
+      _folderSortField[path] ?? FileSortField.name;
+  bool sortAscendingFor(String path) => _folderSortAscending[path] ?? true;
   CachePolicy get cachePolicy => _cachePolicy;
   int get cacheIntervalMinutes => _cacheIntervalMinutes;
+  @override
   bool get isLoading => _isLoading;
+  @override
   String? get errorMessage => _errorMessage;
   NextcloudUserQuota? get quota => _quota;
   List<NextcloudActivity> get activities => _activities;
 
+  @override
   List<NextcloudItem> get items => applyFilesDisplayPrefs(_items);
 
   int _compareItems(NextcloudItem a, NextcloudItem b, FileSortField field) {
@@ -140,6 +168,7 @@ class FilesController extends ChangeNotifier with WidgetsBindingObserver {
     List<NextcloudItem> source, {
     required bool showFavoritesOnly,
     required bool showHidden,
+    bool applyStorageScope = true,
   }) {
     var filtered = source;
     if (showFavoritesOnly) {
@@ -148,13 +177,15 @@ class FilesController extends ChangeNotifier with WidgetsBindingObserver {
     if (!showHidden) {
       filtered = filtered.where((item) => !_isHiddenItem(item)).toList();
     }
-    filtered = filtered
-        .where(
-          (item) => _storageScope == StorageScope.external
-              ? item.isExternalStorage
-              : !item.isExternalStorage,
-        )
-        .toList();
+    if (applyStorageScope) {
+      filtered = filtered
+          .where(
+            (item) => _storageScope == StorageScope.external
+                ? item.isExternalStorage
+                : !item.isExternalStorage,
+          )
+          .toList();
+    }
     return filtered;
   }
 
@@ -165,13 +196,22 @@ class FilesController extends ChangeNotifier with WidgetsBindingObserver {
   /// listings via [fetchFolderListing] rather than reading [items] itself)
   /// can render with the exact same controls/behavior as the Files tab
   /// without duplicating this logic.
-  List<NextcloudItem> applyFilesDisplayPrefs(List<NextcloudItem> rawItems) {
+  ///
+  /// [folderPath] picks which folder's sort prefs apply (default: the
+  /// Files tab's current folder). [applyStorageScope] is off for the
+  /// Offline tab, whose local mirror has no cloud/external distinction.
+  List<NextcloudItem> applyFilesDisplayPrefs(
+    List<NextcloudItem> rawItems, {
+    String? folderPath,
+    bool applyStorageScope = true,
+  }) {
     var filtered = applyCommonFilters(
       rawItems,
       // Files itself doesn't filter by favorite - that's the dedicated
       // Favorites tab's job.
       showFavoritesOnly: false,
       showHidden: _showHiddenFiles,
+      applyStorageScope: applyStorageScope,
     );
     switch (_filesTypeFilter) {
       case FilesTypeFilter.all:
@@ -182,17 +222,21 @@ class FilesController extends ChangeNotifier with WidgetsBindingObserver {
         filtered = filtered.where((i) => i.isFolder).toList();
     }
 
-    final field = filesSortField;
+    final path = folderPath ?? _currentFolderPath;
+    final field = sortFieldFor(path);
     final folders = filtered.where((i) => i.isFolder).toList()
       ..sort((a, b) => _compareItems(a, b, field));
     final files = filtered.where((i) => !i.isFolder).toList()
       ..sort((a, b) => _compareItems(a, b, field));
-    return filesSortAscending
+    return sortAscendingFor(path)
         ? [...folders, ...files]
         : [...folders.reversed, ...files.reversed];
   }
 
   void _onAccountCleared() {
+    _prefsRestore = null;
+    _retryTimer?.cancel();
+    _retryAttempt = 0;
     _cacheRefreshTimer?.cancel();
     _directoryCache.clear();
     _folderSortField.clear();
@@ -206,61 +250,97 @@ class FilesController extends ChangeNotifier with WidgetsBindingObserver {
     _storageScope = StorageScope.cloud;
     _filesTypeFilter = FilesTypeFilter.all;
     _showHiddenFiles = false;
-    _cachePolicy = CachePolicy.never;
-    _cacheIntervalMinutes = 5;
+    _cachePolicy = defaultCachePolicy;
+    _cacheIntervalMinutes = defaultCacheIntervalMinutes;
     _isLoading = false;
     _errorMessage = null;
     notifyListeners();
   }
 
-  Future<void> _onAccountActivated() async {
+  // Memoized per account (reset in _onAccountCleared) so the ready-event
+  // and activated-event paths below share one restore instead of racing
+  // two reads of the same prefs.
+  Future<void>? _prefsRestore;
+
+  /// Loads this account's display prefs (grid/list, hidden, type filter,
+  /// sort, cache policy) - hooked to `addAccountReadyListener` as well as
+  /// activation so the Offline tab, which reads these same prefs, respects
+  /// them even on a provisional/offline login where activation never fires.
+  Future<void> _restoreDisplayPrefs() => _prefsRestore ??= _doRestoreDisplayPrefs();
+
+  /// Completes once this account's cache policy/display prefs have been
+  /// loaded from storage - lets `SyncStatusController` schedule background
+  /// sync from the user's real policy instead of the defaults.
+  Future<void> get displayPrefsLoaded => _restoreDisplayPrefs();
+
+  Future<void> _doRestoreDisplayPrefs() async {
     final id = session.activeAccountId;
     if (id != null) {
-      final prefs = await session.prefsFuture;
-      String k(String base) => session.accountStore.accountPrefKey(id, base);
+      // The whole prefs-restore block is wrapped, not just the JSON
+      // decode below - a single bad/mistyped stored value here (an
+      // unguarded `prefs.getBool`/`getString`/`getInt` throws if the
+      // key holds a different runtime type than requested) would
+      // otherwise propagate uncaught out of this method entirely,
+      // silently skipping `refreshData()` below and leaving the Files
+      // tab permanently empty on this activation with no error surfaced
+      // anywhere - exactly what happened before this was guarded.
+      try {
+        final prefs = await session.prefsFuture;
+        String k(String base) => session.accountStore.accountPrefKey(id, base);
 
-      _isGridView = prefs.getBool(k(_prefGridView)) ?? false;
-      final storageScopeName = prefs.getString(k(_prefStorageScope));
-      _storageScope = StorageScope.values.firstWhere(
-        (s) => s.name == storageScopeName,
-        orElse: () => StorageScope.cloud,
-      );
-      final filesTypeFilterName = prefs.getString(k(_prefFilesTypeFilter));
-      _filesTypeFilter = FilesTypeFilter.values.firstWhere(
-        (f) => f.name == filesTypeFilterName,
-        orElse: () => FilesTypeFilter.all,
-      );
-      _showHiddenFiles = prefs.getBool(k(_prefShowHiddenFiles)) ?? false;
+        _isGridView = prefs.getBool(k(_prefGridView)) ?? false;
+        final storageScopeName = prefs.getString(k(_prefStorageScope));
+        _storageScope = StorageScope.values.firstWhere(
+          (s) => s.name == storageScopeName,
+          orElse: () => StorageScope.cloud,
+        );
+        final filesTypeFilterName = prefs.getString(k(_prefFilesTypeFilter));
+        _filesTypeFilter = FilesTypeFilter.values.firstWhere(
+          (f) => f.name == filesTypeFilterName,
+          orElse: () => FilesTypeFilter.all,
+        );
+        _showHiddenFiles = prefs.getBool(k(_prefShowHiddenFiles)) ?? false;
 
-      final folderSortJson = prefs.getString(k(_prefFolderSort));
-      if (folderSortJson != null) {
-        try {
-          final decoded = jsonDecode(folderSortJson) as Map<String, dynamic>;
-          for (final entry in decoded.entries) {
-            final value = entry.value as Map<String, dynamic>;
-            final fieldName = value['field'] as String?;
-            if (fieldName != null) {
-              _folderSortField[entry.key] = FileSortField.values.firstWhere(
-                (f) => f.name == fieldName,
-                orElse: () => FileSortField.name,
-              );
+        final folderSortJson = prefs.getString(k(_prefFolderSort));
+        if (folderSortJson != null) {
+          try {
+            final decoded = jsonDecode(folderSortJson) as Map<String, dynamic>;
+            for (final entry in decoded.entries) {
+              final value = entry.value as Map<String, dynamic>;
+              final fieldName = value['field'] as String?;
+              if (fieldName != null) {
+                _folderSortField[entry.key] = FileSortField.values.firstWhere(
+                  (f) => f.name == fieldName,
+                  orElse: () => FileSortField.name,
+                );
+              }
+              final ascending = value['ascending'] as bool?;
+              if (ascending != null) {
+                _folderSortAscending[entry.key] = ascending;
+              }
             }
-            final ascending = value['ascending'] as bool?;
-            if (ascending != null) _folderSortAscending[entry.key] = ascending;
+          } catch (e) {
+            debugPrint('[FilesController] Folder sort restore failed: $e');
           }
-        } catch (e) {
-          debugPrint('[FilesController] Folder sort restore failed: $e');
         }
-      }
 
-      final cachePolicyName = prefs.getString(k(_prefCachePolicy));
-      _cachePolicy = CachePolicy.values.firstWhere(
-        (c) => c.name == cachePolicyName,
-        orElse: () => CachePolicy.never,
-      );
-      _cacheIntervalMinutes = prefs.getInt(k(_prefCacheIntervalMinutes)) ?? 5;
-      notifyListeners();
+        final cachePolicyName = prefs.getString(k(prefCachePolicy));
+        _cachePolicy = CachePolicy.values.firstWhere(
+          (c) => c.name == cachePolicyName,
+          orElse: () => defaultCachePolicy,
+        );
+        _cacheIntervalMinutes =
+            prefs.getInt(k(prefCacheIntervalMinutes)) ??
+            defaultCacheIntervalMinutes;
+        notifyListeners();
+      } catch (e) {
+        debugPrint('[FilesController] Account-activation prefs restore failed: $e');
+      }
     }
+  }
+
+  Future<void> _onAccountActivated() async {
+    await _restoreDisplayPrefs();
     _startCacheRefreshTimerIfNeeded();
     await refreshData();
   }
@@ -305,10 +385,21 @@ class FilesController extends ChangeNotifier with WidgetsBindingObserver {
     // can recognize it's for an account the user has already left and
     // discard itself instead of overwriting the new account's content.
     final gen = session.sessionGeneration;
+    _retryTimer?.cancel();
 
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
+    // Refreshing a folder that's already on screen (pull-to-refresh, the
+    // periodic cache refresh) swaps the listing in place once the server
+    // answers - blanking the list to a spinner first made every refresh
+    // look like the files vanished and reappeared. The spinner is only for
+    // when there's nothing to show yet (first load, just navigated into a
+    // new folder - see [_navigateTo], which clears the outgoing folder's
+    // items - or retrying after an error).
+    final inPlace = _items.isNotEmpty && _errorMessage == null;
+    if (!inPlace) {
+      _isLoading = true;
+      _errorMessage = null;
+      notifyListeners();
+    }
 
     debugPrint('[FilesController] Refreshing data for path: $_currentFolderPath');
 
@@ -320,6 +411,11 @@ class FilesController extends ChangeNotifier with WidgetsBindingObserver {
         _items,
         DateTime.now(),
       );
+      // Show the new listing now rather than after the quota/activity
+      // fetches below - they're unrelated to what the list displays.
+      _isLoading = false;
+      _retryAttempt = 0;
+      notifyListeners();
       debugPrint(
         '[FilesController] Loaded ${_items.length} items for $_currentFolderPath',
       );
@@ -336,7 +432,12 @@ class FilesController extends ChangeNotifier with WidgetsBindingObserver {
     } catch (e) {
       if (gen != session.sessionGeneration) return;
       debugPrint('[FilesController] Error fetching directory: $e');
-      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      // A failed in-place refresh keeps the (slightly stale) listing on
+      // screen instead of replacing it with an error page.
+      if (!inPlace) {
+        _errorMessage = e.toString().replaceAll('Exception: ', '');
+        _scheduleNetworkRetry(e);
+      }
     } finally {
       if (gen == session.sessionGeneration) {
         _isLoading = false;
@@ -345,17 +446,46 @@ class FilesController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  /// The OS reports "connected" a moment before the route actually works,
+  /// so the first request after regaining Wi-Fi/data can fail with "Network
+  /// is unreachable" - leaving the Files tab on an error page until the
+  /// user taps Retry. Quietly retry a few times (2s, 4s, 8s, 15s) when the
+  /// failure is network-level and the device is online; a real server error
+  /// (auth, 5xx) isn't retried.
+  void _scheduleNetworkRetry(Object error) {
+    final text = error.toString();
+    final isNetworkError =
+        text.contains('SocketException') ||
+        text.contains('ClientException') ||
+        text.contains('TimeoutException') ||
+        text.contains('Network is unreachable');
+    if (!isNetworkError ||
+        _retryAttempt >= 4 ||
+        session.connectivity.isOffline) {
+      return;
+    }
+    final delays = [2, 4, 8, 15];
+    final delay = Duration(seconds: delays[_retryAttempt]);
+    _retryAttempt++;
+    _retryTimer = Timer(delay, () => unawaited(refreshData()));
+  }
+
   Future<List<NextcloudItem>> searchFiles(String query) async {
     final service = session.service;
     if (service == null) return [];
     return service.searchFiles(query);
   }
 
+  @override
+  Future<void> reload() => refreshData();
+
+  @override
   Future<void> navigateToFolder(String path) async {
     _pathStack.add(path);
     await _navigateTo(path);
   }
 
+  @override
   Future<void> navigateUp() async {
     if (_pathStack.length > 1) {
       _pathStack.removeLast();
@@ -365,6 +495,7 @@ class FilesController extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Jumps directly to an ancestor folder by its position in [pathStack]
   /// (as tapped from a breadcrumb), trimming everything below it.
+  @override
   Future<void> navigateToPathIndex(int index) async {
     if (index < 0 || index >= _pathStack.length - 1) return;
     _pathStack = _pathStack.sublist(0, index + 1);
@@ -402,6 +533,10 @@ class FilesController extends ChangeNotifier with WidgetsBindingObserver {
       notifyListeners();
       return;
     }
+    // Don't leave the folder just left on screen under the new breadcrumb
+    // while this one loads - clearing it is what makes [refreshData] show
+    // its spinner (rather than refreshing in place) for a navigation.
+    _items = [];
     await refreshData();
   }
 
@@ -493,15 +628,20 @@ class FilesController extends ChangeNotifier with WidgetsBindingObserver {
     );
   }
 
-  void setFilesSortField(FileSortField field) {
-    if (filesSortField == field) return;
-    _folderSortField[_currentFolderPath] = field;
+  void setFilesSortField(FileSortField field) =>
+      setSortFieldFor(_currentFolderPath, field);
+
+  void toggleFilesSortOrder() => toggleSortOrderFor(_currentFolderPath);
+
+  void setSortFieldFor(String path, FileSortField field) {
+    if (sortFieldFor(path) == field) return;
+    _folderSortField[path] = field;
     notifyListeners();
     _persistFolderSort();
   }
 
-  void toggleFilesSortOrder() {
-    _folderSortAscending[_currentFolderPath] = !filesSortAscending;
+  void toggleSortOrderFor(String path) {
+    _folderSortAscending[path] = !sortAscendingFor(path);
     notifyListeners();
     _persistFolderSort();
   }
@@ -511,7 +651,7 @@ class FilesController extends ChangeNotifier with WidgetsBindingObserver {
     _cachePolicy = policy;
     notifyListeners();
     _persistAccountPref(
-      _prefCachePolicy,
+      prefCachePolicy,
       (p, key) => p.setString(key, policy.name),
     );
     _startCacheRefreshTimerIfNeeded();
@@ -523,7 +663,7 @@ class FilesController extends ChangeNotifier with WidgetsBindingObserver {
     _cacheIntervalMinutes = clamped;
     notifyListeners();
     _persistAccountPref(
-      _prefCacheIntervalMinutes,
+      prefCacheIntervalMinutes,
       (p, key) => p.setInt(key, clamped),
     );
     _startCacheRefreshTimerIfNeeded();

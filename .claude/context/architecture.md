@@ -60,7 +60,13 @@ new provider instance):
   (grid/list, hidden files, storage scope, sort field/order, per-folder
   sort map), and the shared `applyCommonFilters`/`applyFilesDisplayPrefs`
   helpers Photos/Favorites reuse rather than duplicating the same
-  filter/sort logic.
+  filter/sort logic. `refreshData` refreshes **in place** when a listing is
+  already on screen (pull-to-refresh, periodic refresh, post-mutation): no
+  spinner, the list is swapped once the server answers, and a failed
+  refresh keeps the old list. The spinner/error page only appear when there
+  is nothing to show (first load, `_navigateTo` clears the outgoing folder
+  first, retry after an error). Keep that invariant - blanking the list to
+  a spinner made refreshes look like files vanishing and reappearing.
 - [`PhotosController`](../../lib/providers/photos_controller.dart) /
   [`FavoritesController`](../../lib/providers/favorites_controller.dart) —
   each depends on `FilesController` for the shared storage-scope toggle and
@@ -78,10 +84,47 @@ new provider instance):
   — device-sync settings and live status (`syncStatusFor(item)`,
   `syncHeaderStatus`, conflicts), subscribed to `SyncService`'s status
   stream directly rather than living inside the same object as the item
-  lists it decorates.
+  lists it decorates. Depends on `FilesController` (declared before it in
+  `main()`) because synced files refresh by the Files Cache rule - it owns
+  the foreground timer/resume/pull triggers and background scheduling; see
+  `server.md`'s "Keeping synced files current automatically".
 - [`PickController`](../../lib/providers/pick_controller.dart) — "being
   picked by another app" state (`pickRequest`/`isPicking`/`confirmPick`/
   `itemMatchesPickFilter`) — see `server.md`.
+- [`FolderBrowser`](../../lib/providers/folder_browser.dart) — the small
+  interface (`pathStack`/`currentFolderPath`/`items`/`isLoading`/
+  `errorMessage`/navigation/`reload`) `FilesView` needs from whatever
+  supplies its folder. `FilesController` (server) and `OfflineController`
+  (local mirror) both implement it, which is what lets the Offline tab be
+  `FilesView(offline: true)` - literally the Files tab over the device-sync
+  mirror, not a second view. `offline` only swaps the data source, reads
+  images from the local file (`localFileFor`) instead of a server preview,
+  and turns off what needs the server: selection and bulk actions, swipe
+  actions, sync badges, "+" (replaced by "Manage synced folders"), pick
+  mode. The two `FilesView`s are keyed in `buildAppTabView` so the
+  `IndexedStack` never hands one's State to the other.
+- [`OfflineController`](../../lib/providers/offline_controller.dart) — the
+  Files tab's folder listing read from local storage instead of the
+  server. Owns no display prefs: `items` runs the
+  listing through `FilesController.applyFilesDisplayPrefs` (hidden files,
+  files/folders filter, per-folder sort keyed by the same remote path,
+  minus the cloud/external scope) and `FilesView` reads grid/list from
+  `FilesController`, so both tabs share one set of controls
+  (`FilesControlsRow`). `FilesController` restores those prefs on the
+  account-*ready* event too (memoized `_restoreDisplayPrefs`) so they apply
+  offline. Refreshed (see `server.md`'s "Device sync" section) automatically whenever a sync pass
+  finishes. Listens for `SessionController.addAccountReadyListener`, not
+  `addAccountActivatedListener` - its work is local-only, so it's safe to
+  run even on a provisional/offline login (see `ConnectivityController`
+  below). Registered with `lazy: false` in `main.dart` (as is
+  `SyncStatusController`) - the ready event fires once at startup, before
+  any widget reads a lazily-created provider, so a lazy one would register
+  its listener too late and never load its persisted state.
+- [`ConnectivityController`](../../lib/providers/connectivity_controller.dart)
+  — wraps `connectivity_plus`, exposing just `isOffline`. The one thing
+  every network-touching controller (indirectly, via `SessionController`)
+  and `MainShellView` consult before making a request or deciding what to
+  show - see `server.md`'s "Working offline" section.
 - [`ItemOperations`](../../lib/providers/item_operations.dart) — not a
   `ChangeNotifier`; a plain, `const`-constructible class holding direct
   references to `SessionController`/`FilesController`/`PhotosController`/
@@ -132,8 +175,8 @@ directly, which call `NextcloudService`/`LoginFlowService`/`AccountStore`/
 - else `session.needsUnlock` → `LockScreenView` (login lock — see above)
 - else `MainShellView`
 
-`MainShellView` is a bottom-nav `IndexedStack` over up to 7 tabs — Files,
-Photos, Favorites, Activity, Trash, Shares, Recent — user-configurable
+`MainShellView` is a bottom-nav `IndexedStack` over up to 8 tabs — Files,
+Photos, Favorites, Activity, Trash, Shares, Recent, Offline — user-configurable
 (order, visibility up to `maxVisibleTabs`, default tab) via
 `AppTab`/`SettingsController` and rendered through `buildAppTabView`
 (`widgets/app_tab_view_builder.dart`). `maxVisibleTabs` (5) is less than the
@@ -159,7 +202,13 @@ another app" story) that feeds `PickController.pickRequest`; while
 `isPicking`, the visible tab list is overridden to just Files and Photos
 regardless of the user's own hidden/reordered tab settings, since those
 are the only two views that know how to handle a picking-mode tap and the
-only two that make sense as external "choose a file" sources.
+only two that make sense as external "choose a file" sources. The same
+override mechanism restricts the visible tabs to just Offline while
+`ConnectivityController.isOffline` - see `server.md`'s "Working offline"
+section for the full story, including why session restore itself has to
+avoid making a network request in that case. `MoreTabsButton` hides
+entirely in both cases (picking, offline) for the same reason - there's
+nothing it could usefully open.
 `MainShellView` also fires a one-time notification-permission prompt on
 its first mount (`_maybeRequestNotificationPermission`, gated by a plain
 `shared_preferences` flag so it only ever asks once, not on every
@@ -174,7 +223,7 @@ pill's item row in a horizontal `SingleChildScrollView` rather than a
 plain `Row`, so a wide selected-item label plus several icon-only tabs
 scrolls instead of overflowing on narrower screens.
 
-All six tabs, plus `ShareUploadView` (the share-to-upload destination
+All eight tabs, plus `ShareUploadView` (the share-to-upload destination
 picker, pushed rather than a tab - see below), share
 [`SyncedHeaderScaffold`](../../lib/widgets/synced_header_scaffold.dart) — a
 `CustomScrollView` with a pull-down "sync status" header (Google

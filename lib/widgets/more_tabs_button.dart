@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/app_tab.dart';
+import '../providers/connectivity_controller.dart';
 import '../providers/pick_controller.dart';
 import '../providers/settings_controller.dart';
 import 'app_tab_view_builder.dart';
@@ -16,13 +17,16 @@ class MoreTabsButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final pick = context.watch<PickController>();
     final settings = context.watch<SettingsController>();
+    final connectivity = context.watch<ConnectivityController>();
 
     // While picking (another app's GET_CONTENT request), MainShellView
     // already restricts the bottom nav to Files/Photos - this button would
     // otherwise be the one remaining way to reach a tab that isn't a valid
     // pick source (Trash, Shares, ...), so it hides entirely rather than
-    // just disabling.
-    if (pick.isPicking) return const SizedBox.shrink();
+    // just disabling. Same idea while offline: every hidden tab needs a
+    // network request to show anything useful, so there's nothing this
+    // button could usefully open.
+    if (pick.isPicking || connectivity.isOffline) return const SizedBox.shrink();
 
     return PopupMenuButton<AppTab>(
       icon: const Icon(Icons.apps_rounded),

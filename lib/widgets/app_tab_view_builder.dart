@@ -14,7 +14,12 @@ import '../views/trash_view.dart';
 Widget buildAppTabView(AppTab tab, ScrollController controller) {
   switch (tab) {
     case AppTab.files:
-      return FilesView(scrollController: controller);
+      // Keyed so the Files and Offline tabs (same widget type) never share
+      // State when the visible-tab list shifts positions in the IndexedStack.
+      return FilesView(
+        key: const ValueKey('files'),
+        scrollController: controller,
+      );
     case AppTab.photos:
       return PhotosView(scrollController: controller);
     case AppTab.favorites:
@@ -27,5 +32,11 @@ Widget buildAppTabView(AppTab tab, ScrollController controller) {
       return SharesView(scrollController: controller);
     case AppTab.recent:
       return RecentView(scrollController: controller);
+    case AppTab.offline:
+      return FilesView(
+        key: const ValueKey('offline'),
+        scrollController: controller,
+        offline: true,
+      );
   }
 }

@@ -7,6 +7,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import kotlinx.coroutines.sync.Mutex
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -48,12 +49,45 @@ object SyncEngine {
         val localMTime: Long,
     )
 
+    /**
+     * What we last saw for a configured sync root when a walk of it fully
+     * completed cleanly: its own etag (Nextcloud propagates a change to any
+     * descendant up through every ancestor folder's etag, so an unchanged
+     * root etag means nothing beneath it changed on the server) and when
+     * that full walk happened. Lets a background pass answer "did anything
+     * change?" with one tiny Depth-0 PROPFIND per root instead of
+     * re-walking the whole tree every time.
+     */
+    data class RootMarker(val etag: String, val fullWalkAt: Long)
+
+    /**
+     * The server couldn't be reached or answered with an error (anything
+     * but a clean 404). Distinct from "the path is genuinely gone/empty":
+     * treating a network blip as an empty listing made every previously
+     * synced file look deleted server-side, and the diff then deleted the
+     * local copies. Callers skip the affected path for this run instead.
+     */
+    class RemoteUnavailableException(message: String, cause: Throwable? = null) :
+        Exception(message, cause)
+
     sealed class SyncAction {
         data class Download(val entry: RemoteEntry) : SyncAction()
         data class Upload(val relPath: String, val fileId: String) : SyncAction()
         data class Delete(val relPath: String, val fileId: String) : SyncAction()
         data class Conflict(val entry: RemoteEntry, val relPath: String) : SyncAction()
     }
+
+    /**
+     * Held for the whole of any run that reads-then-rewrites a sync state
+     * map ([SyncWorker], [ConflictResolveWorker]). The periodic job and the
+     * one-off "sync now" jobs have different WorkManager names, so
+     * WorkManager itself happily runs them at once - and both load the
+     * state, mutate it, then save the *whole* map back, so whichever
+     * finished last silently discarded the other's updates. One process-wide
+     * lock serializes them (also keeps [SyncStatusBus], which only tracks
+     * one account at a time, coherent when several accounts are due).
+     */
+    val syncLock = Mutex()
 
     private const val TAG = "NooSync"
     private const val STATE_PREFS = "noo_sync_state"
@@ -73,6 +107,108 @@ object SyncEngine {
     }
 
     private fun stateKey(accountId: String) = "state_$accountId"
+    private fun rootsKey(accountId: String) = "roots_$accountId"
+    private fun rootsVersionKey(accountId: String) = "roots_version_$accountId"
+    private fun missingKey(accountId: String) = "missing_$accountId"
+
+    // Bumped whenever a walk starts doing something new (e.g. mirroring
+    // empty folders) so markers recorded by an older version - which would
+    // make the next run skip the walk - are ignored once.
+    private const val ROOTS_VERSION = 2
+
+    fun loadRootMarkers(context: Context, accountId: String): MutableMap<String, RootMarker> {
+        val prefs = context.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE)
+        if (prefs.getInt(rootsVersionKey(accountId), 0) != ROOTS_VERSION) return mutableMapOf()
+        val json = prefs.getString(rootsKey(accountId), null) ?: return mutableMapOf()
+        val obj = JSONObject(json)
+        val result = mutableMapOf<String, RootMarker>()
+        for (path in obj.keys()) {
+            val entry = obj.getJSONObject(path)
+            result[path] = RootMarker(entry.getString("etag"), entry.getLong("fullWalkAt"))
+        }
+        return result
+    }
+
+    fun saveRootMarkers(context: Context, accountId: String, markers: Map<String, RootMarker>) {
+        val obj = JSONObject()
+        for ((path, m) in markers) {
+            obj.put(path, JSONObject().apply {
+                put("etag", m.etag)
+                put("fullWalkAt", m.fullWalkAt)
+            })
+        }
+        val prefs = context.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE)
+        prefs.edit()
+            .putString(rootsKey(accountId), obj.toString())
+            .putInt(rootsVersionKey(accountId), ROOTS_VERSION)
+            .apply()
+    }
+
+    /**
+     * Configured sync roots the server reported as gone (a clean 404) - e.g.
+     * a synced file or folder that was deleted on the web. The app removes
+     * these from its synced list (there's nothing left to sync) and then
+     * clears them via [removeLocalSync].
+     */
+    fun loadMissingRoots(context: Context, accountId: String): Set<String> {
+        val prefs = context.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE)
+        return prefs.getStringSet(missingKey(accountId), emptySet())?.toSet() ?: emptySet()
+    }
+
+    fun setRootMissing(context: Context, accountId: String, path: String, missing: Boolean) {
+        val prefs = context.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE)
+        val current = loadMissingRoots(context, accountId).toMutableSet()
+        val changed = if (missing) current.add(path) else current.remove(path)
+        if (changed) prefs.edit().putStringSet(missingKey(accountId), current).apply()
+    }
+
+    /** Creates a local directory for every remote folder, so empty folders exist on device too. */
+    fun mirrorFolders(entries: List<RemoteEntry>, syncRoot: File, rootRel: String) {
+        if (rootRel.isNotEmpty()) File(syncRoot, rootRel).mkdirs()
+        for (e in entries) {
+            if (e.isFolder) File(syncRoot, e.path.trim('/')).mkdirs()
+        }
+    }
+
+    /**
+     * Removes local directories under [rootRel] that no longer exist on the
+     * server ([remoteFolders], relative paths) - the counterpart to
+     * [mirrorFolders]. Only *empty* directories are removed: by the time this
+     * runs the files that were inside a deleted server folder have already
+     * been deleted by the diff, while a directory that still holds something
+     * (a file this device created that hasn't synced) is left alone. Never
+     * removes the sync root itself.
+     */
+    fun pruneRemovedFolders(syncRoot: File, rootRel: String, remoteFolders: Set<String>) {
+        val top = if (rootRel.isEmpty()) syncRoot else File(syncRoot, rootRel)
+        if (!top.isDirectory) return
+
+        fun prune(dir: File, rel: String) {
+            dir.listFiles()?.filter { it.isDirectory }?.forEach { child ->
+                prune(child, if (rel.isEmpty()) child.name else "$rel/${child.name}")
+            }
+            if (rel.isNotEmpty() && rel !in remoteFolders && dir.list().isNullOrEmpty()) {
+                dir.delete()
+            }
+        }
+        prune(top, rootRel)
+    }
+
+    /**
+     * True if every file in [fileIds] is still on disk exactly as the sync
+     * state last recorded it (same size and mtime) - i.e. there's nothing
+     * local to upload and nothing missing to re-download. Pure local stat
+     * calls, no network.
+     */
+    fun localMatchesState(
+        state: Map<String, FileState>,
+        fileIds: Collection<String>,
+        syncRoot: File,
+    ): Boolean = fileIds.all { id ->
+        val s = state[id] ?: return@all false
+        val f = File(syncRoot, s.relPath)
+        f.exists() && f.length() == s.size && f.lastModified() == s.localMTime
+    }
 
     fun loadState(context: Context, accountId: String): MutableMap<String, FileState> {
         val prefs = context.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE)
@@ -161,9 +297,10 @@ object SyncEngine {
         return try {
             httpClient.newCall(request).execute().use { response ->
                 Log.d(TAG, "PROPFIND $url -> ${response.code}")
+                if (response.code == 404) return emptyList() // genuinely gone
                 if (!response.isSuccessful) {
                     Log.w(TAG, "PROPFIND $url failed: ${response.code} ${response.body?.string()}")
-                    return emptyList()
+                    throw RemoteUnavailableException("PROPFIND $url -> ${response.code}")
                 }
 
                 val doc = DocumentBuilderFactory.newInstance()
@@ -173,9 +310,11 @@ object SyncEngine {
 
                 parsePropfindResponse(doc, username, cleanPath, skipSelf)
             }
+        } catch (e: RemoteUnavailableException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "PROPFIND $url threw", e)
-            emptyList()
+            throw RemoteUnavailableException("PROPFIND $url threw", e)
         }
     }
 
@@ -323,11 +462,16 @@ object SyncEngine {
                 (localFile.lastModified() != prior.localMTime || localFile.length() != prior.size)
 
             when {
-                !localExists && !serverChanged -> {
-                    // User deleted the local mirror copy themselves and the
-                    // server hasn't changed - respect that deletion rather
-                    // than silently re-creating it.
-                    actions.add(SyncAction.Delete(relPath, entry.fileId))
+                !localExists -> {
+                    // State says this file was mirrored but the local copy
+                    // is gone (stale state left over from an earlier sync of
+                    // this path, or the file was removed outside the app).
+                    // It's inside a path the user asked to sync, so pull it
+                    // back down. This used to be treated as "the user
+                    // deleted it, respect that" and emitted a Delete - which
+                    // dropped the state, skipped the download, and reported
+                    // phantom "N removed" for files that were never on disk.
+                    actions.add(SyncAction.Download(entry))
                 }
                 serverChanged && localChanged -> actions.add(SyncAction.Conflict(entry, relPath))
                 serverChanged -> actions.add(SyncAction.Download(entry))
@@ -379,6 +523,24 @@ object SyncEngine {
         }.keys
         for (fileId in toRemove) state.remove(fileId)
         saveState(context, accountId, state)
+
+        setRootMissing(context, accountId, "/" + cleanPath, false)
+        setRootMissing(context, accountId, cleanPath, false)
+
+        // A root marker for this path (or an ancestor/descendant that also
+        // covers some of what was just deleted) would make the next
+        // background pass think nothing changed and skip re-downloading.
+        val removedPath = "/" + cleanPath
+        val markers = loadRootMarkers(context, accountId)
+        val staleKeys = markers.keys.filter { key ->
+            val k = key.trimEnd('/')
+            k.isEmpty() || removedPath == "/" || k == removedPath ||
+                k.startsWith("$removedPath/") || removedPath.startsWith("$k/")
+        }
+        if (staleKeys.isNotEmpty()) {
+            staleKeys.forEach { markers.remove(it) }
+            saveRootMarkers(context, accountId, markers)
+        }
 
         val target = if (cleanPath.isEmpty()) root else File(root, cleanPath)
         if (target.exists()) target.deleteRecursively()

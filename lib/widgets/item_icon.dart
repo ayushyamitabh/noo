@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/nextcloud_item.dart';
 import '../services/nextcloud_service.dart';
@@ -56,10 +57,16 @@ class ItemThumbnail extends StatelessWidget {
   final double borderRadius;
   final double iconSize;
 
+  /// The on-device copy of [item] (the Offline tab's synced mirror) - when
+  /// set, images render from this file instead of a server preview, so
+  /// thumbnails work with no connection.
+  final File? localFile;
+
   const ItemThumbnail({
     super.key,
     required this.item,
     required this.service,
+    this.localFile,
     required this.size,
     required this.borderRadius,
     required this.iconSize,
@@ -71,6 +78,7 @@ class ItemThumbnail extends StatelessWidget {
     final isMedia =
         item.type == NextcloudItemType.image ||
         item.type == NextcloudItemType.video;
+    final useLocal = item.type == NextcloudItemType.image && localFile != null;
     // Decode straight to the size this thumbnail is actually painted at —
     // the server hands back a 500x500 preview regardless, and decoding that
     // in full for a ~40dp tile (times however many are on screen while
@@ -86,16 +94,22 @@ class ItemThumbnail extends StatelessWidget {
         color: iconColor.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(borderRadius),
       ),
-      child: isMedia && item.previewUrl != null
+      child: useLocal || (isMedia && item.previewUrl != null)
           ? Stack(
               fit: StackFit.expand,
               children: [
-                Image.network(
-                  item.previewUrl!,
-                  headers: service?.authHeaders,
+                Image(
+                  image: ResizeImage(
+                    useLocal
+                        ? FileImage(localFile!) as ImageProvider
+                        : NetworkImage(
+                            item.previewUrl!,
+                            headers: service?.authHeaders,
+                          ),
+                    width: cachePixels,
+                    height: cachePixels,
+                  ),
                   fit: BoxFit.cover,
-                  cacheWidth: cachePixels,
-                  cacheHeight: cachePixels,
                   filterQuality: FilterQuality.low,
                   gaplessPlayback: true,
                   loadingBuilder: (context, child, progress) {

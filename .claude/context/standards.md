@@ -62,9 +62,13 @@ class/method already makes obvious.
 ## Testing
 
 - Widget tests must mock platform channels that the app touches on startup
-  — `SharedPreferences.setMockInitialValues({})` and a mock
-  `MethodChannel('plugins.it_nomads.com/flutter_secure_storage')` handler —
-  and disable Google Fonts network fetching
+  — `SharedPreferences.setMockInitialValues({})`, a mock
+  `MethodChannel('plugins.it_nomads.com/flutter_secure_storage')` handler,
+  and `connectivity_plus`'s `MethodChannel('dev.fluttercommunity.plus/
+  connectivity')` (`'check'` → a result list, e.g. `['wifi']`) plus its
+  `EventChannel('dev.fluttercommunity.plus/connectivity_status')` (a
+  `MockStreamHandler.inline` with a no-op `onListen` is enough) — and
+  disable Google Fonts network fetching
   (`GoogleFonts.config.allowRuntimeFetching = false`) in `setUpAll`. Without
   these, `SessionController`'s session restore never resolves in the test
   sandbox (no plugin implementation is registered, so the read future just

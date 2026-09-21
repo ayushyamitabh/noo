@@ -47,7 +47,7 @@ class ShareUploadService : Service() {
         const val EXTRA_AUTH_HEADER = "authHeader"
         const val EXTRA_REMOTE_FOLDER = "remoteFolder"
 
-        private const val CHANNEL_ID = "share_upload"
+        private const val CHANNEL_ID = "share_upload_v2"
         private const val NOTIFICATION_ID = 4201
     }
 
@@ -90,7 +90,9 @@ class ShareUploadService : Service() {
             this,
             CHANNEL_ID,
             "File uploads",
-            NotificationManager.IMPORTANCE_LOW,
+            // Default (not low) importance so a finished upload actually
+            // alerts; the progress updates themselves stay silent below.
+            NotificationManager.IMPORTANCE_DEFAULT,
             "Progress for files shared to Noo",
         )
         ServiceCompat.startForeground(
@@ -239,6 +241,7 @@ class ShareUploadService : Service() {
             .setContentTitle("Uploading to Noo")
             .setContentText(text)
             .setOnlyAlertOnce(true)
+            .setSilent(true)
             .setOngoing(true)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancel", cancelPendingIntent)
         when {

@@ -42,7 +42,7 @@ class DownloadService : Service() {
         const val EXTRA_USERNAME = "username"
         const val EXTRA_AUTH_HEADER = "authHeader"
 
-        private const val CHANNEL_ID = "file_downloads"
+        private const val CHANNEL_ID = "file_downloads_v2"
         private const val NOTIFICATION_ID = 4301
     }
 
@@ -86,8 +86,11 @@ class DownloadService : Service() {
             this,
             CHANNEL_ID,
             "File downloads",
-            NotificationManager.IMPORTANCE_LOW,
-            "Progress for files downloaded from Noo",
+            // Default (not low) importance so a finished download actually
+            // alerts; the progress updates themselves stay silent below.
+            NotificationManager.IMPORTANCE_DEFAULT,
+            "Progress and completion of files downloaded from Noo",
+            legacyIds = listOf("file_downloads"),
         )
         ServiceCompat.startForeground(
             this,
@@ -250,6 +253,7 @@ class DownloadService : Service() {
             .setContentTitle("Downloading from Noo")
             .setContentText(text)
             .setOnlyAlertOnce(true)
+            .setSilent(true)
             .setOngoing(true)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancel", cancelPendingIntent)
         when {

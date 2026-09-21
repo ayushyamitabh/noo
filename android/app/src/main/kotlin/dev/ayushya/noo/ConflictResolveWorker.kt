@@ -7,6 +7,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -62,6 +63,11 @@ class ConflictResolveWorker(appContext: Context, params: WorkerParameters) :
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+        // Same lock as SyncWorker: both load/mutate/save the whole state map.
+        SyncEngine.syncLock.withLock { performResolve() }
+    }
+
+    private suspend fun performResolve(): Result = withContext(Dispatchers.IO) {
         val accountId = inputData.getString(KEY_ACCOUNT_ID) ?: return@withContext Result.failure()
         val serverUrl = inputData.getString(KEY_SERVER_URL) ?: return@withContext Result.failure()
         val username = inputData.getString(KEY_USERNAME) ?: return@withContext Result.failure()
@@ -84,7 +90,9 @@ class ConflictResolveWorker(appContext: Context, params: WorkerParameters) :
         // Refresh the recorded state from the server's post-resolution
         // etag, so this file isn't immediately re-flagged as a conflict on
         // the next sync pass.
-        val fresh = SyncEngine.propfindSelf(serverUrl, username, authHeader, remotePath)
+        val fresh = runCatching {
+            SyncEngine.propfindSelf(serverUrl, username, authHeader, remotePath)
+        }.getOrNull()
         val state = SyncEngine.loadState(applicationContext, accountId).toMutableMap()
         state[fileId] = SyncEngine.FileState(
             relPath = relPath,
