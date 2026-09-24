@@ -15,6 +15,11 @@ relevant file(s) before working in that area rather than loading all of them:
   conventions, fonts, reusable chrome widgets
 - [`standards.md`](.claude/context/standards.md) — code style, comment
   conventions, linting, testing
+- [`design-system/DESIGN_SYSTEM.md`](.claude/context/design-system/DESIGN_SYSTEM.md)
+  — the target visual/component spec (tokens, components, platform
+  mapping, screen recipes) for the in-progress UI rework; the sibling
+  `.dc.html`/`noo-kit.js` files it references are the visual/token
+  reference builds, not something to read directly
 
 ## Common commands
 

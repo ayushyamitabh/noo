@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<script src="noo-kit.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Schibsted+Grotesk:wght@500;600&display=swap">
+<style>
+body{margin:0;background:#F3EFE6}
+a{color:#8D0DE3;text-decoration:none}
+a:hover{color:#6E08B3}
+</style>
+</helmet>
+<div style="max-width:1440px;margin:0 auto;padding:64px 40px 96px;display:flex;flex-direction:column;gap:48px;font-family:'Instrument Sans',system-ui,sans-serif;color:#0E0D0B">
+<div style="display:flex;flex-direction:column;gap:16px">
+<div style="font:600 64px/0.9 'Schibsted Grotesk',system-ui,sans-serif;letter-spacing:-0.03em">Noo design system</div>
+<div style="font:400 18px/1.35 'Instrument Sans',system-ui,sans-serif;color:#5A5852;max-width:760px;text-wrap:pretty">Every component is shown in light and dark. The full rules for code are in <a href="DESIGN_SYSTEM.md">DESIGN_SYSTEM.md</a>. You can see every screen in <a href="Noo Screens.dc.html">Noo Screens</a>.</div>
+</div>
+
+<sc-if value="{{ ready }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:14px">
+<div style="font:500 28px/1 'Schibsted Grotesk',system-ui,sans-serif;letter-spacing:-0.02em">Type</div>
+<div style="background:#FFFFFF;border-radius:20px;padding:8px 24px">
+<sc-for list="{{ type }}" as="t" hint-placeholder-count="9">
+<div style="display:grid;grid-template-columns:200px minmax(0,1fr);gap:24px;align-items:center;padding:16px 0;border-bottom:1px solid #EAE8E2">
+<div style="font:400 13px/1.3 ui-monospace,Menlo,monospace;color:#7C7A72">{{ t.spec }}</div>
+<div style="{{ t.s }}">{{ t.sample }}</div>
+</div>
+</sc-for>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,600px),1fr));gap:24px">
+<sc-for list="{{ themes }}" as="th" hint-placeholder-count="2">
+<div style="{{ th.vars }}">
+<div style="display:flex;flex-direction:column;gap:28px;padding:28px;border-radius:28px;background:var(--bg);color:var(--fg1);font-family:var(--ft)">
+<div style="font:600 32px/0.9 var(--fd);letter-spacing:-0.03em">{{ th.label }}</div>
+
+<div style="display:flex;flex-direction:column;gap:12px">
+<div style="font:600 13px/1 var(--ft);color:var(--fg2)">Color</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px">
+<sc-for list="{{ th.swatches }}" as="c" hint-placeholder-count="16">
+<div style="display:flex;flex-direction:column;gap:6px;padding:6px;border-radius:14px;background:var(--sf)">
+<div style="{{ c.s }}"></div>
+<div style="padding:0 4px 4px;display:flex;flex-direction:column;gap:3px"><div style="font:600 12px/1 var(--ft)">{{ c.name }}</div><div style="font:400 11px/1 ui-monospace,Menlo,monospace;color:var(--fg3)">{{ c.hex }}</div></div>
+</div>
+</sc-for>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:12px">
+<div style="font:600 13px/1 var(--ft);color:var(--fg2)">File-type tiles</div>
+<div style="display:flex;gap:14px;flex-wrap:wrap">
+<sc-for list="{{ kinds }}" as="k" hint-placeholder-count="7">
+<div style="display:flex;flex-direction:column;align-items:center;gap:6px"><div style="{{ k.tile }}"><span style="{{ k.ico }}"></span></div><div style="font:500 12px/1 var(--ft);color:var(--fg2)">{{ k.name }}</div></div>
+</sc-for>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:12px">
+<div style="font:600 13px/1 var(--ft);color:var(--fg2)">Buttons</div>
+<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+<div style="height:44px;padding:0 20px 0 16px;border-radius:999px;background:var(--ac);color:#FFFFFF;display:flex;align-items:center;gap:8px;font:600 15px/1 var(--ft);white-space:nowrap"><span style="{{ i18.plus }}"></span>Primary</div>
+<div style="height:44px;padding:0 20px;border-radius:999px;background:var(--acs);color:var(--act);display:flex;align-items:center;gap:8px;font:600 15px/1 var(--ft);white-space:nowrap"><span style="{{ i16.sync }}"></span>Tonal</div>
+<div style="height:44px;padding:0 20px;border-radius:999px;background:var(--sf2);display:flex;align-items:center;font:600 15px/1 var(--ft);white-space:nowrap">Secondary</div>
+<div style="height:44px;padding:0 20px;border-radius:999px;background:var(--dgs);color:var(--dg);display:flex;align-items:center;gap:8px;font:600 15px/1 var(--ft);white-space:nowrap"><span style="{{ i16.logout }}"></span>Danger</div>
+<div style="height:44px;padding:0 20px;border-radius:999px;border:1.5px solid var(--sf3);display:flex;align-items:center;gap:8px;font:600 15px/1 var(--ft);white-space:nowrap"><span style="{{ i16.send }}"></span>Outline</div>
+<div style="height:56px;padding:0 20px 0 16px;border-radius:999px;background:var(--ac);color:#FFFFFF;display:flex;align-items:center;gap:10px;font:600 16px/1 var(--ft);white-space:nowrap"><span style="{{ i24.plus }}"></span>FAB · Android</div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:12px">
+<div style="font:600 13px/1 var(--ft);color:var(--fg2)">Chips, segmented, toggles, search</div>
+<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+<div style="height:34px;padding:0 12px;border-radius:999px;background:var(--sf);display:flex;align-items:center;gap:6px;font:500 14px/1 var(--ft);white-space:nowrap"><span style="{{ i16.sort }}"></span>Name<span style="{{ i14.up }}"></span></div>
+<div style="height:34px;padding:0 12px;border-radius:999px;border:1px solid var(--ln);display:flex;align-items:center;gap:6px;font:500 14px/1 var(--ft);white-space:nowrap">Modified<span style="{{ i14.chevD }}"></span></div>
+<div style="height:34px;padding:0 12px;border-radius:999px;background:var(--acs);color:var(--act);display:flex;align-items:center;gap:6px;font:600 14px/1 var(--ft);white-space:nowrap">Available offline<span style="{{ i14.x }}"></span></div>
+<div style="display:flex;padding:3px;border-radius:999px;background:var(--sf);gap:2px"><div style="width:36px;height:28px;border-radius:999px;background:var(--acs);color:var(--act);display:flex;align-items:center;justify-content:center"><span style="{{ i18.list }}"></span></div><div style="width:36px;height:28px;color:var(--fg3);display:flex;align-items:center;justify-content:center"><span style="{{ i18.grid }}"></span></div></div>
+<div style="display:flex;padding:3px;border-radius:999px;background:var(--sf);gap:2px"><div style="height:30px;padding:0 14px;border-radius:999px;background:var(--acs);color:var(--act);display:flex;align-items:center;font:600 13px/1 var(--ft)">With you</div><div style="height:30px;padding:0 14px;display:flex;align-items:center;font:500 13px/1 var(--ft);color:var(--fg2)">By you</div><div style="height:30px;padding:0 14px;display:flex;align-items:center;font:500 13px/1 var(--ft);color:var(--fg2)">Links</div></div>
+<div style="width:48px;height:28px;border-radius:999px;background:var(--ac);padding:3px;box-sizing:border-box;display:flex;justify-content:flex-end"><div style="width:22px;height:22px;border-radius:999px;background:#FFFFFF"></div></div>
+<div style="width:48px;height:28px;border-radius:999px;background:var(--sf3);padding:3px;box-sizing:border-box;display:flex;justify-content:flex-start"><div style="width:22px;height:22px;border-radius:999px;background:#FFFFFF"></div></div>
+</div>
+<div style="height:38px;border-radius:12px;background:var(--sf);display:flex;align-items:center;gap:8px;padding:0 12px;color:var(--fg3);font:400 16px/1 var(--ft)"><span style="{{ i18.search }}"></span>Search</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:12px">
+<div style="font:600 13px/1 var(--ft);color:var(--fg2)">Grouped list · file rows · swipe</div>
+<div style="display:flex;flex-direction:column;gap:1px;background:var(--ln);border-radius:20px;overflow:hidden">
+<sc-for list="{{ rows }}" as="f" hint-placeholder-count="4">
+<div style="position:relative;background:var(--dgf)">
+<sc-if value="{{ f.swiped }}"><div style="position:absolute;right:0;top:0;bottom:0;width:96px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:#FFFFFF;font:600 12px/1 var(--ft)"><span style="{{ i20.trash }}"></span>Delete</div></sc-if>
+<div style="{{ f.rs }}">
+<div style="{{ f.tile }}"><span style="{{ f.ico }}"></span></div>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+<div style="font:500 16px/1.2 var(--ft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ f.name }}</div>
+<div style="display:flex;align-items:center;gap:5px;font:400 13px/1.2 var(--ft);color:var(--fg3);white-space:nowrap"><sc-if value="{{ f.hasBadge }}"><span style="{{ f.badge }}"></span></sc-if><sc-if value="{{ f.shared }}"><span style="{{ i14.users }}"></span></sc-if>{{ f.meta }}</div>
+</div>
+<sc-if value="{{ f.fav }}"><span style="{{ starSm }}"></span></sc-if>
+<div style="width:32px;display:flex;justify-content:center"><span style="{{ moreT }}"></span></div>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:12px">
+<div style="font:600 13px/1 var(--ft);color:var(--fg2)">Settings rows · progress · badges · avatars</div>
+<div style="display:flex;flex-direction:column;gap:1px;background:var(--ln);border-radius:20px;overflow:hidden">
+<div style="display:flex;align-items:center;gap:14px;padding:12px 16px;min-height:60px;box-sizing:border-box;background:var(--sf)"><span style="{{ i20.fingerprint }}"></span><div style="flex:1;display:flex;flex-direction:column;gap:4px"><div style="font:400 16px/1.1 var(--ft)">Toggle row</div><div style="font:400 13px/1.2 var(--ft);color:var(--fg3)">With a subtitle</div></div><div style="width:48px;height:28px;border-radius:999px;background:var(--ac);padding:3px;box-sizing:border-box;display:flex;justify-content:flex-end;flex:none"><div style="width:22px;height:22px;border-radius:999px;background:#FFFFFF"></div></div></div>
+<div style="display:flex;align-items:center;gap:14px;padding:0 16px;height:52px;background:var(--sf)"><span style="{{ i20.timer }}"></span><div style="flex:1;font:400 16px/1 var(--ft)">Value row</div><div style="display:flex;align-items:center;gap:4px;font:400 15px/1 var(--ft);color:var(--fg3)">1 minute<span style="{{ i18.chevR }}"></span></div></div>
+<div style="display:flex;flex-direction:column;gap:10px;padding:14px 16px;background:var(--sf)"><div style="display:flex;justify-content:space-between;font:400 16px/1 var(--ft)"><span>Progress row</span><span style="color:var(--fg3);font-size:15px">1.2 of 2 GB</span></div><div style="height:6px;border-radius:999px;background:var(--sf3);overflow:hidden"><div style="width:60%;height:100%;background:var(--ac)"></div></div></div>
+<div style="display:flex;align-items:center;gap:14px;padding:0 16px;height:52px;background:var(--sf);color:var(--dg)"><span style="{{ i20.trash }}"></span><div style="flex:1;font:500 16px/1 var(--ft)">Destructive row</div></div>
+</div>
+<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+<div style="height:24px;padding:0 10px;border-radius:999px;background:var(--oks);color:var(--ok);display:flex;align-items:center;font:600 12px/1 var(--ft)">Connected</div>
+<div style="height:24px;padding:0 10px;border-radius:999px;background:var(--dgs);color:var(--dg);display:flex;align-items:center;font:600 12px/1 var(--ft)">Couldn’t sync</div>
+<div style="display:flex;align-items:center;gap:5px;font:400 13px/1 var(--ft);color:var(--fg3)"><span style="{{ bOk }}"></span>Synced</div>
+<div style="display:flex;align-items:center;gap:5px;font:400 13px/1 var(--ft);color:var(--fg3)"><span style="{{ bSync }}"></span>Syncing</div>
+<div style="display:flex;align-items:center;gap:5px;font:400 13px/1 var(--ft);color:var(--fg3)"><span style="{{ bErr }}"></span>Error</div>
+<div style="flex:1"></div>
+<div style="width:36px;height:36px;border-radius:999px;background:var(--acs);color:var(--act);display:flex;align-items:center;justify-content:center;font:600 13px/1 var(--ft)">MR</div>
+<div style="{{ avA }}">AS</div>
+<div style="{{ avB }}">LP</div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:12px">
+<div style="font:600 13px/1 var(--ft);color:var(--fg2)">Navigation · iOS tab bar / Android navigation bar / desktop sidebar</div>
+<div style="display:flex;background:var(--sf);border-radius:20px;padding:10px 0">
+<sc-for list="{{ nav }}" as="n" hint-placeholder-count="5">
+<sc-if value="{{ n.on }}"><div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--act);font:600 10px/1 var(--ft)"><span style="{{ n.ico }}"></span>{{ n.label }}</div></sc-if>
+<sc-if value="{{ n.off }}"><div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--fg3);font:500 10px/1 var(--ft)"><span style="{{ n.ico }}"></span>{{ n.label }}</div></sc-if>
+</sc-for>
+</div>
+<div style="display:flex;background:var(--sf);border-radius:20px;padding:14px 0">
+<sc-for list="{{ nav }}" as="n" hint-placeholder-count="5">
+<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+<sc-if value="{{ n.on }}"><div style="width:56px;height:32px;border-radius:999px;background:var(--acs);color:var(--act);display:flex;align-items:center;justify-content:center"><span style="{{ n.ico }}"></span></div><div style="font:600 12px/1 var(--ft)">{{ n.label }}</div></sc-if>
+<sc-if value="{{ n.off }}"><div style="width:56px;height:32px;color:var(--fg2);display:flex;align-items:center;justify-content:center"><span style="{{ n.ico }}"></span></div><div style="font:500 12px/1 var(--ft);color:var(--fg2)">{{ n.label }}</div></sc-if>
+</div>
+</sc-for>
+</div>
+<div style="display:flex;gap:4px;flex-wrap:wrap">
+<div style="height:38px;border-radius:12px;padding:0 12px;display:flex;align-items:center;gap:12px;background:var(--acs);color:var(--act);font:600 14px/1 var(--ft);width:220px;box-sizing:border-box"><span style="{{ i18.folder }}"></span>Files</div>
+<div style="height:38px;border-radius:12px;padding:0 12px;display:flex;align-items:center;gap:12px;font:500 14px/1 var(--ft);width:220px;box-sizing:border-box"><span style="{{ i18.trash }}"></span><div style="flex:1">Trash</div><div style="font:500 12px/1 var(--ft);color:var(--fg3)">12</div></div>
+</div>
+</div>
+
+</div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  componentDidMount() {
+    if (!window.NK) this._t = setInterval(() => { if (window.NK) { clearInterval(this._t); this.forceUpdate(); } }, 40);
+  }
+  componentWillUnmount() { clearInterval(this._t); }
+  renderVals() {
+    const K = window.NK;
+    if (!K) return { ready: false };
+    const { I, ic, D, row, TH, tile, avatar } = K;
+    const FD = "'Schibsted Grotesk',system-ui,sans-serif", FT = "'Instrument Sans',system-ui,sans-serif";
+    const t = (spec, sample, s) => ({ spec, sample, s: { ...s, color: '#0E0D0B' } });
+    const names = [['bg','--bg'],['surface','--sf'],['surface-2','--sf2'],['surface-3','--sf3'],['line','--ln'],['fg-1','--fg1'],['fg-2','--fg2'],['fg-3','--fg3'],['accent','--ac'],['accent-text','--act'],['accent-soft','--acs'],['danger','--dg'],['danger-soft','--dgs'],['success','--ok'],['success-soft','--oks'],['warning','--wn'],['warning-soft','--wns'],['info','--in'],['info-soft','--ins']];
+    const ROW = { display: 'flex', alignItems: 'center', gap: 14, padding: '0 6px 0 14px', height: 64, background: 'var(--sf)', position: 'relative' };
+    const demo = [D.files[2], D.files[3], D.offline[2], D.offline[4], { ...D.files[4] }].map(f => { const r = row(f); r.rs = { ...ROW, transform: r.swiped ? 'translateX(-96px)' : 'none' }; return r; });
+    return {
+      ready: true,
+      i14: I[14], i16: I[16], i18: I[18], i20: I[20], i24: I[24],
+      type: [
+        t('Display 600 · 34/0.9 · −3%', 'Large title', { font: `600 34px/0.9 ${FD}`, letterSpacing: '-0.03em' }),
+        t('Display 600 · 32/0.9 · −3%', '2.4 GB', { font: `600 32px/0.9 ${FD}`, letterSpacing: '-0.03em' }),
+        t('Display 500 · 22/1 · −2%', 'Top bar title', { font: `500 22px/1 ${FD}`, letterSpacing: '-0.02em' }),
+        t('Display 500 · 18/1 · −2%', 'Card title · September 2026', { font: `500 18px/1 ${FD}`, letterSpacing: '-0.02em' }),
+        t('Text 500 · 16/1.2', 'Q3 Planning.pdf', { font: `500 16px/1.2 ${FT}` }),
+        t('Text 400 · 15/1.3', 'Ana Souza shared Q3 Planning.pdf with you', { font: `400 15px/1.3 ${FT}` }),
+        t('Text 600 · 13/1', 'Section label', { font: `600 13px/1 ${FT}` }),
+        t('Text 400 · 13/1.2 · fg-3', '2.4 MB · Yesterday', { font: `400 13px/1.2 ${FT}`, opacity: 0.62 }),
+        t('Mono 400 · 14', 'cloud.rocha.family/s/k7Pq2xW', { font: '400 14px/1 ui-monospace,Menlo,monospace' })
+      ],
+      themes: ['light', 'dark'].map(id => ({ label: id === 'light' ? 'Light' : 'Dark', vars: TH[id],
+        swatches: names.map(([name, v]) => ({ name, hex: TH[id][v], s: { height: 44, borderRadius: 10, background: `var(${v})`, boxShadow: 'inset 0 0 0 1px var(--ln)' } })) })),
+      kinds: Object.keys(K.KIND).map(k => ({ name: k, tile: tile(k, 40, 12), ico: I[20][K.KIND[k][2]] })),
+      rows: demo, starSm: ic('star', 16, 'var(--act)'), moreT: ic('moreH', 20, 'var(--fg3)'),
+      bOk: ic('ok', 14, 'var(--ok)'), bSync: ic('sync', 14, 'var(--act)'), bErr: ic('alert', 14, 'var(--dg)'),
+      avA: avatar('#DA9AC7', 36), avB: avatar('#8DCDE2', 36),
+      nav: D.pinned.map(([label, ico], i) => ({ label, ico: I[24][ico], on: i === 0, off: i !== 0 }))
+    };
+  }
+}
+</script>
+</body>
+</html>

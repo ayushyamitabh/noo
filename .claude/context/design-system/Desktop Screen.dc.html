@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<script src="noo-kit.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Schibsted+Grotesk:wght@500;600&display=swap">
+<style>
+body{margin:0}
+a{color:#8D0DE3;text-decoration:none}
+a:hover{color:#6E08B3}
+</style>
+</helmet>
+<sc-if value="{{ ready }}" hint-placeholder-val="{{ false }}">
+<div style="{{ root }}">
+
+<sc-if value="{{ win }}">
+<div style="height:40px;flex:none;display:flex;align-items:center;background:var(--bg);color:var(--fg2)">
+<div style="display:flex;align-items:center;gap:10px;padding:0 16px;flex:1;font:400 12px/1 var(--ft)"><div style="width:16px;height:16px;border-radius:4px;background:var(--ac)"></div>Noo</div>
+<div style="width:46px;height:40px;display:flex;align-items:center;justify-content:center"><span style="{{ i16.minus }}"></span></div>
+<div style="width:46px;height:40px;display:flex;align-items:center;justify-content:center"><span style="{{ i14.square }}"></span></div>
+<div style="width:46px;height:40px;display:flex;align-items:center;justify-content:center"><span style="{{ i16.x }}"></span></div>
+</div>
+</sc-if>
+
+<div style="flex:1;min-height:0;display:flex">
+<div style="width:256px;flex:none;background:var(--bg);display:flex;flex-direction:column;padding:12px 12px 16px;box-sizing:border-box;gap:2px">
+<sc-if value="{{ mac }}">
+<div style="height:32px;display:flex;align-items:center;gap:8px;padding:0 8px 8px"><div style="width:12px;height:12px;border-radius:999px;background:#FF5F57"></div><div style="width:12px;height:12px;border-radius:999px;background:#FEBC2E"></div><div style="width:12px;height:12px;border-radius:999px;background:#28C840"></div></div>
+</sc-if>
+<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:14px;background:var(--sf);margin-bottom:14px">
+<div style="width:32px;height:32px;border-radius:999px;background:var(--acs);color:var(--act);display:flex;align-items:center;justify-content:center;font:600 12px/1 var(--ft);flex:none">MR</div>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px"><div style="font:600 14px/1 var(--ft)">Marina Rocha</div><div style="font:400 12px/1 var(--ft);color:var(--fg3)">cloud.rocha.family</div></div>
+<span style="{{ chevG }}"></span>
+</div>
+<sc-for list="{{ navA }}" as="n" hint-placeholder-count="5">
+<sc-if value="{{ n.on }}"><div style="height:38px;border-radius:12px;padding:0 12px;display:flex;align-items:center;gap:12px;background:var(--acs);color:var(--act);font:600 14px/1 var(--ft)"><span style="{{ n.ico }}"></span><div style="flex:1">{{ n.label }}</div><div style="font:500 12px/1 var(--ft)">{{ n.count }}</div></div></sc-if>
+<sc-if value="{{ n.off }}"><div style="height:38px;border-radius:12px;padding:0 12px;display:flex;align-items:center;gap:12px;color:var(--fg1);font:500 14px/1 var(--ft)"><span style="{{ n.icoG }}"></span><div style="flex:1">{{ n.label }}</div><div style="font:500 12px/1 var(--ft);color:var(--fg3)">{{ n.count }}</div></div></sc-if>
+</sc-for>
+<div style="height:1px;background:var(--ln);margin:8px 12px"></div>
+<sc-for list="{{ navB }}" as="n" hint-placeholder-count="3">
+<sc-if value="{{ n.on }}"><div style="height:38px;border-radius:12px;padding:0 12px;display:flex;align-items:center;gap:12px;background:var(--acs);color:var(--act);font:600 14px/1 var(--ft)"><span style="{{ n.ico }}"></span><div style="flex:1">{{ n.label }}</div><div style="font:500 12px/1 var(--ft)">{{ n.count }}</div></div></sc-if>
+<sc-if value="{{ n.off }}"><div style="height:38px;border-radius:12px;padding:0 12px;display:flex;align-items:center;gap:12px;color:var(--fg1);font:500 14px/1 var(--ft)"><span style="{{ n.icoG }}"></span><div style="flex:1">{{ n.label }}</div><div style="font:500 12px/1 var(--ft);color:var(--fg3)">{{ n.count }}</div></div></sc-if>
+</sc-for>
+<div style="flex:1"></div>
+<div style="display:flex;flex-direction:column;gap:8px;padding:12px 12px 14px">
+<div style="display:flex;justify-content:space-between;font:400 12px/1 var(--ft);color:var(--fg2)"><span style="font-weight:500;color:var(--fg1)">Storage</span><span>38.2 of 100 GB</span></div>
+<div style="height:6px;border-radius:999px;background:var(--sf3);overflow:hidden"><div style="width:38%;height:100%;background:var(--ac)"></div></div>
+</div>
+<sc-if value="{{ setOn }}"><div style="height:38px;border-radius:12px;padding:0 12px;display:flex;align-items:center;gap:12px;background:var(--acs);color:var(--act);font:600 14px/1 var(--ft)"><span style="{{ i18.settings }}"></span>Settings</div></sc-if>
+<sc-if value="{{ setOff }}"><div style="height:38px;border-radius:12px;padding:0 12px;display:flex;align-items:center;gap:12px;color:var(--fg1);font:500 14px/1 var(--ft)"><span style="{{ setIcoG }}"></span>Settings</div></sc-if>
+</div>
+
+<div style="flex:1;min-width:0;background:var(--sf);display:flex;flex-direction:column;position:relative;border-left:1px solid var(--ln)">
+<div style="height:64px;flex:none;display:flex;align-items:center;gap:12px;padding:0 20px 0 24px;border-bottom:1px solid var(--ln)">
+<sc-if value="{{ mac }}"><div style="display:flex;gap:4px;color:var(--fg3);margin-right:4px"><span style="{{ i20.chevL }}"></span><span style="{{ i20.chevR }}"></span></div></sc-if>
+<div style="display:flex;align-items:center;gap:8px;font:500 22px/1 var(--fd);letter-spacing:-0.02em">{{ title }}<sc-if value="{{ s.files }}"><span style="{{ chevG }}"></span><span style="font:400 15px/1 var(--ft);letter-spacing:0;color:var(--fg2);white-space:nowrap">All files</span></sc-if></div>
+<div style="flex:1"></div>
+<sc-if value="{{ notSettings }}"><div style="width:260px;height:36px;border-radius:999px;background:var(--sf2);display:flex;align-items:center;gap:8px;padding:0 14px;color:var(--fg3);font:400 14px/1 var(--ft)"><span style="{{ i16.search }}"></span>Search in {{ title }}</div></sc-if>
+<sc-if value="{{ s.files }}">
+<div style="display:flex;padding:3px;border-radius:999px;background:var(--sf2);gap:2px"><div style="{{ segL }}"><span style="{{ i16.list }}"></span></div><div style="{{ segG }}"><span style="{{ i16.grid }}"></span></div></div>
+<div style="height:36px;padding:0 16px 0 12px;border-radius:999px;background:var(--ac);color:#FFFFFF;display:flex;align-items:center;gap:8px;font:600 14px/1 var(--ft);white-space:nowrap"><span style="{{ i18.plus }}"></span>Upload</div>
+</sc-if>
+<sc-if value="{{ s.photos }}"><div style="height:36px;padding:0 16px 0 12px;border-radius:999px;background:var(--ac);color:#FFFFFF;display:flex;align-items:center;gap:8px;font:600 14px/1 var(--ft);white-space:nowrap"><span style="{{ i18.upload }}"></span>Upload</div></sc-if>
+<sc-if value="{{ s.trash }}"><div style="height:36px;padding:0 16px;border-radius:999px;background:var(--dgs);color:var(--dg);display:flex;align-items:center;gap:8px;font:600 14px/1 var(--ft);white-space:nowrap"><span style="{{ i16.trash }}"></span>Empty trash</div></sc-if>
+<sc-if value="{{ s.offline }}"><div style="height:36px;padding:0 16px;border-radius:999px;background:var(--acs);color:var(--act);display:flex;align-items:center;gap:8px;font:600 14px/1 var(--ft);white-space:nowrap"><span style="{{ i16.sync }}"></span>Sync now</div></sc-if>
+</div>
+
+<div style="flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;padding:0 24px">
+
+<sc-if value="{{ s.files }}">
+<div style="flex:none;display:flex;align-items:center;gap:8px;padding:14px 0 10px">
+<div style="height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--ln);display:flex;align-items:center;gap:6px;font:500 13px/1 var(--ft);white-space:nowrap"><span style="{{ i14.filter }}"></span>All types<span style="{{ i14.chevD }}"></span></div>
+<div style="height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--ln);display:flex;align-items:center;gap:6px;font:500 13px/1 var(--ft);white-space:nowrap">Modified<span style="{{ i14.chevD }}"></span></div>
+<div style="height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--ln);display:flex;align-items:center;gap:6px;font:500 13px/1 var(--ft);white-space:nowrap">Shared<span style="{{ i14.chevD }}"></span></div>
+<div style="height:32px;padding:0 12px;border-radius:999px;background:var(--acs);color:var(--act);display:flex;align-items:center;gap:6px;font:600 13px/1 var(--ft);white-space:nowrap"><span style="{{ i14.offline }}"></span>Available offline<span style="{{ i14.x }}"></span></div>
+<div style="flex:1"></div>
+<div style="font:400 13px/1 var(--ft);color:var(--fg3)">10 items · 440 MB</div>
+</div>
+</sc-if>
+<sc-if value="{{ s.trash }}">
+<div style="flex:none;margin:16px 0 4px;padding:12px 16px;border-radius:14px;background:var(--sf2);display:flex;gap:10px;align-items:center;color:var(--fg2);font:400 14px/1.2 var(--ft)"><span style="{{ i18.info }}"></span>Items here are deleted for good after 30 days.</div>
+</sc-if>
+<sc-if value="{{ s.offline }}">
+<div style="flex:none;display:grid;grid-template-columns:minmax(0,2fr) repeat(3,minmax(0,1fr));gap:12px;padding:18px 0 8px">
+<div style="padding:16px 18px;border-radius:18px;background:var(--sf2);display:flex;flex-direction:column;gap:10px"><div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font:600 28px/0.9 var(--fd);letter-spacing:-0.03em">2.4 GB</div><div style="font:400 13px/1 var(--ft);color:var(--fg3)">of 5 GB limit</div></div><div style="height:6px;border-radius:999px;background:var(--sf3);overflow:hidden"><div style="width:48%;height:100%;background:var(--ac)"></div></div></div>
+<div style="padding:16px 18px;border-radius:18px;background:var(--sf2);display:flex;flex-direction:column;gap:8px"><div style="font:600 28px/0.9 var(--fd);letter-spacing:-0.03em">142</div><div style="font:400 13px/1 var(--ft);color:var(--fg2)">Files up to date</div></div>
+<div style="padding:16px 18px;border-radius:18px;background:var(--sf2);display:flex;flex-direction:column;gap:8px"><div style="font:600 28px/0.9 var(--fd);letter-spacing:-0.03em;color:var(--act)">6</div><div style="font:400 13px/1 var(--ft);color:var(--fg2)">Syncing now</div></div>
+<div style="padding:16px 18px;border-radius:18px;background:var(--dgs);display:flex;flex-direction:column;gap:8px"><div style="font:600 28px/0.9 var(--fd);letter-spacing:-0.03em;color:var(--dg)">1</div><div style="font:400 13px/1 var(--ft);color:var(--dg)">Needs attention</div></div>
+</div>
+</sc-if>
+<sc-if value="{{ s.shares }}">
+<div style="flex:none;display:flex;padding:14px 0 8px"><div style="display:flex;padding:3px;border-radius:999px;background:var(--sf2);gap:2px">
+<div style="height:32px;padding:0 16px;border-radius:999px;background:var(--acs);color:var(--act);display:flex;align-items:center;font:600 13px/1 var(--ft);white-space:nowrap">With you</div>
+<div style="height:32px;padding:0 16px;display:flex;align-items:center;font:500 13px/1 var(--ft);color:var(--fg2)">By you</div>
+<div style="height:32px;padding:0 16px;display:flex;align-items:center;font:500 13px/1 var(--ft);color:var(--fg2)">Links</div>
+</div></div>
+</sc-if>
+
+<sc-if value="{{ showTable }}">
+<sc-for list="{{ groups }}" as="g" hint-placeholder-count="1">
+<sc-if value="{{ g.hasLabel }}"><div style="padding:18px 12px 6px;font:600 13px/1 var(--ft);color:var(--fg2)">{{ g.label }}</div></sc-if>
+<div style="display:grid;grid-template-columns:minmax(0,1fr) 180px 160px 120px;align-items:center;height:36px;padding:0 12px;border-bottom:1px solid var(--ln);font:600 12px/1 var(--ft);color:var(--fg3)">
+<div style="display:flex;align-items:center;gap:4px">{{ c0 }}<sc-if value="{{ sortable }}"><span style="{{ i14.up }}"></span></sc-if></div><div>{{ c1 }}</div><div>{{ c2 }}</div><div></div>
+</div>
+<sc-for list="{{ g.rows }}" as="f" hint-placeholder-count="8">
+<div style="{{ f.rs }}">
+<div style="display:flex;align-items:center;gap:12px;min-width:0"><div style="{{ f.tile }}"><span style="{{ f.ico }}"></span></div><div style="font:500 14px/1.2 var(--ft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ f.name }}</div></div>
+<div style="font:400 13px/1.2 var(--ft);color:var(--fg2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ f.a }}</div>
+<div style="display:flex;align-items:center;gap:6px;font:400 13px/1.2 var(--ft);color:var(--fg2);white-space:nowrap;overflow:hidden"><sc-if value="{{ f.bInline }}"><span style="{{ f.badge }}"></span></sc-if>{{ f.b }}</div>
+<div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;color:var(--fg3)">
+<sc-if value="{{ f.bIcon }}"><span style="{{ f.badge }}"></span></sc-if>
+<sc-if value="{{ f.shared }}"><span style="{{ i16.users }}"></span></sc-if>
+<sc-if value="{{ f.fav }}"><span style="{{ starSm }}"></span></sc-if>
+<sc-if value="{{ restore }}"><div style="height:28px;padding:0 12px;border-radius:999px;background:var(--acs);color:var(--act);display:flex;align-items:center;gap:6px;font:600 12px/1 var(--ft);white-space:nowrap"><span style="{{ i14.restore }}"></span>Restore</div></sc-if>
+<span style="{{ i18.moreH }}"></span>
+</div>
+</div>
+</sc-for>
+</sc-for>
+</sc-if>
+
+<sc-if value="{{ showGrid }}">
+<div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px;padding-top:6px">
+<sc-for list="{{ gridRows }}" as="f" hint-placeholder-count="10">
+<div style="border:1px solid var(--ln);border-radius:18px;overflow:hidden;display:flex;flex-direction:column;background:var(--sf)">
+<div style="{{ f.thumb }}"><span style="{{ f.icoL }}"></span></div>
+<div style="padding:10px 10px 12px 14px;display:flex;flex-direction:column;gap:5px">
+<div style="display:flex;align-items:center;gap:4px"><div style="flex:1;min-width:0;font:500 14px/1.2 var(--ft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ f.name }}</div><span style="{{ moreSm }}"></span></div>
+<div style="display:flex;align-items:center;gap:5px;font:400 12px/1.2 var(--ft);color:var(--fg3)"><sc-if value="{{ f.hasBadge }}"><span style="{{ f.badge }}"></span></sc-if>{{ f.meta }}</div>
+</div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ s.photos }}">
+<div style="flex:none;display:flex;gap:8px;padding:14px 0 4px">
+<div style="height:32px;padding:0 14px;border-radius:999px;background:var(--acs);color:var(--act);display:flex;align-items:center;font:600 13px/1 var(--ft);white-space:nowrap">All</div>
+<div style="height:32px;padding:0 14px;border-radius:999px;border:1px solid var(--ln);display:flex;align-items:center;font:500 13px/1 var(--ft);white-space:nowrap">Photos</div>
+<div style="height:32px;padding:0 14px;border-radius:999px;border:1px solid var(--ln);display:flex;align-items:center;font:500 13px/1 var(--ft);white-space:nowrap">Videos</div>
+<div style="height:32px;padding:0 14px;border-radius:999px;border:1px solid var(--ln);display:flex;align-items:center;gap:6px;font:500 13px/1 var(--ft);white-space:nowrap"><span style="{{ i14.camera }}"></span>Camera uploads</div>
+</div>
+<sc-for list="{{ photoGroups }}" as="g" hint-placeholder-count="2">
+<div style="display:flex;justify-content:space-between;align-items:baseline;padding:16px 0 10px"><div style="font:500 18px/1 var(--fd);letter-spacing:-0.02em">{{ g.label }}</div><div style="font:400 13px/1 var(--ft);color:var(--fg3)">{{ g.count }}</div></div>
+<div style="display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px">
+<sc-for list="{{ g.tiles }}" as="t" hint-placeholder-count="16">
+<div style="{{ t.s }}"><sc-if value="{{ t.vid }}"><div style="position:absolute;right:6px;bottom:6px;height:20px;padding:0 7px 0 5px;border-radius:999px;background:rgba(14,13,11,0.7);color:#FFFFFF;display:flex;align-items:center;gap:3px;font:600 11px/1 var(--ft)"><span style="{{ i14.play }}"></span>{{ t.dur }}</div></sc-if></div>
+</sc-for>
+</div>
+</sc-for>
+</sc-if>
+
+<sc-if value="{{ s.activity }}">
+<div style="max-width:760px;width:100%;display:flex;flex-direction:column">
+<sc-for list="{{ act }}" as="g" hint-placeholder-count="2">
+<div style="padding:20px 0 8px;font:600 13px/1 var(--ft);color:var(--fg2)">{{ g.label }}</div>
+<sc-for list="{{ g.items }}" as="a" hint-placeholder-count="3">
+<div style="display:flex;gap:14px;padding:14px 0;align-items:center;border-bottom:1px solid var(--ln)">
+<div style="{{ a.av }}">{{ a.who }}</div>
+<div style="flex:1;min-width:0;font:400 14px/1.3 var(--ft)"><span style="font-weight:600">{{ a.name }}</span> {{ a.verb }} <span style="font-weight:600">{{ a.obj }}</span> {{ a.tail }}</div>
+<div style="{{ a.tile }}"><span style="{{ a.ico }}"></span></div>
+<div style="width:48px;text-align:right;font:400 13px/1 var(--ft);color:var(--fg3)">{{ a.time }}</div>
+</div>
+</sc-for>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ s.settings }}">
+<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;padding:20px 0;align-items:start">
+<div style="display:flex;flex-direction:column;gap:16px">
+<div style="padding:20px;border-radius:20px;border:1px solid var(--ln);display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;gap:14px;align-items:center"><div style="width:52px;height:52px;border-radius:999px;background:var(--acs);color:var(--act);display:flex;align-items:center;justify-content:center;font:600 18px/1 var(--ft);flex:none">MR</div><div style="flex:1;display:flex;flex-direction:column;gap:5px"><div style="font:500 20px/1 var(--fd);letter-spacing:-0.02em">Marina Rocha</div><div style="font:400 14px/1 var(--ft);color:var(--fg2)">marina@rocha.family</div></div><div style="height:24px;padding:0 10px;border-radius:999px;background:var(--oks);color:var(--ok);display:flex;align-items:center;font:600 12px/1 var(--ft);white-space:nowrap">Connected</div></div>
+<div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px 16px;font:400 14px/1.2 var(--ft)"><span style="color:var(--fg3)">Server</span><span>cloud.rocha.family</span><span style="color:var(--fg3)">Version</span><span>Nextcloud 30.0.2</span><span style="color:var(--fg3)">Storage</span><div style="display:flex;align-items:center;gap:10px"><div style="flex:1;height:6px;border-radius:999px;background:var(--sf3);overflow:hidden"><div style="width:38%;height:100%;background:var(--ac)"></div></div><span style="color:var(--fg2)">38.2 of 100 GB</span></div></div>
+<div style="display:flex;gap:8px"><div style="height:36px;padding:0 16px;border-radius:999px;background:var(--sf2);display:flex;align-items:center;gap:8px;font:600 14px/1 var(--ft);white-space:nowrap"><span style="{{ i14.external }}"></span>Manage on web</div><div style="height:36px;padding:0 16px;border-radius:999px;background:var(--dgs);color:var(--dg);display:flex;align-items:center;gap:8px;font:600 14px/1 var(--ft);white-space:nowrap"><span style="{{ i14.logout }}"></span>Log out</div></div>
+</div>
+<div style="padding:8px 20px 12px;border-radius:20px;border:1px solid var(--ln);display:flex;flex-direction:column">
+<div style="padding:12px 0 8px;font:500 17px/1 var(--fd);letter-spacing:-0.02em">Accounts</div>
+<div style="display:flex;align-items:center;gap:12px;height:56px;border-bottom:1px solid var(--ln)"><div style="width:32px;height:32px;border-radius:999px;background:var(--acs);color:var(--act);display:flex;align-items:center;justify-content:center;font:600 12px/1 var(--ft)">MR</div><div style="flex:1;display:flex;flex-direction:column;gap:4px"><div style="font:500 14px/1 var(--ft)">Marina Rocha</div><div style="font:400 12px/1 var(--ft);color:var(--fg3)">cloud.rocha.family</div></div><span style="{{ checkA }}"></span></div>
+<div style="display:flex;align-items:center;gap:12px;height:56px;border-bottom:1px solid var(--ln)"><div style="width:32px;height:32px;border-radius:999px;background:#85D1BD;color:#0E0D0B;display:flex;align-items:center;justify-content:center;font:600 12px/1 var(--ft)">MR</div><div style="flex:1;display:flex;flex-direction:column;gap:4px"><div style="font:500 14px/1 var(--ft)">Marina · Work</div><div style="font:400 12px/1 var(--ft);color:var(--fg3)">files.acme-studio.com</div></div><div style="font:600 13px/1 var(--ft);color:var(--act)">Switch</div></div>
+<div style="display:flex;align-items:center;gap:12px;height:48px;color:var(--act);font:600 14px/1 var(--ft)"><div style="width:32px;display:flex;justify-content:center"><span style="{{ i18.plus }}"></span></div>Add account</div>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:16px">
+<div style="padding:8px 20px 8px;border-radius:20px;border:1px solid var(--ln);display:flex;flex-direction:column">
+<div style="padding:12px 0 8px;font:500 17px/1 var(--fd);letter-spacing:-0.02em">Security</div>
+<div style="display:flex;align-items:center;gap:14px;min-height:60px;border-bottom:1px solid var(--ln)"><span style="{{ bioIco }}"></span><div style="flex:1;display:flex;flex-direction:column;gap:4px"><div style="font:400 14px/1.1 var(--ft)">{{ bioLabel }}</div><div style="font:400 12px/1.2 var(--ft);color:var(--fg3)">Needed every time you open Noo</div></div><div style="width:44px;height:26px;border-radius:999px;background:var(--ac);padding:3px;box-sizing:border-box;display:flex;justify-content:flex-end;flex:none"><div style="width:20px;height:20px;border-radius:999px;background:#FFFFFF"></div></div></div>
+<div style="display:flex;align-items:center;gap:14px;height:52px"><span style="{{ i18.timer }}"></span><div style="flex:1;font:400 14px/1 var(--ft)">Lock after</div><div style="height:32px;padding:0 10px 0 12px;border-radius:10px;border:1px solid var(--ln);display:flex;align-items:center;gap:6px;font:500 13px/1 var(--ft)">5 minutes idle<span style="{{ i14.chevD }}"></span></div></div>
+</div>
+<div style="padding:8px 20px 8px;border-radius:20px;border:1px solid var(--ln);display:flex;flex-direction:column">
+<div style="padding:12px 0 8px;font:500 17px/1 var(--fd);letter-spacing:-0.02em">File sync</div>
+<div style="display:flex;align-items:center;gap:14px;min-height:60px;border-bottom:1px solid var(--ln)"><span style="{{ i18.folder }}"></span><div style="flex:1;display:flex;flex-direction:column;gap:4px"><div style="font:400 14px/1.1 var(--ft)">Local sync folder</div><div style="font:400 12px/1.2 var(--ft);color:var(--fg3);font-family:ui-monospace,Menlo,monospace">{{ syncPath }}</div></div><div style="height:32px;padding:0 12px;border-radius:999px;background:var(--sf2);display:flex;align-items:center;font:600 13px/1 var(--ft);white-space:nowrap">Change</div></div>
+<div style="display:flex;align-items:center;gap:14px;height:52px;border-bottom:1px solid var(--ln)"><span style="{{ i18.sync }}"></span><div style="flex:1;font:400 14px/1 var(--ft)">Sync automatically</div><div style="width:44px;height:26px;border-radius:999px;background:var(--ac);padding:3px;box-sizing:border-box;display:flex;justify-content:flex-end;flex:none"><div style="width:20px;height:20px;border-radius:999px;background:#FFFFFF"></div></div></div>
+<div style="display:flex;align-items:center;gap:14px;height:52px;border-bottom:1px solid var(--ln)"><span style="{{ i18.download }}"></span><div style="flex:1;font:400 14px/1 var(--ft)">Download files on demand</div><div style="width:44px;height:26px;border-radius:999px;background:var(--ac);padding:3px;box-sizing:border-box;display:flex;justify-content:flex-end;flex:none"><div style="width:20px;height:20px;border-radius:999px;background:#FFFFFF"></div></div></div>
+<div style="display:flex;align-items:center;gap:14px;height:52px"><span style="{{ i18.wifi }}"></span><div style="flex:1;font:400 14px/1 var(--ft)">Pause on metered networks</div><div style="width:44px;height:26px;border-radius:999px;background:var(--sf3);padding:3px;box-sizing:border-box;display:flex;justify-content:flex-start;flex:none"><div style="width:20px;height:20px;border-radius:999px;background:#FFFFFF"></div></div></div>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ s.settings2 }}">
+<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;padding:20px 0;align-items:start">
+<div style="display:flex;flex-direction:column;gap:16px">
+<div style="padding:8px 20px 8px;border-radius:20px;border:1px solid var(--ln);display:flex;flex-direction:column">
+<div style="padding:12px 0 8px;font:500 17px/1 var(--fd);letter-spacing:-0.02em">Files cache</div>
+<div style="display:flex;flex-direction:column;gap:10px;padding:10px 0 14px;border-bottom:1px solid var(--ln)"><div style="display:flex;justify-content:space-between;font:400 14px/1 var(--ft)"><span>Cache in use</span><span style="color:var(--fg2)">1.2 of 2 GB</span></div><div style="height:6px;border-radius:999px;background:var(--sf3);overflow:hidden"><div style="width:60%;height:100%;background:var(--ac)"></div></div></div>
+<div style="display:flex;align-items:center;gap:14px;height:52px;border-bottom:1px solid var(--ln)"><span style="{{ i18.database }}"></span><div style="flex:1;font:400 14px/1 var(--ft)">Cache limit</div><div style="height:32px;padding:0 10px 0 12px;border-radius:10px;border:1px solid var(--ln);display:flex;align-items:center;gap:6px;font:500 13px/1 var(--ft)">2 GB<span style="{{ i14.chevD }}"></span></div></div>
+<div style="display:flex;align-items:center;gap:14px;height:52px"><span style="{{ i18.trash }}"></span><div style="flex:1;font:400 14px/1 var(--ft)">Clear cached files</div><div style="height:32px;padding:0 14px;border-radius:999px;background:var(--dgs);color:var(--dg);display:flex;align-items:center;font:600 13px/1 var(--ft);white-space:nowrap">Clear cache</div></div>
+</div>
+<div style="padding:8px 20px 8px;border-radius:20px;border:1px solid var(--ln);display:flex;flex-direction:column">
+<div style="padding:12px 0 8px;font:500 17px/1 var(--fd);letter-spacing:-0.02em">Appearance</div>
+<div style="display:flex;align-items:center;gap:14px;height:56px;border-bottom:1px solid var(--ln)"><span style="{{ i18.palette }}"></span><div style="flex:1;font:400 14px/1 var(--ft)">Theme</div><div style="display:flex;padding:3px;border-radius:999px;background:var(--sf2);gap:2px"><div style="height:28px;padding:0 12px;border-radius:999px;background:var(--acs);color:var(--act);display:flex;align-items:center;font:600 13px/1 var(--ft);white-space:nowrap">System</div><div style="height:28px;padding:0 12px;display:flex;align-items:center;font:500 13px/1 var(--ft);color:var(--fg2)">Light</div><div style="height:28px;padding:0 12px;display:flex;align-items:center;font:500 13px/1 var(--ft);color:var(--fg2)">Dark</div></div></div>
+<div style="display:flex;align-items:center;gap:14px;height:56px;border-bottom:1px solid var(--ln)"><span style="{{ i18.grid }}"></span><div style="flex:1;font:400 14px/1 var(--ft)">Default file view</div><div style="display:flex;padding:3px;border-radius:999px;background:var(--sf2);gap:2px"><div style="height:28px;padding:0 12px;border-radius:999px;background:var(--acs);color:var(--act);display:flex;align-items:center;gap:6px;font:600 13px/1 var(--ft);white-space:nowrap"><span style="{{ i14.list }}"></span>List</div><div style="height:28px;padding:0 12px;display:flex;align-items:center;gap:6px;font:500 13px/1 var(--ft);color:var(--fg2)"><span style="{{ i14.grid }}"></span>Grid</div></div></div>
+<div style="display:flex;align-items:center;gap:14px;height:52px"><span style="{{ i18.hidden }}"></span><div style="flex:1;font:400 14px/1 var(--ft)">Show hidden files</div><div style="width:44px;height:26px;border-radius:999px;background:var(--sf3);padding:3px;box-sizing:border-box;display:flex;justify-content:flex-start;flex:none"><div style="width:20px;height:20px;border-radius:999px;background:#FFFFFF"></div></div></div>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:16px">
+<div style="padding:8px 20px 12px;border-radius:20px;border:1px solid var(--ln);display:flex;flex-direction:column">
+<div style="padding:12px 0 4px;display:flex;justify-content:space-between;align-items:baseline"><div style="font:500 17px/1 var(--fd);letter-spacing:-0.02em">Sidebar tabs</div><div style="font:400 12px/1 var(--ft);color:var(--fg3)">Drag to reorder</div></div>
+<div style="padding:4px 0 8px;font:400 12px/1.3 var(--ft);color:var(--fg3)">Pinned tabs show at the top of the sidebar, and in the bottom bar on mobile.</div>
+<sc-for list="{{ tabRows }}" as="t" hint-placeholder-count="8">
+<div style="display:flex;align-items:center;gap:12px;height:44px;border-bottom:1px solid var(--ln)"><span style="{{ gripS }}"></span><span style="{{ t.ico }}"></span><div style="flex:1;font:400 14px/1 var(--ft)">{{ t.label }}</div><div style="{{ t.pinS }}"><span style="{{ t.pinI }}"></span></div></div>
+</sc-for>
+</div>
+<div style="padding:8px 20px 8px;border-radius:20px;border:1px solid var(--ln);display:flex;flex-direction:column">
+<div style="padding:12px 0 8px;font:500 17px/1 var(--fd);letter-spacing:-0.02em">{{ swipeTitle }}</div>
+<div style="display:flex;align-items:center;gap:14px;height:52px;border-bottom:1px solid var(--ln)"><span style="{{ i18.swipe }}"></span><div style="flex:1;font:400 14px/1 var(--ft)">Swipe left</div><div style="height:32px;padding:0 10px 0 12px;border-radius:10px;border:1px solid var(--ln);display:flex;align-items:center;gap:6px;font:500 13px/1 var(--ft);color:var(--dg)"><span style="{{ i14.trash }}"></span>Delete<span style="{{ i14.chevD }}"></span></div></div>
+<div style="display:flex;align-items:center;gap:14px;height:52px"><span style="{{ i18.swipe }}"></span><div style="flex:1;font:400 14px/1 var(--ft)">Swipe right</div><div style="height:32px;padding:0 10px 0 12px;border-radius:10px;border:1px solid var(--ln);display:flex;align-items:center;gap:6px;font:500 13px/1 var(--ft);color:var(--act)"><span style="{{ i14.star }}"></span>Favorite<span style="{{ i14.chevD }}"></span></div></div>
+</div>
+</div>
+</div>
+</sc-if>
+
+</div>
+
+<sc-if value="{{ share }}">
+<div style="position:absolute;inset:0;background:var(--scrim);display:flex;align-items:center;justify-content:center">
+<div style="width:540px;background:var(--sf);border-radius:24px;padding:24px;box-sizing:border-box;display:flex;flex-direction:column;gap:20px;box-shadow:0 24px 48px rgba(30,0,47,0.14)">
+<div style="display:flex;gap:12px;align-items:center">
+<div style="{{ shareTile }}"><span style="{{ i20.doc }}"></span></div>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px"><div style="font:500 19px/1 var(--fd);letter-spacing:-0.02em">Share “Q3 Planning.pdf”</div><div style="font:400 13px/1 var(--ft);color:var(--fg3)">2.4 MB · Documents</div></div>
+<div style="width:32px;height:32px;border-radius:999px;background:var(--sf2);display:flex;align-items:center;justify-content:center"><span style="{{ i16.x }}"></span></div>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px">
+<div style="font:500 16px/1 var(--fd);letter-spacing:-0.02em">Share with people</div>
+<div style="display:flex;gap:8px"><div style="flex:1;height:42px;border-radius:12px;background:var(--sf2);display:flex;align-items:center;gap:10px;padding:0 12px;color:var(--fg3);font:400 14px/1 var(--ft)"><span style="{{ i18.userPlus }}"></span>Name, email or group</div><div style="height:42px;padding:0 10px 0 14px;border-radius:12px;border:1px solid var(--ln);display:flex;align-items:center;gap:6px;font:500 13px/1 var(--ft)">Can edit<span style="{{ i14.chevD }}"></span></div></div>
+<div style="display:flex;align-items:center;gap:12px;height:44px"><div style="{{ avYou }}">MR</div><div style="flex:1;display:flex;flex-direction:column;gap:4px"><div style="font:500 14px/1 var(--ft)">You</div><div style="font:400 12px/1 var(--ft);color:var(--fg3)">marina@rocha.family</div></div><div style="font:500 13px/1 var(--ft);color:var(--fg3)">Owner</div></div>
+<div style="display:flex;align-items:center;gap:12px;height:44px"><div style="{{ avAna }}">AS</div><div style="flex:1;display:flex;flex-direction:column;gap:4px"><div style="font:500 14px/1 var(--ft)">Ana Souza</div><div style="font:400 12px/1 var(--ft);color:var(--fg3)">ana@rocha.family</div></div><div style="height:28px;padding:0 8px 0 12px;border-radius:999px;border:1px solid var(--ln);display:flex;align-items:center;gap:4px;font:500 12px/1 var(--ft);white-space:nowrap">Can edit<span style="{{ i14.chevD }}"></span></div></div>
+<div style="display:flex;align-items:center;gap:12px;height:44px"><div style="width:32px;height:32px;border-radius:999px;background:var(--sf2);color:var(--fg2);display:flex;align-items:center;justify-content:center;flex:none"><span style="{{ i16.users }}"></span></div><div style="flex:1;display:flex;flex-direction:column;gap:4px"><div style="font:500 14px/1 var(--ft)">Design team</div><div style="font:400 12px/1 var(--ft);color:var(--fg3)">Group · 6 people</div></div><div style="height:28px;padding:0 8px 0 12px;border-radius:999px;border:1px solid var(--ln);display:flex;align-items:center;gap:4px;font:500 12px/1 var(--ft);white-space:nowrap">Can view<span style="{{ i14.chevD }}"></span></div></div>
+</div>
+<div style="height:1px;background:var(--ln)"></div>
+<div style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;flex-direction:column;gap:5px"><div style="font:500 16px/1 var(--fd);letter-spacing:-0.02em">Share link</div><div style="font:400 12px/1 var(--ft);color:var(--fg3)">Anyone with the link can view</div></div><div style="width:44px;height:26px;border-radius:999px;background:var(--ac);padding:3px;box-sizing:border-box;display:flex;justify-content:flex-end;flex:none"><div style="width:20px;height:20px;border-radius:999px;background:#FFFFFF"></div></div></div>
+<div style="border-radius:14px;background:var(--sf2);padding:5px 5px 5px 14px;display:flex;gap:10px;align-items:center;color:var(--fg2)"><span style="{{ i16.link }}"></span><div style="flex:1;min-width:0;font:400 13px/1 ui-monospace,Menlo,monospace;color:var(--fg1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">https://cloud.rocha.family/s/k7Pq2xW</div><div style="height:34px;padding:0 14px;border-radius:999px;background:var(--ac);color:#FFFFFF;display:flex;align-items:center;gap:6px;font:600 13px/1 var(--ft);white-space:nowrap"><span style="{{ i14.copy }}"></span>Copy link</div></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap">
+<div style="height:30px;padding:0 12px;border-radius:999px;border:1px solid var(--ln);display:flex;align-items:center;gap:6px;font:500 12px/1 var(--ft);white-space:nowrap"><span style="{{ i14.eye }}"></span>Can view<span style="{{ i14.chevD }}"></span></div>
+<div style="height:30px;padding:0 12px;border-radius:999px;background:var(--acs);color:var(--act);display:flex;align-items:center;gap:6px;font:600 12px/1 var(--ft);white-space:nowrap"><span style="{{ i14.calendar }}"></span>Expires Oct 24</div>
+<div style="height:30px;padding:0 12px;border-radius:999px;border:1px solid var(--ln);display:flex;align-items:center;gap:6px;font:500 12px/1 var(--ft);white-space:nowrap"><span style="{{ i14.lock }}"></span>Add password</div>
+<div style="height:30px;padding:0 12px;border-radius:999px;border:1px solid var(--ln);display:flex;align-items:center;gap:6px;font:500 12px/1 var(--ft);white-space:nowrap"><span style="{{ i14.download }}"></span>Allow download</div>
+</div>
+</div>
+<div style="height:1px;background:var(--ln)"></div>
+<div style="display:flex;align-items:center;gap:12px">
+<div style="flex:1;font:400 12px/1.3 var(--ft);color:var(--fg3)">Sends a copy through another app. Link settings don’t apply.</div>
+<div style="height:38px;padding:0 16px;border-radius:999px;border:1.5px solid var(--sf3);display:flex;align-items:center;gap:8px;font:600 14px/1 var(--ft);white-space:nowrap"><span style="{{ i16.send }}"></span>Send file directly</div>
+</div>
+</div>
+</div>
+</sc-if>
+</div>
+</div>
+</div>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:800},&quot;os&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;mac&quot;,&quot;windows&quot;],&quot;default&quot;:&quot;mac&quot;,&quot;tsType&quot;:&quot;'mac'|'windows'&quot;},&quot;screen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;files&quot;,&quot;filesGrid&quot;,&quot;photos&quot;,&quot;favorites&quot;,&quot;offline&quot;,&quot;shares&quot;,&quot;recent&quot;,&quot;activity&quot;,&quot;trash&quot;,&quot;share&quot;,&quot;settings&quot;,&quot;settings2&quot;],&quot;default&quot;:&quot;files&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;'light'|'dark'&quot;}}">
+class Component extends DCLogic {
+  componentDidMount() {
+    if (!window.NK) this._t = setInterval(() => { if (window.NK) { clearInterval(this._t); this.forceUpdate(); } }, 40);
+  }
+  componentWillUnmount() { clearInterval(this._t); }
+  renderVals() {
+    const K = window.NK;
+    if (!K) return { ready: false };
+    const { I, ic, D, row, TH, tile, tiles, avatar } = K;
+    const mac = this.props.os !== 'windows', win = !mac;
+    const sc = this.props.screen || 'files';
+    const theme = this.props.theme === 'dark' ? 'dark' : 'light';
+    const share = sc === 'share', grid = sc === 'filesGrid';
+    const base = (share || grid) ? 'files' : sc;
+    const settings = base.startsWith('settings');
+    const s = {}; ['files','photos','activity','trash','favorites','offline','shares','recent','settings','settings2'].forEach(k => s[k] = base === k);
+    const RS = sel => ({ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 180px 160px 120px', alignItems: 'center', height: 52, padding: '0 12px', borderBottom: '1px solid var(--ln)', background: sel ? 'var(--acs)' : 'transparent', borderRadius: sel ? 12 : 0 });
+    const mk = (list, fn, o = {}) => list.map((f, i) => { const r = row(f, { tile: 30, r: 9, ico: 16, ...o }); Object.assign(r, fn(f)); r.rs = RS(o.sel === i); return r; });
+    let groups = [], cols = ['Name', 'Size', 'Modified'];
+    const split = f => { const p = (f.meta || '').split(' · '); return { a: p[0], b: p[1] || '' }; };
+    if (base === 'files') groups = [{ rows: mk(D.files, f => ({ a: f.size, b: f.mod, bIcon: !!f.off }), { noSwipe: 1, sel: 3 }) }];
+    if (base === 'favorites') groups = [{ rows: mk(D.favorites, f => ({ a: f.size, b: f.mod, bIcon: !!f.off, fav: true })) }];
+    if (base === 'offline') { cols = ['Name', 'Size', 'Status']; groups = [{ rows: mk(D.offline, f => ({ a: f.size, b: split(f).a, bInline: true })) }]; }
+    if (base === 'shares') { cols = ['Name', 'Shared by', 'Permission']; groups = [{ rows: mk(D.shares, f => ({ a: f.by, b: f.perm })) }]; }
+    if (base === 'recent') { cols = ['Name', 'Activity', 'Location']; groups = D.recent.map(g => ({ label: g.label, rows: mk(g.rows, f => ({ ...split(f), bIcon: !!f.off })) })); }
+    if (base === 'trash') { cols = ['Name', 'Original location', 'Deleted']; groups = [{ rows: mk(D.trash, f => ({ a: f.from, b: f.del })) }]; }
+    groups = groups.map(g => ({ ...g, hasLabel: !!g.label }));
+    const title = settings ? 'Settings' : D.titles[base];
+    const seg = on => ({ width: 34, height: 30, borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? 'var(--acs)' : 'transparent', color: on ? 'var(--act)' : 'var(--fg3)' });
+    const counts = { trash: '12', offline: '1', shares: '3' };
+    const navItem = ([label, ico, key]) => ({ label, ico: I[18][ico], icoG: ic(ico, 18, 'var(--fg2)'), on: key === base, off: key !== base, count: counts[key] || '' });
+    return {
+      ready: true, mac, win, s, title, groups, c0: cols[0], c1: cols[1], c2: cols[2], share, notSettings: !settings,
+      sortable: base === 'files' || base === 'favorites',
+      restore: base === 'trash',
+      root: { ...TH[theme], width: 1280, height: 800, borderRadius: mac ? 12 : 8, overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--fg1)', fontFamily: 'var(--ft)', border: '1px solid var(--ln)', boxSizing: 'border-box' },
+      i14: I[14], i16: I[16], i18: I[18], i20: I[20], i24: I[24],
+      showTable: groups.length > 0 && !grid, showGrid: grid,
+      gridRows: D.files.map(f => row(f, { noSwipe: 1, thumbH: 118 })).map(r => ({ ...r, meta: `${r.size} · ${r.mod}` })),
+      segL: seg(!grid), segG: seg(grid),
+      navA: D.pinned.map(navItem), navB: D.menu.map(navItem),
+      setOn: settings, setOff: !settings, setIcoG: ic('settings', 18, 'var(--fg2)'),
+      starSm: ic('star', 16, 'var(--act)'), moreSm: ic('moreH', 16, 'var(--fg3)'),
+      checkA: ic('check', 18, 'var(--act)'), chevG: ic('chevR', 16, 'var(--fg3)'), gripS: ic('grip', 16, 'var(--fg3)'),
+      photoGroups: [{ label: 'September 2026', count: '38 items', tiles: tiles(24, 0, [2, 9, 13, 20]) }, { label: 'August 2026', count: '112 items', tiles: tiles(16, 3, [4, 11]) }],
+      act: D.activity.map(g => ({ label: g.label, items: g.items.map(a => ({ ...a, av: avatar(a.col, 36), tile: tile(a.kind, 30, 9), ico: I[16][K.KIND[a.kind][2]] })) })),
+      tabRows: [...D.pinned.map(([label, ico]) => ({ label, ico: I[18][ico], p: 1 })), ...D.menu.map(([label, ico]) => ({ label, ico: I[18][ico], p: 0 }))].map(t => ({ ...t,
+        pinS: { width: 30, height: 30, borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: t.p ? 'var(--acs)' : 'var(--sf2)', color: t.p ? 'var(--act)' : 'var(--fg3)' },
+        pinI: I[14][t.p ? 'pin' : 'pinOff'] })),
+      bioLabel: mac ? 'Lock with Touch ID' : 'Lock with Windows Hello', bioIco: I[18][mac ? 'fingerprint' : 'face'],
+      syncPath: mac ? '~/Noo/rocha.family' : 'C:\\Users\\Marina\\Noo',
+      swipeTitle: mac ? 'Trackpad swipe on a file' : 'Touch swipe on a file',
+      shareTile: tile('pdf', 40, 12), avYou: avatar('#CBA5FD', 32), avAna: avatar('#DA9AC7', 32)
+    };
+  }
+}
+</script>
+</body>
+</html>

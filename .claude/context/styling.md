@@ -1,5 +1,13 @@
 # Styling
 
+**Migration in progress:** this file documents the current (pre-rework)
+Material 3 theme. The target look is
+[`design-system/DESIGN_SYSTEM.md`](design-system/DESIGN_SYSTEM.md) — warm
+neutrals, one violet accent, pill controls, Schibsted Grotesk/Instrument
+Sans, no gradients/shadows. Update this file to describe the new system as
+each area gets reworked, rather than leaving stale Material 3 guidance next
+to a design system that's already superseded it.
+
 ## Theme
 
 All theming goes through [`AppTheme`](../../lib/theme/app_theme.dart)
@@ -127,4 +135,8 @@ widgets. Key points:
   ColorFilter.mode(colorScheme.onSurface, BlendMode.srcIn), ...)` so it
   reads correctly in both light and dark mode. Never the full-color
   `app_icon.png`/adaptive-icon assets for in-app UI — those are for the
-  launcher icon only (`flutter_launcher_icons` in `pubspec.yaml`).
+  launcher icon only. The launcher icon is maintained by hand from an
+  IconKitchen export (`mipmap-*` in `android/app/src/main/res`); there is no
+  generator step. `assets/icon/app_icon_monochrome.png` is deliberately a
+  tightly-cropped glyph (unlike the launcher's safe-zone-padded monochrome
+  layer), so it renders at a sensible size at 72-80px.
