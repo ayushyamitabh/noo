@@ -1,21 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../models/nextcloud_item.dart';
+import '../../theme/design_tokens.dart';
+import '../noo/lists/noo_grouped_list.dart';
 import '../synced_header_scaffold.dart' show formatBytes;
 
-/// Plain metadata tab of the Details sheet — name, type, size, location,
-/// and dates. No network calls, so no loading state needed.
+/// Plain metadata list of the Details sheet/dialog - name, type, size,
+/// location, and dates. No network calls, so no loading state needed.
 class DetailsInfoTab extends StatelessWidget {
   final NextcloudItem item;
-  final ScrollController? scrollController;
 
-  const DetailsInfoTab({super.key, required this.item, this.scrollController});
+  const DetailsInfoTab({super.key, required this.item});
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
     final rows = <(String, String)>[
       ('Name', item.name),
       ('Type', item.isFolder ? 'Folder' : (item.mimeType ?? 'File')),
@@ -26,39 +24,51 @@ class DetailsInfoTab extends StatelessWidget {
       ('Favorite', item.isFavorite ? 'Yes' : 'No'),
     ];
 
-    return ListView.separated(
-      controller: scrollController,
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-      itemCount: rows.length,
-      separatorBuilder: (context, index) => const Divider(height: 1),
-      itemBuilder: (context, index) {
-        final (label, value) = rows[index];
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: 96,
-                child: Text(
-                  label,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
+    return NooGroupedList(
+      children: [for (final row in rows) _InfoRow(label: row.$1, value: row.$2)],
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _InfoRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.nooColors;
+    return ColoredBox(
+      color: colors.surface,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: NooSpace.md,
+          vertical: NooSpace.sm,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 96,
+              child: Text(
+                label,
+                style: NooText.body.copyWith(fontSize: 14, color: colors.fg3),
+              ),
+            ),
+            Expanded(
+              child: Text(
+                value,
+                style: NooText.body.copyWith(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: colors.fg1,
                 ),
               ),
-              Expanded(
-                child: Text(
-                  value,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

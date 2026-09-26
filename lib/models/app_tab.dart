@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 /// Every destination the bottom nav bar can show. Order here is only the
 /// fallback default — actual order/visibility/default-tab are user
@@ -41,24 +41,26 @@ extension AppTabInfo on AppTab {
     }
   }
 
+  // Lucide icon mapping per DESIGN_SYSTEM.md 1.5 - the Lucide icon slug is
+  // named in a comment where it doesn't match the Dart identifier.
   IconData get icon {
     switch (this) {
       case AppTab.files:
-        return Icons.folder_rounded;
+        return LucideIcons.folder;
       case AppTab.photos:
-        return Icons.photo_library_rounded;
+        return LucideIcons.images;
       case AppTab.favorites:
-        return Icons.favorite_rounded;
+        return LucideIcons.star;
       case AppTab.activity:
-        return Icons.electric_bolt_rounded;
+        return LucideIcons.activity;
       case AppTab.trash:
-        return Icons.delete_outline_rounded;
+        return LucideIcons.trash2; // trash-2
       case AppTab.shares:
-        return Icons.groups_rounded;
+        return LucideIcons.share2; // share-2
       case AppTab.recent:
-        return Symbols.search_activity_rounded;
+        return LucideIcons.clock;
       case AppTab.offline:
-        return Icons.offline_pin_rounded;
+        return LucideIcons.hardDriveDownload; // hard-drive-download
     }
   }
 }

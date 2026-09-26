@@ -1,15 +1,20 @@
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import '../../models/nextcloud_file_version.dart';
 import '../../models/nextcloud_item.dart';
 import '../../providers/item_operations.dart';
+import '../../theme/design_tokens.dart';
+import '../noo/files/noo_file_kind.dart';
+import '../noo/files/noo_file_tile.dart';
+import '../noo/lists/noo_grouped_list.dart';
 import '../synced_header_scaffold.dart' show formatBytes;
 
-/// File version history — a synthetic "Current version" row (from the
+/// File version history - a synthetic "Current version" row (from the
 /// item's own metadata) followed by whatever the DAV versions endpoint
 /// returns, each with Restore/Download actions.
 class DetailsVersionsTab extends StatefulWidget {
@@ -75,7 +80,7 @@ class _DetailsVersionsTabState extends State<DetailsVersionsTab> {
       await FileSaver.instance.saveFile(
         name: baseName,
         filePath: tempPath,
-        ext: ext,
+        fileExtension: ext,
       );
       if (!mounted) return;
       messenger.showSnackBar(
@@ -101,11 +106,12 @@ class _DetailsVersionsTabState extends State<DetailsVersionsTab> {
       _requested = true;
       WidgetsBinding.instance.addPostFrameCallback((_) => _load());
     }
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
 
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 32),
+        child: Center(child: CircularProgressIndicator()),
+      );
     }
 
     final items = [
@@ -117,44 +123,126 @@ class _DetailsVersionsTabState extends State<DetailsVersionsTab> {
       ),
       ..._versions,
     ];
+    final kind = NooFileKind.from(
+      name: widget.item.name,
+      mimeType: widget.item.mimeType,
+      isDirectory: false,
+    );
 
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-      itemCount: items.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 4),
-      itemBuilder: (context, index) {
-        final version = items[index];
-        return ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: CircleAvatar(
-            backgroundColor: colorScheme.primaryContainer,
-            child: Icon(
-              Icons.history_rounded,
-              color: colorScheme.onPrimaryContainer,
-              size: 20,
+    return NooGroupedList(
+      children: [
+        for (final version in items)
+          _VersionRow(
+            kind: kind,
+            version: version,
+            onRestore: () => _restore(version),
+            onDownload: () => _download(version),
+          ),
+      ],
+    );
+  }
+}
+
+class _VersionRow extends StatelessWidget {
+  final NooFileKind kind;
+  final NextcloudFileVersion version;
+  final VoidCallback onRestore;
+  final VoidCallback onDownload;
+
+  const _VersionRow({
+    required this.kind,
+    required this.version,
+    required this.onRestore,
+    required this.onDownload,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.nooColors;
+    return ColoredBox(
+      color: colors.surface,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: NooSpace.md,
+          vertical: NooSpace.sm,
+        ),
+        child: Row(
+          children: [
+            NooFileTile(kind: kind, size: NooFileTileSize.activity),
+            const SizedBox(width: NooSpace.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    version.isCurrent
+                        ? 'Current version'
+                        : DateFormat.yMMMd().add_jm().format(version.timestamp),
+                    style: NooText.bodyL.copyWith(
+                      fontWeight: FontWeight.w500,
+                      color: colors.fg1,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${formatBytes(version.size)} · ${DateFormat.yMMMd().format(version.timestamp)}',
+                    style: NooText.meta.copyWith(color: colors.fg3),
+                  ),
+                ],
+              ),
             ),
-          ),
-          title: Text(
-            version.isCurrent
-                ? 'Current version'
-                : DateFormat.yMMMd().add_jm().format(version.timestamp),
-          ),
-          subtitle: Text(
-            '${DateFormat.yMMMd().format(version.timestamp)} • ${formatBytes(version.size)}',
-          ),
-          trailing: version.isCurrent
-              ? null
-              : PopupMenuButton<String>(
-                  onSelected: (value) => value == 'restore'
-                      ? _restore(version)
-                      : _download(version),
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(value: 'restore', child: Text('Restore')),
-                    PopupMenuItem(value: 'download', child: Text('Download')),
-                  ],
-                ),
-        );
-      },
+            if (!version.isCurrent) ...[
+              const SizedBox(width: NooSpace.xs),
+              _RowIconButton(
+                icon: LucideIcons.rotateCcw,
+                tooltip: 'Restore',
+                onTap: onRestore,
+              ),
+              const SizedBox(width: NooSpace.xxs),
+              _RowIconButton(
+                icon: LucideIcons.download,
+                tooltip: 'Download',
+                onTap: onDownload,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A small round icon button matching [NooCloseButton]'s visual language
+/// (surface-2 circle) but for an arbitrary action - promote this to `noo/`
+/// if another row-level icon action needs the same treatment.
+class _RowIconButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  const _RowIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.nooColors;
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Container(
+          width: 32,
+          height: 32,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(color: colors.surface2, shape: BoxShape.circle),
+          child: Icon(icon, size: 16, color: colors.fg2),
+        ),
+      ),
     );
   }
 }

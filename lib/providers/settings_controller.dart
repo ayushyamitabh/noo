@@ -23,8 +23,6 @@ class SettingsController extends ChangeNotifier {
   static const _prefThemeMode = 'ui_theme_mode';
   static const _prefUseDynamicColor = 'ui_use_dynamic_color';
   static const _prefSeedColor = 'ui_seed_color';
-  static const _prefBottomBarOpacity = 'ui_bottom_bar_opacity';
-  static const _prefBottomBarBlur = 'ui_bottom_bar_blur';
   static const _prefTabOrder = 'ui_tab_order';
   static const _prefHiddenTabs = 'ui_hidden_tabs';
   static const _prefDefaultTab = 'ui_default_tab';
@@ -43,8 +41,6 @@ class SettingsController extends ChangeNotifier {
   bool _amoledDark = false;
   MediaProgressBarStyle _mediaProgressBarStyle = MediaProgressBarStyle.wavy;
 
-  double _bottomBarOpacity = 0.55;
-  double _bottomBarBlur = 28;
   bool _tapTabToScrollTop = true;
 
   List<AppTab> _tabOrder = AppTab.values.toList();
@@ -82,8 +78,6 @@ class SettingsController extends ChangeNotifier {
   bool get useDynamicColor => _useDynamicColor;
   bool get amoledDark => _amoledDark;
   MediaProgressBarStyle get mediaProgressBarStyle => _mediaProgressBarStyle;
-  double get bottomBarOpacity => _bottomBarOpacity;
-  double get bottomBarBlur => _bottomBarBlur;
   bool get tapTabToScrollTop => _tapTabToScrollTop;
 
   /// Every tab in the user's configured order, including hidden ones — used
@@ -122,9 +116,6 @@ class SettingsController extends ChangeNotifier {
       }
       final seedColorValue = prefs.getInt(_prefSeedColor);
       if (seedColorValue != null) _seedColor = Color(seedColorValue);
-      _bottomBarOpacity =
-          prefs.getDouble(_prefBottomBarOpacity) ?? _bottomBarOpacity;
-      _bottomBarBlur = prefs.getDouble(_prefBottomBarBlur) ?? _bottomBarBlur;
       _tapTabToScrollTop =
           prefs.getBool(_prefTapTabToScrollTop) ?? _tapTabToScrollTop;
 
@@ -221,18 +212,6 @@ class SettingsController extends ChangeNotifier {
     _prefsFuture.then(
       (p) => p.setString(_prefMediaProgressBarStyle, style.name),
     );
-  }
-
-  void setBottomBarOpacity(double value) {
-    _bottomBarOpacity = value;
-    notifyListeners();
-    _prefsFuture.then((p) => p.setDouble(_prefBottomBarOpacity, value));
-  }
-
-  void setBottomBarBlur(double value) {
-    _bottomBarBlur = value;
-    notifyListeners();
-    _prefsFuture.then((p) => p.setDouble(_prefBottomBarBlur, value));
   }
 
   void setTapTabToScrollTop(bool value) {

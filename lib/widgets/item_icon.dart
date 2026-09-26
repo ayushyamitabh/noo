@@ -1,48 +1,73 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../models/nextcloud_item.dart';
 import '../services/nextcloud_service.dart';
+import '../theme/design_tokens.dart';
 
 /// The icon/color/thumbnail treatment for a file or folder, shared by any
 /// screen that lists [NextcloudItem]s the same way the Files tab does (see
 /// `files_view.dart`, and `share_upload_view.dart`'s destination picker).
+/// Matches DESIGN_SYSTEM.md 1.2's file-type tile table (`KIND`) - a pdf is
+/// its own kind there (distinct from a generic document), which is why
+/// these take the whole [NextcloudItem] rather than just its
+/// [NextcloudItemType]: the type alone can't tell a pdf from any other
+/// document.
+bool _isPdf(NextcloudItem item) => item.name.toLowerCase().endsWith('.pdf');
 
-IconData getItemIcon(NextcloudItemType type) {
-  switch (type) {
+IconData getItemIcon(NextcloudItem item) {
+  switch (item.type) {
     case NextcloudItemType.folder:
-      return Icons.folder_rounded;
+      return LucideIcons.folder;
     case NextcloudItemType.image:
-      return Icons.image_rounded;
+      return LucideIcons.image;
     case NextcloudItemType.video:
-      return Icons.movie_rounded;
-    case NextcloudItemType.audio:
-      return Icons.audiotrack_rounded;
+      return LucideIcons.film;
     case NextcloudItemType.document:
-      return Icons.description_rounded;
+      return LucideIcons.fileText;
     case NextcloudItemType.archive:
-      return Icons.folder_zip_rounded;
+      return LucideIcons.fileArchive;
+    case NextcloudItemType.audio:
     case NextcloudItemType.file:
-      return Icons.insert_drive_file_rounded;
+      return LucideIcons.file;
   }
 }
 
-Color getIconColor(BuildContext context, NextcloudItemType type) {
-  final colorScheme = Theme.of(context).colorScheme;
-  switch (type) {
+Color getIconColor(BuildContext context, NextcloudItem item) {
+  final colors = context.nooColors;
+  switch (item.type) {
     case NextcloudItemType.folder:
-      return colorScheme.primary;
-    case NextcloudItemType.image:
-      return Colors.amber.shade700;
-    case NextcloudItemType.video:
-      return Colors.deepOrange.shade600;
-    case NextcloudItemType.audio:
-      return Colors.purple.shade600;
+      return colors.accentText;
     case NextcloudItemType.document:
-      return Colors.blue.shade700;
+      return _isPdf(item) ? colors.danger : colors.info;
+    case NextcloudItemType.image:
+      return colors.info;
+    case NextcloudItemType.video:
+      return colors.warning;
     case NextcloudItemType.archive:
-      return Colors.teal.shade700;
+    case NextcloudItemType.audio:
     case NextcloudItemType.file:
-      return colorScheme.outline;
+      return colors.fg2;
+  }
+}
+
+/// The tile's background (the soft-tinted square/circle behind the icon) -
+/// the other half of the [getIconColor] pair every call site pairs it with.
+Color getIconBackground(BuildContext context, NextcloudItem item) {
+  final colors = context.nooColors;
+  switch (item.type) {
+    case NextcloudItemType.folder:
+      return colors.accentSoft;
+    case NextcloudItemType.document:
+      return _isPdf(item) ? colors.dangerSoft : colors.infoSoft;
+    case NextcloudItemType.image:
+      return colors.infoSoft;
+    case NextcloudItemType.video:
+      return colors.warningSoft;
+    case NextcloudItemType.archive:
+    case NextcloudItemType.audio:
+    case NextcloudItemType.file:
+      return colors.surface3;
   }
 }
 
@@ -74,7 +99,7 @@ class ItemThumbnail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final iconColor = getIconColor(context, item.type);
+    final iconColor = getIconColor(context, item);
     final isMedia =
         item.type == NextcloudItemType.image ||
         item.type == NextcloudItemType.video;
@@ -91,7 +116,7 @@ class ItemThumbnail extends StatelessWidget {
       height: size,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: iconColor.withValues(alpha: 0.12),
+        color: getIconBackground(context, item),
         borderRadius: BorderRadius.circular(borderRadius),
       ),
       child: useLocal || (isMedia && item.previewUrl != null)
@@ -116,7 +141,7 @@ class ItemThumbnail extends StatelessWidget {
                     if (progress == null) return child;
                     return Center(
                       child: Icon(
-                        getItemIcon(item.type),
+                        getItemIcon(item),
                         color: iconColor,
                         size: iconSize,
                       ),
@@ -124,7 +149,7 @@ class ItemThumbnail extends StatelessWidget {
                   },
                   errorBuilder: (context, error, stack) => Center(
                     child: Icon(
-                      getItemIcon(item.type),
+                      getItemIcon(item),
                       color: iconColor,
                       size: iconSize,
                     ),
@@ -142,7 +167,7 @@ class ItemThumbnail extends StatelessWidget {
             )
           : Center(
               child: Icon(
-                getItemIcon(item.type),
+                getItemIcon(item),
                 color: iconColor,
                 size: iconSize,
               ),

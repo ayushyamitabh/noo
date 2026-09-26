@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:intl/intl.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/nextcloud_item.dart';
@@ -11,18 +12,42 @@ import '../providers/photos_controller.dart';
 import '../providers/pick_controller.dart';
 import '../providers/session_controller.dart';
 import '../services/download_service.dart';
+import '../theme/design_tokens.dart';
 import '../widgets/details/details_sheet.dart';
-import '../widgets/more_tabs_button.dart';
-import '../widgets/profile_avatar_button.dart';
-import '../widgets/segmented_icon_toggle.dart';
-import '../widgets/selectable_thumbnail.dart';
+import '../widgets/noo/core/noo_button.dart';
+import '../widgets/noo/core/noo_chip.dart';
+import '../widgets/noo/core/noo_segmented_control.dart';
+import '../widgets/noo/core/noo_toggle.dart';
+import '../widgets/noo/files/noo_file_kind.dart';
+import '../widgets/noo/lists/noo_grouped_list.dart';
+import '../widgets/noo/lists/noo_settings_row.dart';
+import '../widgets/noo/media/noo_photo_group.dart';
+import '../widgets/noo/media/noo_photo_tile.dart';
+import '../widgets/noo/noo_layout.dart';
+import '../widgets/noo/overlays/noo_sheet.dart';
 import '../widgets/share_sheet.dart';
-import '../widgets/sort_menu_button.dart';
+import '../widgets/sort_menu_button.dart' show sortFieldLabel;
 import '../widgets/sticky_header_delegate.dart';
-import '../widgets/synced_header_scaffold.dart';
 import 'file_viewer_screen.dart';
 import 'move_copy_destination_picker.dart';
 
+/// The type chips PhotosController actually has data for (DESIGN_SYSTEM.md
+/// section 4 also lists "Camera", but there's no camera-upload/EXIF source
+/// to distinguish that from any other photo - see the view's doc comment).
+enum _PhotoTypeFilter { all, image, video }
+
+/// A contiguous run of [PhotosController.items] that shares a calendar
+/// month, in whatever order the controller already sorted them - see
+/// [_PhotosViewState._groupByMonth].
+class _MonthGroup {
+  final DateTime month;
+  final List<NextcloudItem> items;
+  _MonthGroup(this.month, this.items);
+}
+
+/// The Photos tab: every image/video across the account, grouped by month
+/// (DESIGN_SYSTEM.md section 4). Renders content only - the shell
+/// (`MainShellView`) owns the top bar, bottom bar, drawer and FAB.
 class PhotosView extends StatefulWidget {
   final ScrollController scrollController;
 
@@ -38,6 +63,12 @@ class _PhotosViewState extends State<PhotosView>
   final Set<String> _selectedIds = {};
   final ScrollController _selectionActionsScrollController = ScrollController();
   final List<AnimationController> _scrollHintControllers = [];
+
+  // Session-local only (not one of PhotosController's persisted display
+  // prefs) - a pure narrowing of the already-fetched/filtered/sorted list,
+  // same way the type chips narrow Files' listing without touching the
+  // controller.
+  _PhotoTypeFilter _typeFilter = _PhotoTypeFilter.all;
 
   bool get _isSelecting => _selectedIds.isNotEmpty;
 
@@ -64,7 +95,14 @@ class _PhotosViewState extends State<PhotosView>
   /// starts. No-ops if there's nothing to scroll (row already fits).
   Future<void> _playScrollHint(ScrollController scrollController) async {
     await Future.delayed(const Duration(milliseconds: 500));
-    if (!mounted || !scrollController.hasClients) return;
+    // `hasClients` only means a position is attached, not that it's
+    // finished its first layout - reading maxScrollExtent before that
+    // throws (min/maxScrollExtent are still null internally).
+    if (!mounted ||
+        !scrollController.hasClients ||
+        !scrollController.position.hasContentDimensions) {
+      return;
+    }
     final maxExtent = scrollController.position.maxScrollExtent;
     if (maxExtent <= 0) return;
     final double peak = maxExtent < 36 ? maxExtent : 36;
@@ -195,10 +233,39 @@ class _PhotosViewState extends State<PhotosView>
     ];
   }
 
+  /// Splits an already-filtered/sorted list into contiguous month runs
+  /// (`dateCreated`) in list order - deliberately not a global re-sort by
+  /// date, so a "Name"/"Size" sort chip still governs the order shown
+  /// (see the group header row it feeds).
+  List<_MonthGroup> _groupByMonth(List<NextcloudItem> items) {
+    final groups = <_MonthGroup>[];
+    for (final item in items) {
+      final d = item.dateCreated;
+      final month = DateTime(d.year, d.month);
+      if (groups.isNotEmpty && groups.last.month == month) {
+        groups.last.items.add(item);
+      } else {
+        groups.add(_MonthGroup(month, [item]));
+      }
+    }
+    return groups;
+  }
+
+  bool _matchesTypeFilter(NextcloudItem item) {
+    switch (_typeFilter) {
+      case _PhotoTypeFilter.all:
+        return true;
+      case _PhotoTypeFilter.image:
+        return item.type == NextcloudItemType.image;
+      case _PhotoTypeFilter.video:
+        return item.type == NextcloudItemType.video;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final colors = context.nooColors;
+    final isDesktop = NooLayout.isDesktop(context);
     final photosController = context.watch<PhotosController>();
     final filesController = context.watch<FilesController>();
     final pick = context.watch<PickController>();
@@ -210,89 +277,44 @@ class _PhotosViewState extends State<PhotosView>
       );
     }
 
-    final photos = photosController.items;
-    final selectedItems = photos
+    final allPhotos = photosController.items;
+    final visiblePhotos = allPhotos.where(_matchesTypeFilter).toList();
+    // Selection tracks the full (favorites/hidden-filtered) list, not just
+    // the type-filtered view, so switching the type chip mid-selection
+    // never silently drops a selected item from the bulk actions.
+    final selectedItems = allPhotos
         .where((i) => _selectedIds.contains(i.id))
         .toList();
+    final groups = _groupByMonth(visiblePhotos);
 
-    final controlsRow = Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      child: SizedBox(
-        height: 44,
-        child: Row(
-          children: [
-            IconButton(
-              icon: Icon(
-                photosController.sortAscending
-                    ? Icons.arrow_upward_rounded
-                    : Icons.arrow_downward_rounded,
-                size: 20,
-              ),
-              visualDensity: VisualDensity.compact,
-              tooltip: photosController.sortAscending
-                  ? 'Ascending'
-                  : 'Descending',
-              onPressed: photosController.toggleSortOrder,
-            ),
-            Expanded(
-              child: SortMenuButton(
-                field: photosController.sortField,
-                onChanged: photosController.setSortField,
-              ),
-            ),
-            ToggleIconButton(
-              icon: photosController.showFavoritesOnly
-                  ? Icons.favorite_rounded
-                  : Icons.favorite_border_rounded,
-              isSelected: photosController.showFavoritesOnly,
-              onTap: photosController.toggleFavoritesFilter,
-              tooltip: 'Favorites only',
-            ),
-            const SizedBox(width: 4),
-            ToggleIconButton(
-              icon: photosController.showHidden
-                  ? Icons.visibility_rounded
-                  : Icons.visibility_off_rounded,
-              isSelected: photosController.showHidden,
-              onTap: () => photosController.toggleShowHidden(),
-              tooltip: 'Show hidden files',
-            ),
-            const SizedBox(width: 4),
-            SegmentedIconGroup(
-              children: [
-                ToggleIconButton(
-                  icon: Symbols.circles_rounded,
-                  isSelected: filesController.storageScope == StorageScope.cloud,
-                  onTap: () =>
-                      filesController.setStorageScope(StorageScope.cloud),
-                  tooltip: 'Cloud storage',
-                ),
-                ToggleIconButton(
-                  icon: Symbols.hard_drive_rounded,
-                  isSelected:
-                      filesController.storageScope == StorageScope.external,
-                  onTap: () =>
-                      filesController.setStorageScope(StorageScope.external),
-                  tooltip: 'External storage',
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+    final controlsRow = _buildControlsRow(
+      context,
+      photosController,
+      filesController,
     );
 
     final List<Widget> contentSlivers = [
       // Sticky while browsing; once selecting, the selection bar takes over
-      // the very top of the screen instead (see `selectionBar` below), so
-      // this is free to scroll away rather than staying pinned under it.
+      // the same slot instead.
       SliverPersistentHeader(
         pinned: !_isSelecting,
-        delegate: StickyHeaderDelegate(height: 60, child: controlsRow),
+        delegate: StickyHeaderDelegate(
+          height: _isSelecting ? 56 : 64,
+          child: _isSelecting
+              ? _buildSelectionBar(context, pick, selectedItems)
+              : Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    NooSpace.sm,
+                    NooSpace.sm,
+                    NooSpace.sm,
+                    NooSpace.xs,
+                  ),
+                  child: controlsRow,
+                ),
+        ),
       ),
-      const SliverToBoxAdapter(child: SizedBox(height: 8)),
 
-      if (photosController.isLoading && photos.isEmpty)
+      if (photosController.isLoading && allPhotos.isEmpty)
         const SliverFillRemaining(
           hasScrollBody: false,
           child: Center(child: CircularProgressIndicator()),
@@ -306,85 +328,82 @@ class _PhotosViewState extends State<PhotosView>
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.error_outline_rounded,
-                    size: 64,
-                    color: colorScheme.error,
-                  ),
+                  Icon(LucideIcons.circleAlert, size: 56, color: colors.danger),
                   const SizedBox(height: 16),
                   Text(
                     'Could not load photos',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      color: colorScheme.error,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: NooText.cardTitle.copyWith(color: colors.danger),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     photosController.errorMessage!,
                     textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
+                    style: NooText.body.copyWith(color: colors.fg3),
                   ),
                   const SizedBox(height: 20),
-                  FilledButton.icon(
-                    onPressed: photosController.fetchAllMedia,
-                    icon: const Icon(Icons.refresh_rounded),
-                    label: const Text('Retry'),
+                  NooButton(
+                    variant: NooButtonVariant.secondary,
+                    size: NooButtonSize.field,
+                    icon: LucideIcons.refreshCw,
+                    onTap: photosController.fetchAllMedia,
+                    child: const Text('Retry'),
                   ),
                 ],
               ),
             ),
           ),
         )
-      else if (photos.isEmpty)
+      else if (visiblePhotos.isEmpty)
         SliverFillRemaining(
           hasScrollBody: false,
           child: Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.photo_library_outlined,
-                  size: 64,
-                  color: colorScheme.outlineVariant,
-                ),
+                Icon(LucideIcons.image, size: 56, color: colors.fg3),
                 const SizedBox(height: 12),
                 Text(
-                  'No photos found in Nextcloud library',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
+                  allPhotos.isEmpty
+                      ? 'No photos found in Nextcloud library'
+                      : 'No photos match this filter',
+                  style: NooText.cardTitle.copyWith(color: colors.fg2),
                 ),
               ],
             ),
           ),
         )
       else
-        SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          sliver: SliverGrid(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
-              childAspectRatio: 1.0,
+        for (final group in groups) ...[
+          SliverToBoxAdapter(
+            child: NooPhotoGroupHeader(
+              title: DateFormat('MMMM yyyy').format(group.month),
+              count:
+                  '${group.items.length} ${group.items.length == 1 ? 'item' : 'items'}',
+              padding: EdgeInsets.fromLTRB(
+                NooLayout.gutter(context),
+                NooSpace.lg,
+                NooLayout.gutter(context),
+                NooSpace.sm,
+              ),
             ),
-            delegate: SliverChildBuilderDelegate((context, index) {
-              final photo = photos[index];
-              return _buildPhotoTile(context, photo);
-            }, childCount: photos.length),
           ),
-        ),
+          NooPhotoGrid(
+            itemCount: group.items.length,
+            columns: isDesktop
+                ? NooPhotoGrid.desktopColumns
+                : NooPhotoGrid.mobileColumns,
+            gap: isDesktop ? NooPhotoGrid.desktopGap : NooPhotoGrid.mobileGap,
+            padding: EdgeInsets.symmetric(
+              horizontal: isDesktop ? NooLayout.gutter(context) : 0,
+            ),
+            itemBuilder: (context, index) =>
+                _buildPhotoTile(context, group.items[index], visiblePhotos),
+          ),
+        ],
 
       // Fixed clearance so the last row isn't hidden behind the floating
       // nav bar, regardless of grid length.
       const SliverToBoxAdapter(child: SizedBox(height: 100)),
-      // For a short grid this stretches the white card's background down to
-      // the screen edge (matching the empty state above); for a long grid
-      // that already fills the viewport it contributes nothing extra.
-      const SliverFillRemaining(hasScrollBody: false, child: SizedBox()),
     ];
 
     return PopScope(
@@ -392,29 +411,181 @@ class _PhotosViewState extends State<PhotosView>
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop && _isSelecting) _clearSelection();
       },
-      child: SyncedHeaderScaffold(
-        scrollController: widget.scrollController,
-        actions: const [MoreTabsButton(), ProfileAvatarButton()],
-        onRefresh: photosController.fetchAllMedia,
-        selectionBar: _isSelecting
-            ? _buildSelectionBar(context, theme, pick, selectedItems)
-            : null,
-        contentSlivers: contentSlivers,
+      child: ColoredBox(
+        color: colors.bg,
+        child: RefreshIndicator(
+          color: colors.accent,
+          backgroundColor: colors.surface,
+          onRefresh: photosController.fetchAllMedia,
+          child: CustomScrollView(
+            controller: widget.scrollController,
+            slivers: contentSlivers,
+          ),
+        ),
       ),
     );
   }
 
-  /// Replaces the top bar entirely while selecting (see
-  /// `SyncedHeaderScaffold.selectionBar`) - a close button, the "N
-  /// selected" count, and the horizontally-scrollable bulk actions.
+  /// Type chips (All/Photos/Videos - "Camera" from the spec has no data
+  /// source, see the view's doc comment), a sort chip and a filter chip for
+  /// favorites-only/hidden/external-storage, mirroring `FilesControlsRow`'s
+  /// layout/pattern.
+  Widget _buildControlsRow(
+    BuildContext context,
+    PhotosController photos,
+    FilesController files,
+  ) {
+    final filtersActive =
+        photos.showFavoritesOnly ||
+        photos.showHidden ||
+        files.storageScope != StorageScope.cloud;
+
+    return SizedBox(
+      height: 44,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            NooChip(
+              icon: photos.sortAscending
+                  ? LucideIcons.arrowUp
+                  : LucideIcons.arrowDown,
+              onTap: () => _showSortSheet(context, photos),
+              child: Text(sortFieldLabel(photos.sortField)),
+            ),
+            const SizedBox(width: 8),
+            NooChip(
+              selected: _typeFilter == _PhotoTypeFilter.all,
+              onTap: () => setState(() => _typeFilter = _PhotoTypeFilter.all),
+              child: const Text('All'),
+            ),
+            const SizedBox(width: 8),
+            NooChip(
+              selected: _typeFilter == _PhotoTypeFilter.image,
+              onTap: () =>
+                  setState(() => _typeFilter = _PhotoTypeFilter.image),
+              child: const Text('Photos'),
+            ),
+            const SizedBox(width: 8),
+            NooChip(
+              selected: _typeFilter == _PhotoTypeFilter.video,
+              onTap: () =>
+                  setState(() => _typeFilter = _PhotoTypeFilter.video),
+              child: const Text('Videos'),
+            ),
+            const SizedBox(width: 8),
+            NooChip(
+              icon: LucideIcons.filter,
+              trailing: NooChipTrailing.menu,
+              selected: filtersActive,
+              onTap: () => _showFilterSheet(context, photos, files),
+              child: const Text('Filter'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSortSheet(BuildContext context, PhotosController photos) {
+    showNooSheet(
+      context,
+      children: [
+        NooSegmentedControl<bool>(
+          fill: true,
+          value: photos.sortAscending,
+          onChanged: (asc) {
+            if (asc != photos.sortAscending) photos.toggleSortOrder();
+          },
+          options: const [
+            NooSegmentOption(
+              value: true,
+              icon: LucideIcons.arrowUp,
+              label: 'Ascending',
+            ),
+            NooSegmentOption(
+              value: false,
+              icon: LucideIcons.arrowDown,
+              label: 'Descending',
+            ),
+          ],
+        ),
+        NooGroupedList(
+          children: [
+            for (final field in FileSortField.values)
+              NooSettingsRow(
+                label: Text(sortFieldLabel(field)),
+                trailing: field == photos.sortField
+                    ? Icon(
+                        LucideIcons.check,
+                        size: 18,
+                        color: context.nooColors.accentText,
+                      )
+                    : null,
+                onTap: () {
+                  photos.setSortField(field);
+                  Navigator.pop(context);
+                },
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  void _showFilterSheet(
+    BuildContext context,
+    PhotosController photos,
+    FilesController files,
+  ) {
+    showNooSheet(
+      context,
+      children: [
+        NooGroupedList(
+          children: [
+            NooSettingsRow(
+              icon: LucideIcons.heart,
+              label: const Text('Favorites only'),
+              trailing: NooToggle(
+                checked: photos.showFavoritesOnly,
+                onChanged: (_) => photos.toggleFavoritesFilter(),
+              ),
+            ),
+            NooSettingsRow(
+              icon: LucideIcons.eye,
+              label: const Text('Show hidden files'),
+              trailing: NooToggle(
+                checked: photos.showHidden,
+                onChanged: (_) => photos.toggleShowHidden(),
+              ),
+            ),
+            NooSettingsRow(
+              icon: LucideIcons.hardDrive,
+              label: const Text('External storage'),
+              trailing: NooToggle(
+                checked: files.storageScope == StorageScope.external,
+                onChanged: (external) => files.setStorageScope(
+                  external ? StorageScope.external : StorageScope.cloud,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Replaces the controls row's own sticky slot while selecting - a close
+  /// button, the "N selected" count, and the horizontally-scrollable bulk
+  /// actions. Mirrors `FilesView`'s identical selection bar.
   Widget _buildSelectionBar(
     BuildContext context,
-    ThemeData theme,
     PickController pick,
     List<NextcloudItem> selectedItems,
   ) {
+    final colors = context.nooColors;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: NooSpace.sm),
       child: Row(
         children: [
           SizedBox(
@@ -425,7 +596,7 @@ class _PhotosViewState extends State<PhotosView>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.close_rounded, size: 20),
+                    icon: Icon(LucideIcons.x, size: 20, color: colors.fg1),
                     tooltip: 'Cancel selection',
                     onPressed: _clearSelection,
                     visualDensity: VisualDensity.compact,
@@ -433,8 +604,9 @@ class _PhotosViewState extends State<PhotosView>
                   const SizedBox(width: 8),
                   Text(
                     '${selectedItems.length} selected',
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
+                    style: NooText.cardTitle.copyWith(
+                      fontSize: 17,
+                      color: colors.fg1,
                     ),
                   ),
                 ],
@@ -447,7 +619,7 @@ class _PhotosViewState extends State<PhotosView>
               scrollDirection: Axis.horizontal,
               // Left-aligned (not anchored to the trailing edge) so the
               // first action's left edge sits at a fixed spot - lining up
-              // with the controls row's own first icon directly below it -
+              // with the controls row's own first chip directly below it -
               // regardless of how many actions there are.
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -457,7 +629,7 @@ class _PhotosViewState extends State<PhotosView>
                     selectedItems,
                   ))
                     IconButton(
-                      icon: Icon(action.icon, size: 20),
+                      icon: Icon(action.icon, size: 20, color: colors.fg1),
                       tooltip: action.label,
                       onPressed: action.onTap,
                       visualDensity: VisualDensity.compact,
@@ -471,117 +643,82 @@ class _PhotosViewState extends State<PhotosView>
     );
   }
 
-  Widget _buildPhotoTile(BuildContext context, NextcloudItem photo) {
-    final colorScheme = Theme.of(context).colorScheme;
+  Widget _buildPhotoTile(
+    BuildContext context,
+    NextcloudItem photo,
+    List<NextcloudItem> siblings,
+  ) {
     final pick = context.watch<PickController>();
     final session = context.watch<SessionController>();
     final isSelected = _selectedIds.contains(photo.id);
+    final isVideo = photo.type == NextcloudItemType.video;
 
-    // No border radius on the tile itself — the outer ClipRRect below is
-    // the only place that rounds it, so a swipe doesn't reveal a stray
-    // floating rounded corner mid-drag (see the same fix in files_view).
-    final tile = GestureDetector(
+    return NooPhotoTile(
+      selected: isSelected,
+      selectionMode: _isSelecting,
+      // No real duration source (no video-metadata extraction anywhere in
+      // the app) - an empty string still marks it as a video and shows the
+      // icon-only badge (DESIGN_SYSTEM.md: "else icon-only").
+      videoDuration: isVideo ? '' : null,
+      placeholderColor: NooPhotoTile.paletteColor(photo.id.hashCode),
       onTap: () {
         if (pick.isPicking) {
           _handlePickTap(context, pick, photo);
         } else if (_isSelecting) {
           _toggleSelection(photo);
         } else {
-          _openLightbox(context, photo);
+          _openLightbox(context, photo, siblings);
         }
       },
       onLongPress: pick.isPicking && !pick.pickRequest!.allowMultiple
           ? null
           : () => _toggleSelection(photo),
-      child: ColoredBox(
-        color: colorScheme.surfaceContainerHigh,
-        child: SelectableThumbnail(
-          isSelected: isSelected,
-          checkmarkSize: 32,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              photo.previewUrl != null
-                  ? LayoutBuilder(
-                      builder: (context, constraints) {
-                        // Decode at the tile's actual rendered size rather
-                        // than the full 500x500 preview the server returns —
-                        // cheaper to decode/cache while scrolling a grid.
-                        final cachePixels =
-                            (constraints.maxWidth *
-                                    MediaQuery.of(context).devicePixelRatio)
-                                .round();
-                        return Image.network(
-                          photo.previewUrl!,
-                          headers: session.service?.authHeaders,
-                          fit: BoxFit.cover,
-                          cacheWidth: cachePixels,
-                          cacheHeight: cachePixels,
-                          filterQuality: FilterQuality.low,
-                          gaplessPlayback: true,
-                          errorBuilder: (ctx, err, stack) =>
-                              _buildFallbackTile(context, photo),
-                        );
-                      },
-                    )
-                  : _buildFallbackTile(context, photo),
-              if (photo.type == NextcloudItemType.video)
-                Positioned(
-                  bottom: 8,
-                  right: 8,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.6),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.play_arrow_rounded,
-                      color: Colors.white,
-                      size: 16,
-                    ),
-                  ),
-                ),
-              if (photo.isFavorite)
-                const Positioned(
-                  top: 8,
-                  right: 8,
-                  child: Icon(
-                    Icons.favorite_rounded,
-                    color: Colors.red,
-                    size: 18,
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
+      child: photo.previewUrl != null
+          ? LayoutBuilder(
+              builder: (context, constraints) {
+                // Decode at the tile's actual rendered size rather than the
+                // full 500x500 preview the server returns - cheaper to
+                // decode/cache while scrolling a grid.
+                final cachePixels =
+                    (constraints.maxWidth *
+                            MediaQuery.of(context).devicePixelRatio)
+                        .round();
+                return Image.network(
+                  photo.previewUrl!,
+                  headers: session.service?.authHeaders,
+                  fit: BoxFit.cover,
+                  cacheWidth: cachePixels,
+                  cacheHeight: cachePixels,
+                  filterQuality: FilterQuality.low,
+                  gaplessPlayback: true,
+                  errorBuilder: (ctx, err, stack) =>
+                      _buildFallbackTile(context, photo),
+                );
+              },
+            )
+          : _buildFallbackTile(context, photo),
     );
-
-    return ClipRRect(borderRadius: BorderRadius.circular(16), child: tile);
   }
 
   Widget _buildFallbackTile(BuildContext context, NextcloudItem photo) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      color: colorScheme.secondaryContainer,
+    final colors = context.nooColors;
+    final kind = NooFileKind.from(name: photo.name, mimeType: photo.mimeType);
+    return ColoredBox(
+      color: kind.background(colors),
       child: Center(
-        child: Icon(
-          photo.type == NextcloudItemType.video
-              ? Icons.movie_rounded
-              : Icons.image_rounded,
-          color: colorScheme.onSecondaryContainer,
-          size: 32,
-        ),
+        child: Icon(kind.icon, color: kind.foreground(colors), size: 32),
       ),
     );
   }
 
-  void _openLightbox(BuildContext context, NextcloudItem photo) {
-    final photos = context.read<PhotosController>().items;
+  void _openLightbox(
+    BuildContext context,
+    NextcloudItem photo,
+    List<NextcloudItem> siblings,
+  ) {
     Navigator.push(
       context,
-      FileViewerScreen.route(item: photo, siblings: photos),
+      FileViewerScreen.route(item: photo, siblings: siblings),
     );
   }
 

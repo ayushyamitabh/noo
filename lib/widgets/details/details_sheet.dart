@@ -1,160 +1,149 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:path/path.dart' as p;
 import '../../models/nextcloud_item.dart';
-import '../gradual_bottom_sheet.dart';
+import '../../theme/design_tokens.dart';
+import '../noo/core/noo_segmented_control.dart';
+import '../noo/files/noo_file_kind.dart';
+import '../noo/files/noo_file_tile.dart';
+import '../noo/noo_layout.dart';
+import '../noo/overlays/noo_dialog.dart';
+import '../noo/overlays/noo_overlay_header.dart';
+import '../noo/overlays/noo_sheet.dart';
 import '../synced_header_scaffold.dart' show formatBytes;
 import 'details_activity_tab.dart';
 import 'details_info_tab.dart';
 import 'details_versions_tab.dart';
 
-IconData _detailsItemIcon(NextcloudItemType type) {
-  switch (type) {
-    case NextcloudItemType.folder:
-      return Icons.folder_rounded;
-    case NextcloudItemType.image:
-      return Icons.image_rounded;
-    case NextcloudItemType.video:
-      return Icons.movie_rounded;
-    case NextcloudItemType.audio:
-      return Icons.audiotrack_rounded;
-    case NextcloudItemType.document:
-      return Icons.description_rounded;
-    case NextcloudItemType.archive:
-      return Icons.folder_zip_rounded;
-    case NextcloudItemType.file:
-      return Icons.insert_drive_file_rounded;
-  }
+/// The file-type tile every per-item sheet/dialog opens on
+/// (`DESIGN_SYSTEM.md` §1.2/§4) - shared by [DetailsSheet] and [ShareSheet]
+/// so both overlays for the same item use the same header tile.
+Widget detailsFileTile(
+  NextcloudItem item, {
+  NooFileTileSize size = NooFileTileSize.header,
+}) {
+  return NooFileTile(
+    kind: NooFileKind.from(
+      name: item.name,
+      mimeType: item.mimeType,
+      isDirectory: item.isFolder,
+    ),
+    size: size,
+  );
 }
 
-/// Reusable "Details" bottom sheet for a single file/folder — Info,
-/// Versions, and Activity tabs. Sharing lives in its own sheet
-/// ([ShareSheet]), triggered separately from wherever a "Share" action
-/// appears. Triggered from long-press selection (exactly one item), the
-/// media viewer's action bar, and the "open externally" flow for
-/// unsupported file types.
+/// The header's meta subtitle - "12.3 KB · Documents" for a file, "Folder"
+/// for a folder (`DESIGN_SYSTEM.md` §4: "size · folder").
+String detailsMetaLine(NextcloudItem item) {
+  if (item.isFolder) return 'Folder';
+  final parent = p.basename(p.dirname(item.path));
+  final location = parent.isEmpty || parent == '.' || parent == '/'
+      ? 'Home'
+      : parent;
+  return '${formatBytes(item.size)} · $location';
+}
+
+enum _DetailsTab { info, versions, activity }
+
+/// Reusable "Details" bottom sheet/dialog for a single file/folder - Info,
+/// Versions and Activity switched by a segmented control (there's no
+/// tab-strip component in the noo kit, so this is the closest fit - see the
+/// rebuild report). Sharing lives in its own sheet ([ShareSheet]), triggered
+/// separately from wherever a "Share" action appears. Triggered from
+/// long-press selection (exactly one item), the media viewer's action bar,
+/// and the "open externally" flow for unsupported file types.
+///
+/// Only used directly on mobile (bundles its own [NooOverlayHeader]); the
+/// desktop path in [show] passes [_DetailsBody] straight to [showNooDialog],
+/// which renders the header itself via `leading`/`title`/`subtitle`.
 class DetailsSheet extends StatelessWidget {
   final NextcloudItem item;
 
   const DetailsSheet({super.key, required this.item});
 
   static Future<void> show(BuildContext context, NextcloudItem item) {
-    return showGradualBottomSheet(
-      context,
-      builder: (context, scrollController) => DetailsSheet(item: item),
-    );
+    if (NooLayout.isDesktop(context)) {
+      return showNooDialog(
+        context,
+        leading: detailsFileTile(item),
+        title: item.name,
+        subtitle: detailsMetaLine(item),
+        children: [_DetailsBody(item: item)],
+      );
+    }
+    return showNooSheet(context, children: [DetailsSheet(item: item)]);
   }
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 3,
-      child: Column(
-        children: [
-          DetailsHeader(item: item),
-          // Icon size matches the bottom nav bar's own tab icons
-          // (FloatingBottomNavBar) rather than TabBar's oversized default,
-          // so a "tabs" affordance reads the same size everywhere in the
-          // app.
-          const TabBar(
-            tabs: [
-              Tab(
-                icon: Icon(Icons.info_outline_rounded, size: 22),
-                text: 'Info',
-              ),
-              Tab(
-                icon: Icon(Icons.history_rounded, size: 22),
-                text: 'Versions',
-              ),
-              Tab(
-                icon: Icon(Icons.electric_bolt_rounded, size: 22),
-                text: 'Activity',
-              ),
-            ],
-          ),
-          Expanded(
-            child: TabBarView(
-              children: [
-                DetailsInfoTab(item: item),
-                DetailsVersionsTab(item: item),
-                DetailsActivityTab(item: item),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        NooOverlayHeader(
+          leading: detailsFileTile(item),
+          title: item.name,
+          subtitle: detailsMetaLine(item),
+          onClose: () => Navigator.pop(context),
+        ),
+        const SizedBox(height: NooSpace.lg),
+        _DetailsBody(item: item),
+      ],
     );
   }
 }
 
-/// Icon/name/size/date row shared by [DetailsSheet], the media viewer's
-/// collapsed "peek" state (which shows just this, before the user drags the
-/// sheet open far enough to reveal the tabs), and [ShareSheet]'s own title
-/// (so every per-item bottom sheet opens on the same header instead of
-/// [ShareSheet] alone using a bare title `Text`).
-class DetailsHeader extends StatelessWidget {
+/// The segmented control plus whichever tab's content it selects. A private
+/// [StatefulWidget] rather than three fields on [DetailsSheet] so the
+/// selection survives independently of how the header/container around it
+/// is built (mobile embeds this once, desktop hands it to [showNooDialog]
+/// directly).
+class _DetailsBody extends StatefulWidget {
   final NextcloudItem item;
 
-  /// Defaults to this widget's own standalone inset ([DetailsSheet]); a
-  /// caller whose surrounding scroll view already applies horizontal
-  /// padding (e.g. [ShareSheet]'s `ListView`) should pass a padding with
-  /// zero left/right to avoid doubling it up.
-  final EdgeInsetsGeometry padding;
+  const _DetailsBody({required this.item});
 
-  const DetailsHeader({
-    super.key,
-    required this.item,
-    this.padding = const EdgeInsets.fromLTRB(20, 12, 20, 8),
-  });
+  @override
+  State<_DetailsBody> createState() => _DetailsBodyState();
+}
+
+class _DetailsBodyState extends State<_DetailsBody> {
+  _DetailsTab _tab = _DetailsTab.info;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Padding(
-      padding: padding,
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(12),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        NooSegmentedControl<_DetailsTab>(
+          onSurface: true,
+          fill: true,
+          value: _tab,
+          onChanged: (tab) => setState(() => _tab = tab),
+          options: const [
+            NooSegmentOption(
+              value: _DetailsTab.info,
+              icon: LucideIcons.info,
+              label: 'Info',
             ),
-            child: Icon(
-              _detailsItemIcon(item.type),
-              color: colorScheme.onPrimaryContainer,
-              size: 22,
+            NooSegmentOption(
+              value: _DetailsTab.versions,
+              icon: LucideIcons.history,
+              label: 'Versions',
             ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  item.isFolder
-                      ? DateFormat.yMMMd().format(item.lastModified)
-                      : '${formatBytes(item.size)} • ${DateFormat.yMMMd().format(item.lastModified)}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
+            NooSegmentOption(
+              value: _DetailsTab.activity,
+              icon: LucideIcons.activity,
+              label: 'Activity',
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
+        const SizedBox(height: NooSpace.lg),
+        switch (_tab) {
+          _DetailsTab.info => DetailsInfoTab(item: widget.item),
+          _DetailsTab.versions => DetailsVersionsTab(item: widget.item),
+          _DetailsTab.activity => DetailsActivityTab(item: widget.item),
+        },
+      ],
     );
   }
 }

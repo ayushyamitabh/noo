@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/design_tokens.dart';
 
 /// A single icon button that fills with a solid circle when active —
 /// the building block for Drive-style toggle controls. Thin wrapper around
@@ -21,7 +22,7 @@ class ToggleIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final colors = context.nooColors;
 
     return IconButton(
       isSelected: isSelected,
@@ -33,12 +34,12 @@ class ToggleIconButton extends StatelessWidget {
         shape: const WidgetStatePropertyAll(CircleBorder()),
         foregroundColor: WidgetStateProperty.resolveWith(
           (states) => states.contains(WidgetState.selected)
-              ? colorScheme.onPrimaryContainer
-              : colorScheme.onSurfaceVariant,
+              ? colors.accentText
+              : colors.fg2,
         ),
         backgroundColor: WidgetStateProperty.resolveWith(
           (states) => states.contains(WidgetState.selected)
-              ? colorScheme.primaryContainer
+              ? colors.accentSoft
               : Colors.transparent,
         ),
       ),
@@ -55,12 +56,12 @@ class SegmentedIconGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final colors = context.nooColors;
     return Container(
-      padding: const EdgeInsets.all(2),
+      padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(20),
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(NooRadii.pill),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: children),
     );

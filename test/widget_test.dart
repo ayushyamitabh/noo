@@ -114,7 +114,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Noo'), findsOneWidget);
-    expect(find.text('Server Address'), findsOneWidget);
+    expect(find.text('cloud.example.com'), findsOneWidget);
     expect(find.text('Continue'), findsOneWidget);
   });
 }

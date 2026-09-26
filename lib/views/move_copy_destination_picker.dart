@@ -1,21 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../models/move_copy_result.dart';
 import '../models/nextcloud_item.dart';
 import '../providers/files_controller.dart';
 import '../providers/item_operations.dart';
-import '../providers/session_controller.dart';
+import '../theme/design_tokens.dart';
 import '../widgets/breadcrumbs.dart';
-import '../widgets/item_icon.dart';
 import '../widgets/more_tabs_button.dart';
 import '../widgets/move_copy_conflict_sheet.dart';
-import '../widgets/profile_avatar_button.dart';
-import '../widgets/segmented_icon_toggle.dart';
-import '../widgets/sort_menu_button.dart';
-import '../widgets/sticky_header_delegate.dart';
-import '../widgets/synced_header_scaffold.dart';
+import '../widgets/noo/core/noo_button.dart';
+import '../widgets/noo/files/noo_file_kind.dart';
+import '../widgets/noo/files/noo_file_row.dart';
+import '../widgets/noo/files/noo_file_table.dart';
+import '../widgets/noo/nav/noo_top_bar.dart';
+import '../widgets/noo/nav/noo_toolbar.dart';
+import '../widgets/noo/noo_layout.dart';
+import '../widgets/tabs/tab_state_slivers.dart';
 
 /// Destination-folder browser for moving/copying [items] (a multi-select
 /// batch from Files or Photos). Visually mirrors `ShareUploadView`'s
@@ -175,293 +176,105 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
     ).pop(MoveCopyResult(succeeded: succeeded, failed: failed));
   }
 
-  Widget _buildControlsRow(FilesController files) {
-    return SizedBox(
-      height: 44,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            IconButton(
-              icon: Icon(
-                files.filesSortAscending
-                    ? Icons.arrow_upward_rounded
-                    : Icons.arrow_downward_rounded,
-                size: 20,
-              ),
-              visualDensity: VisualDensity.compact,
-              tooltip: files.filesSortAscending ? 'Ascending' : 'Descending',
-              onPressed: files.toggleFilesSortOrder,
-            ),
-            SizedBox(
-              width: 130,
-              child: SortMenuButton(
-                field: files.filesSortField,
-                onChanged: files.setFilesSortField,
-              ),
-            ),
-            ToggleIconButton(
-              icon: files.showHiddenFiles
-                  ? Icons.visibility_rounded
-                  : Icons.visibility_off_rounded,
-              isSelected: files.showHiddenFiles,
-              onTap: () => files.toggleShowHiddenFiles(),
-              tooltip: 'Show hidden files',
-            ),
-            const SizedBox(width: 4),
-            SegmentedIconGroup(
-              children: [
-                ToggleIconButton(
-                  icon: Symbols.circles_rounded,
-                  isSelected: files.storageScope == StorageScope.cloud,
-                  onTap: () => files.setStorageScope(StorageScope.cloud),
-                  tooltip: 'Cloud storage',
-                ),
-                ToggleIconButton(
-                  icon: Symbols.hard_drive_rounded,
-                  isSelected: files.storageScope == StorageScope.external,
-                  onTap: () => files.setStorageScope(StorageScope.external),
-                  tooltip: 'External storage',
-                ),
-              ],
-            ),
-            const SizedBox(width: 8),
-            SegmentedIconGroup(
-              children: [
-                ToggleIconButton(
-                  icon: Icons.view_list_rounded,
-                  isSelected: !files.isGridView,
-                  onTap: () => files.setGridView(false),
-                  tooltip: 'List view',
-                ),
-                ToggleIconButton(
-                  icon: Icons.grid_view_rounded,
-                  isSelected: files.isGridView,
-                  onTap: () => files.setGridView(true),
-                  tooltip: 'Grid view',
-                ),
-              ],
-            ),
-          ],
+  // Only folders are valid Move/Copy destinations, so the listing - unlike
+  // Files' own - never shows plain files at all.
+  Widget _buildRow(NextcloudItem item, int index, int count) {
+    final colors = context.nooColors;
+    final row = NooFileRow(
+      kind: NooFileKind.folder,
+      name: item.name,
+      meta: 'Folder',
+      iosStyle: NooLayout.iosStyle(context),
+      onTap: () => _navigateToFolder(item.path),
+    );
+
+    final isFirst = index == 0;
+    final isLast = index == count - 1;
+    return Column(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.vertical(
+            top: isFirst ? const Radius.circular(NooRadii.card) : Radius.zero,
+            bottom: isLast ? const Radius.circular(NooRadii.card) : Radius.zero,
+          ),
+          child: row,
         ),
-      ),
+        if (!isLast) Container(height: 1, color: colors.line),
+      ],
     );
   }
 
-  // Only folders are valid Move/Copy destinations - files still show (so
-  // the listing matches what the Files tab itself would show for this
-  // folder) but are visually dimmed and inert, same treatment as
-  // ShareUploadView's own destination browser.
-  Widget _buildListTile(NextcloudItem item) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final session = context.watch<SessionController>();
-    final isFolder = item.isFolder;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Opacity(
-          opacity: isFolder ? 1 : 0.5,
-          child: Material(
-            color: colorScheme.surfaceContainerLow,
-            child: InkWell(
-              onTap: isFolder ? () => _navigateToFolder(item.path) : null,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                child: Row(
-                  children: [
-                    ItemThumbnail(
-                      item: item,
-                      service: session.service,
-                      size: 44,
-                      borderRadius: 12,
-                      iconSize: 22,
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item.name,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            isFolder
-                                ? 'Folder'
-                                : '${formatBytes(item.size)} • ${DateFormat.yMMMd().format(item.lastModified)}',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (isFolder) const Icon(Icons.chevron_right_rounded),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGridCard(NextcloudItem item) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final isFolder = item.isFolder;
-    final iconColor = getIconColor(context, item.type);
-
-    return Opacity(
-      opacity: isFolder ? 1 : 0.5,
-      child: Material(
-        color: colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(20),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: isFolder ? () => _navigateToFolder(item.path) : null,
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: iconColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    getItemIcon(item.type),
-                    color: iconColor,
-                    size: 24,
-                  ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      isFolder ? 'Folder' : formatBytes(item.size),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+  Widget _buildDesktopRow(NextcloudItem item) {
+    return NooFileTableRow(
+      kind: NooFileKind.folder,
+      name: item.name,
+      onTap: () => _navigateToFolder(item.path),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final colors = context.nooColors;
+    final desktop = NooLayout.isDesktop(context);
     final files = context.watch<FilesController>();
     final ops = context.read<ItemOperations>();
     final hasBreadcrumbs = _pathStack.length > 1;
-    final currentLabel = _currentPath == '/'
-        ? 'Home'
-        : _currentPath.split('/').where((s) => s.isNotEmpty).last;
-    final items = files.applyFilesDisplayPrefs(_rawItems);
+    final folders = files
+        .applyFilesDisplayPrefs(_rawItems)
+        .where((item) => item.isFolder)
+        .toList();
     final invalidDestination = _destinationIsInvalid();
+    final gutter = NooLayout.gutter(context);
+    final verb = widget.copy ? 'Copying' : 'Moving';
+    final itemCount = widget.items.length;
 
-    final controlsColumn = Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildControlsRow(files),
-          if (hasBreadcrumbs) ...[
-            const SizedBox(height: 10),
-            SizedBox(
-              height: 32,
-              child: Breadcrumbs(
-                pathStack: _pathStack,
-                onTap: _navigateToPathIndex,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-
-    final contentSlivers = <Widget>[
-      SliverPersistentHeader(
-        pinned: true,
-        delegate: StickyHeaderDelegate(
-          height: hasBreadcrumbs ? 114 : 72,
-          child: controlsColumn,
+    final slivers = <Widget>[
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(gutter, NooSpace.md, gutter, NooSpace.sm),
+          child: hasBreadcrumbs
+              ? SizedBox(
+                  height: 32,
+                  child: Breadcrumbs(
+                    pathStack: _pathStack,
+                    onTap: _navigateToPathIndex,
+                  ),
+                )
+              : const SizedBox.shrink(),
         ),
       ),
       if (_isLoading)
-        const SliverFillRemaining(
-          hasScrollBody: false,
-          child: Center(child: CircularProgressIndicator()),
+        tabLoadingSliver
+      else if (folders.isEmpty)
+        tabEmptySliver(
+          context,
+          icon: LucideIcons.folder,
+          message: 'No folders here',
         )
-      else if (items.isEmpty)
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: Center(
-            child: Text(
-              'Folder is empty',
-              style: TextStyle(color: colorScheme.onSurfaceVariant),
-            ),
-          ),
-        )
-      else if (files.isGridView)
+      else if (desktop)
         SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          sliver: SliverGrid(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 1.1,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
+          padding: EdgeInsets.symmetric(horizontal: gutter),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => _buildDesktopRow(folders[index]),
+              childCount: folders.length,
             ),
-            delegate: SliverChildBuilderDelegate((context, index) {
-              return _buildGridCard(items[index]);
-            }, childCount: items.length),
           ),
         )
       else
         SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          padding: EdgeInsets.symmetric(horizontal: gutter),
           sliver: SliverList(
-            delegate: SliverChildBuilderDelegate((context, index) {
-              return _buildListTile(items[index]);
-            }, childCount: items.length),
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => _buildRow(folders[index], index, folders.length),
+              childCount: folders.length,
+            ),
           ),
         ),
-      const SliverToBoxAdapter(child: SizedBox(height: 24)),
+      const SliverToBoxAdapter(child: SizedBox(height: NooSpace.xl)),
     ];
+
+    final title = widget.copy ? 'Copy to...' : 'Move to...';
 
     return PopScope(
       canPop: _pathStack.length <= 1,
@@ -469,58 +282,88 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
         if (!didPop) _navigateUp();
       },
       child: Scaffold(
-        body: SyncedHeaderScaffold(
-          scrollController: _scrollController,
-          actions: const [MoreTabsButton(), ProfileAvatarButton()],
-          contentSlivers: contentSlivers,
-        ),
-        bottomNavigationBar: Material(
-          color: colorScheme.surfaceContainerHigh,
-          elevation: 8,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        backgroundColor: colors.bg,
+        appBar: desktop
+            ? NooToolbar(
+                title: title,
+                actions: [
+                  const MoreTabsButton(),
+                  const SizedBox(width: NooSpace.xs),
+                  NooButton(
+                    variant: NooButtonVariant.secondary,
+                    size: NooButtonSize.toolbar,
+                    onTap: () => Navigator.maybePop(context),
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              )
+            : NooTopBar(
+                style: NooLayout.navStyle(context),
+                title: title,
+                leading: const NooTopBarBack(label: 'Cancel'),
+                // Stacks a hidden tab's own screen on top rather than
+                // jumping the shell there, so it doesn't abandon this
+                // picker - safe to keep, unlike ShareUploadView's chrome.
+                actions: const [MoreTabsButton()],
+              ),
+        body: SafeArea(
+          top: false,
+          child: RefreshIndicator(
+            color: colors.accent,
+            backgroundColor: colors.surface,
+            onRefresh: () => _fetch(_currentPath),
+            child: CustomScrollView(controller: _scrollController, slivers: slivers),
           ),
-          clipBehavior: Clip.antiAlias,
+        ),
+        bottomNavigationBar: DecoratedBox(
+          decoration: BoxDecoration(
+            color: colors.surface,
+            border: Border(top: BorderSide(color: colors.line)),
+          ),
           child: SafeArea(
             top: false,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+              padding: const EdgeInsets.fromLTRB(
+                NooSpace.lg,
+                NooSpace.md,
+                NooSpace.lg,
+                NooSpace.md,
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (invalidDestination) ...[
-                    Text(
-                      "Can't ${widget.copy ? 'copy' : 'move'} a folder into "
-                      "itself or one of its own subfolders",
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.error,
-                      ),
+                  Text(
+                    invalidDestination
+                        ? "Can't ${widget.copy ? 'copy' : 'move'} a folder into "
+                              "itself or one of its own subfolders"
+                        : '$verb $itemCount item${itemCount == 1 ? '' : 's'}',
+                    style: NooText.meta.copyWith(
+                      color: invalidDestination ? colors.danger : colors.fg3,
                     ),
-                    const SizedBox(height: 8),
-                  ],
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: invalidDestination || _isSubmitting
-                          ? null
-                          : () => _confirm(ops),
-                      icon: _isSubmitting
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : Icon(
-                              widget.copy
-                                  ? Icons.copy_rounded
-                                  : Icons.drive_file_move_rounded,
+                  ),
+                  const SizedBox(height: NooSpace.sm),
+                  NooButton(
+                    variant: NooButtonVariant.primary,
+                    size: NooButtonSize.cta,
+                    fullWidth: true,
+                    disabled: invalidDestination || _isSubmitting,
+                    icon: _isSubmitting
+                        ? null
+                        : (widget.copy ? LucideIcons.copy : LucideIcons.folderInput),
+                    onTap: invalidDestination || _isSubmitting
+                        ? null
+                        : () => _confirm(ops),
+                    child: _isSubmitting
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
                             ),
-                      label: Text(
-                        '${widget.copy ? 'Copy' : 'Move'} ${widget.items.length} '
-                        'item(s) to $currentLabel',
-                      ),
-                    ),
+                          )
+                        : Text(widget.copy ? 'Copy here' : 'Move here'),
                   ),
                 ],
               ),

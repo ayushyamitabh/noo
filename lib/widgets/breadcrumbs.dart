@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../theme/design_tokens.dart';
 
 /// Tappable "Home / Folder / Sub-folder" trail shown whenever the user has
-/// navigated below the root, in both the Files and Photos tabs.
+/// navigated below the root - now only used by `ShareUploadView` and
+/// `MoveCopyDestinationPicker` (Files/Photos moved to their own noo-styled
+/// `FileBreadcrumbRow`), so this is free to carry noo tokens directly rather
+/// than staying on the old Material look. Same behaviour: every crumb but
+/// the last is tappable, jumping back to that depth.
 class Breadcrumbs extends StatelessWidget {
   final List<String> pathStack;
   final ValueChanged<int> onTap;
@@ -19,8 +25,7 @@ class Breadcrumbs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final colors = context.nooColors;
     final lastIndex = pathStack.length - 1;
 
     return SingleChildScrollView(
@@ -32,37 +37,42 @@ class Breadcrumbs extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 2),
                 child: Icon(
-                  Icons.chevron_right_rounded,
-                  size: 16,
-                  color: colorScheme.outlineVariant,
+                  LucideIcons.chevronRight,
+                  size: 14,
+                  color: colors.fg3,
                 ),
               ),
             if (i == lastIndex)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 6),
                 child: Text(
                   _labelFor(i),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: colorScheme.onSurface,
+                  style: NooText.body.copyWith(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: colors.fg1,
                   ),
                 ),
               )
             else
-              // A chip's whole pill is the tap target (not just the text),
-              // so the previous plain-text crumbs were fiddly to hit.
-              ActionChip(
-                label: Text(_labelFor(i)),
-                labelStyle: theme.textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: colorScheme.primary,
+              // The whole pill is the tap target, not just the text.
+              InkWell(
+                onTap: () => onTap(i),
+                borderRadius: BorderRadius.circular(NooRadii.pill),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  child: Text(
+                    _labelFor(i),
+                    style: NooText.body.copyWith(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: colors.accentText,
+                    ),
+                  ),
                 ),
-                onPressed: () => onTap(i),
-                backgroundColor: colorScheme.surfaceContainerHigh,
-                side: BorderSide.none,
-                visualDensity: VisualDensity.compact,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                padding: const EdgeInsets.symmetric(horizontal: 4),
               ),
           ],
         ],

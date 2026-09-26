@@ -1,0 +1,16 @@
+# A throwaway Nextcloud that only ever holds fake data - the backend the Play
+# Store screenshots are taken against (see tool/screenshots.sh). Nothing is
+# persisted: `docker compose down -v` wipes it completely.
+services:
+  nextcloud:
+    image: ${NEXTCLOUD_IMAGE:-nextcloud:apache}
+    ports:
+      - "${DEMO_PORT:-80}:80"
+    environment:
+      # SQLite keeps this to a single container.
+      SQLITE_DATABASE: nextcloud
+      NEXTCLOUD_ADMIN_USER: admin
+      NEXTCLOUD_ADMIN_PASSWORD: demo-admin-password
+      # `localhost` is how the Android emulator reaches this server (via
+      # `adb reverse`); DEMO_HOST is the optional friendlier hostname.
+      NEXTCLOUD_TRUSTED_DOMAINS: "localhost 127.0.0.1 10.0.2.2 ${DEMO_HOST:-demo.example.com}"

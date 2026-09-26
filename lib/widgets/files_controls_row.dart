@@ -1,16 +1,37 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../providers/files_controller.dart';
-import 'segmented_icon_toggle.dart';
-import 'sort_menu_button.dart';
+import '../theme/design_tokens.dart';
+import 'noo/core/noo_chip.dart';
+import 'noo/core/noo_segmented_control.dart';
+import 'noo/core/noo_toggle.dart';
+import 'noo/lists/noo_grouped_list.dart';
+import 'noo/lists/noo_settings_row.dart';
+import 'noo/overlays/noo_sheet.dart';
+import 'sort_menu_button.dart' show sortFieldLabel;
 
-/// The Files tab's sort/hidden/scope/type-filter/view-mode controls row,
-/// shared with the Offline tab so both read and write the exact same
-/// [FilesController] prefs. [folderPath] picks which folder's sort applies
-/// (the Files tab's current folder, or the folder being browsed offline).
-/// [showStorageScope] is off for Offline - a local mirror has no
-/// cloud/external distinction.
+String _typeFilterLabel(FilesTypeFilter filter) {
+  switch (filter) {
+    case FilesTypeFilter.all:
+      return 'All types';
+    case FilesTypeFilter.filesOnly:
+      return 'Files only';
+    case FilesTypeFilter.foldersOnly:
+      return 'Folders only';
+  }
+}
+
+/// The Files tab's sort/filter/view-mode row (Noo Design System project's
+/// Files screen: a sort chip, a filter chip, a spacer, then the list/grid
+/// segmented toggle) - shared with the Offline tab, which reads and writes
+/// the exact same [FilesController] prefs. [folderPath] picks which
+/// folder's sort applies. [showStorageScope] is off for Offline - a local
+/// mirror has no cloud/external distinction.
+///
+/// Hidden-files and storage-scope, which have no home in the mockup's
+/// simple two-chip row, live inside the filter chip's sheet instead of as
+/// their own row controls.
 class FilesControlsRow extends StatelessWidget {
   final String folderPath;
   final bool showStorageScope;
@@ -26,6 +47,9 @@ class FilesControlsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final files = context.watch<FilesController>();
+    final filtersActive = files.filesTypeFilter != FilesTypeFilter.all ||
+        files.showHiddenFiles ||
+        (showStorageScope && files.storageScope != StorageScope.cloud);
 
     return SizedBox(
       height: 44,
@@ -34,103 +58,127 @@ class FilesControlsRow extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            IconButton(
-              icon: Icon(
-                files.sortAscendingFor(folderPath)
-                    ? Icons.arrow_upward_rounded
-                    : Icons.arrow_downward_rounded,
-                size: 20,
-              ),
-              visualDensity: VisualDensity.compact,
-              tooltip: files.sortAscendingFor(folderPath)
-                  ? 'Ascending'
-                  : 'Descending',
-              onPressed: () => files.toggleSortOrderFor(folderPath),
-            ),
-            // A plain width, not Expanded - this row scrolls horizontally,
-            // which gives every control unbounded width to lay out in, so a
-            // flex child would throw.
-            SizedBox(
-              width: 130,
-              child: SortMenuButton(
-                field: files.sortFieldFor(folderPath),
-                onChanged: (field) => files.setSortFieldFor(folderPath, field),
-              ),
-            ),
-            ToggleIconButton(
-              icon: files.showHiddenFiles
-                  ? Icons.visibility_rounded
-                  : Icons.visibility_off_rounded,
-              isSelected: files.showHiddenFiles,
-              onTap: () => files.toggleShowHiddenFiles(),
-              tooltip: 'Show hidden files',
-            ),
-            const SizedBox(width: 4),
-            if (showStorageScope) ...[
-              SegmentedIconGroup(
-                children: [
-                  ToggleIconButton(
-                    icon: Symbols.circles_rounded,
-                    isSelected: files.storageScope == StorageScope.cloud,
-                    onTap: () => files.setStorageScope(StorageScope.cloud),
-                    tooltip: 'Cloud storage',
-                  ),
-                  ToggleIconButton(
-                    icon: Symbols.hard_drive_rounded,
-                    isSelected: files.storageScope == StorageScope.external,
-                    onTap: () => files.setStorageScope(StorageScope.external),
-                    tooltip: 'External storage',
-                  ),
-                ],
-              ),
-              const SizedBox(width: 8),
-            ],
-            SegmentedIconGroup(
-              children: [
-                ToggleIconButton(
-                  icon: Icons.select_all_rounded,
-                  isSelected: files.filesTypeFilter == FilesTypeFilter.all,
-                  onTap: () => files.setFilesTypeFilter(FilesTypeFilter.all),
-                  tooltip: 'Files & folders',
-                ),
-                ToggleIconButton(
-                  icon: Icons.insert_drive_file_outlined,
-                  isSelected:
-                      files.filesTypeFilter == FilesTypeFilter.filesOnly,
-                  onTap: () =>
-                      files.setFilesTypeFilter(FilesTypeFilter.filesOnly),
-                  tooltip: 'Files only',
-                ),
-                ToggleIconButton(
-                  icon: Icons.folder_outlined,
-                  isSelected:
-                      files.filesTypeFilter == FilesTypeFilter.foldersOnly,
-                  onTap: () =>
-                      files.setFilesTypeFilter(FilesTypeFilter.foldersOnly),
-                  tooltip: 'Folders only',
-                ),
-              ],
+            NooChip(
+              icon: files.sortAscendingFor(folderPath)
+                  ? LucideIcons.arrowUp
+                  : LucideIcons.arrowDown,
+              onTap: () => _showSortSheet(context, files),
+              child: Text(sortFieldLabel(files.sortFieldFor(folderPath))),
             ),
             const SizedBox(width: 8),
-            SegmentedIconGroup(
-              children: [
-                ToggleIconButton(
-                  icon: Icons.view_list_rounded,
-                  isSelected: !files.isGridView,
-                  onTap: () => files.setGridView(false),
-                  tooltip: 'List view',
-                ),
-                ToggleIconButton(
-                  icon: Icons.grid_view_rounded,
-                  isSelected: files.isGridView,
-                  onTap: () => files.setGridView(true),
-                  tooltip: 'Grid view',
-                ),
+            NooChip(
+              icon: LucideIcons.filter,
+              trailing: NooChipTrailing.menu,
+              selected: filtersActive,
+              onTap: () => _showFilterSheet(context, files),
+              child: Text(_typeFilterLabel(files.filesTypeFilter)),
+            ),
+            const Spacer(),
+            NooSegmentedControl<bool>(
+              iconOnly: true,
+              value: files.isGridView,
+              onChanged: files.setGridView,
+              options: const [
+                NooSegmentOption(value: false, icon: LucideIcons.list),
+                NooSegmentOption(value: true, icon: LucideIcons.grid),
               ],
             ),
           ],
         ),
       ),
+    );
+  }
+
+  void _showSortSheet(BuildContext context, FilesController files) {
+    showNooSheet(
+      context,
+      children: [
+        NooSegmentedControl<bool>(
+          fill: true,
+          value: files.sortAscendingFor(folderPath),
+          onChanged: (asc) {
+            if (asc != files.sortAscendingFor(folderPath)) {
+              files.toggleSortOrderFor(folderPath);
+            }
+          },
+          options: const [
+            NooSegmentOption(value: true, icon: LucideIcons.arrowUp, label: 'Ascending'),
+            NooSegmentOption(value: false, icon: LucideIcons.arrowDown, label: 'Descending'),
+          ],
+        ),
+        NooGroupedList(
+          children: [
+            for (final field in FileSortField.values)
+              NooSettingsRow(
+                label: Text(sortFieldLabel(field)),
+                trailing: field == files.sortFieldFor(folderPath)
+                    ? Icon(LucideIcons.check, size: 18, color: context.nooColors.accentText)
+                    : null,
+                onTap: () {
+                  files.setSortFieldFor(folderPath, field);
+                  Navigator.pop(context);
+                },
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  void _showFilterSheet(BuildContext context, FilesController files) {
+    showNooSheet(
+      context,
+      children: [
+        NooGroupedList(
+          label: 'Show',
+          children: [
+            NooSettingsRow(
+              label: const Text('Files and folders'),
+              trailing: files.filesTypeFilter == FilesTypeFilter.all
+                  ? Icon(LucideIcons.check, size: 18, color: context.nooColors.accentText)
+                  : null,
+              onTap: () => files.setFilesTypeFilter(FilesTypeFilter.all),
+            ),
+            NooSettingsRow(
+              label: const Text('Files only'),
+              trailing: files.filesTypeFilter == FilesTypeFilter.filesOnly
+                  ? Icon(LucideIcons.check, size: 18, color: context.nooColors.accentText)
+                  : null,
+              onTap: () => files.setFilesTypeFilter(FilesTypeFilter.filesOnly),
+            ),
+            NooSettingsRow(
+              label: const Text('Folders only'),
+              trailing: files.filesTypeFilter == FilesTypeFilter.foldersOnly
+                  ? Icon(LucideIcons.check, size: 18, color: context.nooColors.accentText)
+                  : null,
+              onTap: () => files.setFilesTypeFilter(FilesTypeFilter.foldersOnly),
+            ),
+          ],
+        ),
+        NooGroupedList(
+          children: [
+            NooSettingsRow(
+              icon: LucideIcons.eye,
+              label: const Text('Show hidden files'),
+              trailing: NooToggle(
+                checked: files.showHiddenFiles,
+                onChanged: (_) => files.toggleShowHiddenFiles(),
+              ),
+            ),
+            if (showStorageScope)
+              NooSettingsRow(
+                icon: LucideIcons.hardDrive,
+                label: const Text('External storage'),
+                trailing: NooToggle(
+                  checked: files.storageScope == StorageScope.external,
+                  onChanged: (external) => files.setStorageScope(
+                    external ? StorageScope.external : StorageScope.cloud,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
     );
   }
 }

@@ -1,12 +1,20 @@
 # Styling
 
-**Migration in progress:** this file documents the current (pre-rework)
-Material 3 theme. The target look is
+**Migration in progress:** the target look is
 [`design-system/DESIGN_SYSTEM.md`](design-system/DESIGN_SYSTEM.md) — warm
 neutrals, one violet accent, pill controls, Schibsted Grotesk/Instrument
-Sans, no gradients/shadows. Update this file to describe the new system as
-each area gets reworked, rather than leaving stale Material 3 guidance next
-to a design system that's already superseded it.
+Sans, no gradients/shadows — built from the `widgets/noo/` component kit
+(see "Noo design-system components" below). Rebuilt so far: the app shell
+(top/bottom bars, drawer, sidebar, toolbar), Files/Offline, Photos,
+Favorites, Recent, Activity, Trash, Shares, Settings, the lock screen,
+login, `ShareUploadView`, `MoveCopyDestinationPicker`,
+`MoveCopyConflictSheet`, the shared `Breadcrumbs` widget, and the file
+details/share bottom sheets/dialogs (`DetailsSheet`/`ShareSheet`). **Still on
+the pre-rework Material 3 theme** documented in "Theme" and "Reusable
+chrome" below: `FileViewerScreen` (the media viewer), `SearchView`, and
+`LoginWebviewView`. Update this file to describe each area as it gets
+reworked, rather than leaving stale Material 3 guidance next to a design
+system that's already superseded it.
 
 ## Theme
 
@@ -42,62 +50,148 @@ widgets. Key points:
   and no `scrollbarTheme` override (tried once, explicitly reverted). Don't
   reintroduce one without being asked.
 
+## Noo design-system components
+
+The rebuilt UI is assembled from `lib/widgets/noo/`, which implements
+`DESIGN_SYSTEM.md` §2–3. Build new screens from these rather than from raw
+Material widgets or the pre-rework chrome below.
+
+- **Tokens** live in [`design_tokens.dart`](../../lib/theme/design_tokens.dart):
+  colors via `context.nooColors` (a `NooColors` `ThemeExtension`), plus
+  `NooText`, `NooSpace`, `NooRadii`, `NooSizes`, `NooMotion` and
+  `nooDialogShadow`. `NooText` styles set no color; callers add it with
+  `copyWith(color: ...)`. Flutter's `TextStyle.height` is a multiple of font
+  size, so the spec's CSS line-height maps to it directly (for example,
+  0.9 → `height: 0.9`).
+- **Icons are Lucide** (`lucide_icons_flutter`, `LucideIcons.*`) inside
+  `noo/`, never Material `Icons.*`.
+- **Components are data-agnostic.** They take strings, icons, colors and
+  callbacks, not `NextcloudItem`/`AppTab`, so the screen layer maps models
+  onto them.
+- **Platform differences** are chosen with a flag rather than by reading the
+  platform inside the widget: `NooNavStyle` (`ios`/`android`, with
+  `NooNavStyle.fromPlatform`) for nav chrome, and `iosStyle` on rows and
+  cards for the ellipsis vs. vertical-ellipsis overflow icon.
+
+Catalog:
+
+| Folder | Components |
+|---|---|
+| `core/` | `NooButton`, `NooFab`, `NooChip`, `NooSegmentedControl`, `NooToggle`, `NooSearchField`, `NooAvatar`, `NooBadge`, `NooProgressBar` |
+| `lists/` | `NooGroupedList`, `NooSettingsRow`, `NooTabOrderRow`, `NooBanner`, `NooSummaryCard` |
+| `files/` | `NooFileKind` (spec §1.2 tiles; `NooFileKind.from(name:, mimeType:, isDirectory:)`), `NooFileTile`, `NooStatusIcon`/`NooSyncStatus`, `NooFileRow` (mobile 64px), `NooFileTableHeader`/`NooFileTableRow` (desktop), `NooSwipeAction` |
+| `media/` | `NooGridCard`, `NooPhotoTile` (video badge, selection), `NooPhotoGroupHeader`/`NooPhotoGrid` (sliver, or `.box`), `NooActivityItem`, `NooStatCard` |
+| `nav/` | `NooBottomBar`, `NooTopBar` (a `PreferredSizeWidget`) with `NooTopBarButton`/`NooTopBarBack`, `NooDrawer` with its `Account`/`Storage`/`Item`/`Link` parts, `NooSidebar` with `NooSidebarItem`/`Divider`/`Account`/`Storage`, `NooToolbar` |
+| `overlays/` | `showNooSheet`, `showNooDialog`/`NooDialog`, `NooOverlayHeader`, `NooTextField`, and the share parts `NooShareSection`, `NooPersonAccessRow`, `NooPermissionPill` |
+
+Gotchas:
+- `NooDrawer` can't set its own scrim. The host `Scaffold` needs
+  `drawerScrimColor: context.nooColors.scrim`.
+- `NooGroupedList` draws dividers by showing `line` through 1px gaps, so each
+  child must paint its own surface (`NooSettingsRow` and `NooTabOrderRow`
+  do).
+- `NooSwipeAction` only reveals its action. The user has to tap the block to
+  trigger it; a full swipe never deletes.
+- Window chrome (macOS traffic lights, the Windows 40px title bar) isn't
+  built yet. `NooSidebar.windowControls` is the slot for it.
+
 ## Reusable chrome
 
-- `MediaGridTile` (`lib/widgets/media_grid_tile.dart`): the full-bleed image/video
-  grid card with name/size scrim, shared by Files (server preview) and Offline
-  (local `FileImage`, images only - no video frame-extraction plugin, so offline
-  videos use the plain icon card). `ItemThumbnail` takes an optional `localFile`
-  for the same offline-image case in list tiles.
-- `FilesControlsRow` (`lib/widgets/files_controls_row.dart`): the
-  sort/hidden/scope/type-filter/view-mode row, shared by the Files and
-  Offline tabs (`showStorageScope: false` for Offline).
+**Rebuilt on the Noo design system** (Files/Offline, Photos, Favorites,
+Recent, Activity, Trash, Shares, Settings, the app shell, lock screen,
+login, `ShareUploadView`, `MoveCopyDestinationPicker`, `DetailsSheet` and
+`ShareSheet`): these no longer use the pieces below. Their own building
+blocks are noted where they matter:
 
+- `FilesControlsRow` (`lib/widgets/files_controls_row.dart`) — now built from
+  `NooChip`/`NooSegmentedControl`; still the sort/hidden/scope/type-filter/
+  view-mode row shared by Files and Offline (`showStorageScope: false` for
+  Offline), and reused as-is by Favorites.
+- `lib/widgets/files/file_breadcrumb_row.dart` — the noo-styled breadcrumb
+  trail Files uses in place of the shared
+  [`Breadcrumbs`](../../lib/widgets/breadcrumbs.dart) widget. `Breadcrumbs`
+  is now also noo-styled (same tokens, private-widget-turned-shared) — it's
+  used only by `ShareUploadView`/`MoveCopyDestinationPicker`, which is why
+  it was safe to restyle directly instead of forking another
+  `FileBreadcrumbRow`-style copy; don't move Files back onto it.
+  `lib/widgets/tabs/` (`tab_state_slivers.dart`, `tab_day_groups.dart`,
+  `tab_location.dart`) — the loading/error/empty-state slivers and
+  day/month grouping helpers shared by Recent/Activity/Trash/Shares.
+  `lib/widgets/settings/` — Settings' 8 section widgets plus
+  `settings_section.dart`'s `SettingsSection`/`showSettingsPicker` and
+  `settings_dialogs.dart`'s `confirmRemoveAccount`.
+  `lib/widgets/shell/shell_common.dart` — account/storage formatting,
+  `openSettings`/`openSearch`, `showAccountSwitcher`, `ShellAvatarButton`,
+  `ShellSearchLauncher`, shared by the mobile and desktop shell chrome.
 - [`getItemIcon`/`getIconColor`/`ItemThumbnail`](../../lib/widgets/item_icon.dart)
-  — the icon/color/thumbnail treatment for a file or folder, shared by any
-  screen that lists `NextcloudItem`s the way the Files tab does (currently
-  `files_view.dart` and `share_upload_view.dart`'s destination picker).
-  Extend this rather than re-deriving per-type icons/colors at a new call
-  site.
-- [`DetailsHeader`](../../lib/widgets/details/details_sheet.dart) — the
-  icon-box/name/meta row every per-item bottom sheet opens on
-  (`DetailsSheet`, the media viewer's collapsed peek state, and
-  `ShareSheet`). Takes a `padding` override for callers whose own scroll
-  view already applies horizontal insets (`ShareSheet`'s `ListView`), so it
-  doesn't get doubled up. Reuse this instead of a bare title `Text` for any
-  new per-item sheet - a plain title reads as under-designed next to the
-  other sheets (a real instance: `ShareSheet` used to be just that).
+  — `getItemIcon`/`getIconColor` are superseded by `NooFileKind` in
+  rebuilt screens; `ItemThumbnail` is still reused as-is, fed into
+  `NooFileTile`/`NooFileRow`/`NooFileTableRow`/`NooGridCard`'s `thumbnail`
+  slot. `ShareUploadView`/`MoveCopyDestinationPicker` don't use any of the
+  three any more - both destination pickers now list folders only (see
+  below), and a folder never gets a real thumbnail (only image/video do),
+  so a plain `NooFileTile(kind: NooFileKind.folder)` covers every row.
+- `DetailsSheet`/`ShareSheet` (`lib/widgets/details/details_sheet.dart`,
+  `lib/widgets/share_sheet.dart`) are rebuilt: `showNooSheet`/`showNooDialog`
+  per `NooLayout.isDesktop`, with the header built from `detailsFileTile`
+  (a `NooFileTile` keyed by `NooFileKind.from`) and `detailsMetaLine` -
+  shared top-level helpers in `details_sheet.dart` so both sheets open on
+  the same header, replacing the old `DetailsHeader` widget. Neither sheet
+  uses `showGradualBottomSheet`'s drag-to-resize any more: `DetailsSheet`
+  swaps Info/Versions/Activity with a `NooSegmentedControl` (there's no
+  tab-strip component in the noo kit) instead of a `TabBar`/`TabBarView`,
+  and both sheets' content sits in one `Column` so `showNooSheet`'s/
+  `showNooDialog`'s own `SingleChildScrollView` handles overflow - a fixed
+  page per tab no longer needs a resizable sheet to see the rest.
+  `showGradualBottomSheet` (`lib/widgets/gradual_bottom_sheet.dart`) has no
+  remaining callers as a result.
+  `ShareSheet`'s "Share with people"/"Share link"/"Send file directly"
+  sections follow `DESIGN_SYSTEM.md` §4 via `NooShareSection`/
+  `NooPersonAccessRow`/`NooPermissionPill`; the permission pill and the
+  link's permission/expiry chips are read-only display (no
+  `ItemOperations` call updates a share's permission/expiry/password/
+  hide-download yet) - promote those to real controls once that exists.
+  Removing a person/group/email share is reachable by tapping their
+  permission pill, which opens a small "Remove access" menu.
+  [`MoveCopyConflictSheet`](../../lib/widgets/move_copy_conflict_sheet.dart)
+  is rebuilt: `showNooDialog`/`showNooSheet` (per `NooLayout.isDesktop`), a
+  `NooGroupedList` of file-tile rows with an inline
+  `NooSegmentedControl<ConflictChoice>` once "Decide per item" is picked,
+  and `NooButton`s for overwrite-all/keep-both/decide-per-item/confirm. Its
+  `show(BuildContext, List<MoveCopyConflict>)` API is unchanged.
 - [`FrostedGlassContainer`](../../lib/widgets/frosted_glass_container.dart) —
-  the blurred/translucent pill background shared by all floating chrome
-  (bottom nav bar, media-viewer top/bottom bars and video transport
-  controls). Reuse this for any new floating overlay instead of building a
-  new blur/shadow combo.
-- [`FloatingBottomNavBar`](../../lib/widgets/floating_bottom_bar.dart) — the
-  main tab bar; opacity/blur are user-adjustable settings
-  (`SettingsController.bottomBarOpacity`/`bottomBarBlur`), not constants —
-  pull new adjustable visual knobs from `SettingsController` the same way
-  rather than hardcoding them.
+  the blurred/translucent pill background for the media viewer's top/bottom
+  bars and video transport controls (its other former user, the floating
+  bottom nav bar, is gone - see below). Reuse this for any new floating
+  overlay instead of building a new blur/shadow combo.
+- `SettingsController.bottomBarOpacity`/`bottomBarBlur` and
+  `lib/widgets/floating_bottom_bar.dart`/`media_grid_tile.dart`/
+  `swipeable_item.dart`/`sync_status_badge.dart`/`selectable_thumbnail.dart`
+  are gone: the bottom bar is now the flat, non-blurred `NooBottomBar` (no
+  opacity/blur knob - flat surfaces per the design system), grid tiles are
+  `NooGridCard`, swipe actions are `NooSwipeAction`, and per-item sync
+  status is `NooFileRow`/`NooFileTableRow`'s built-in `NooStatusIcon` list
+  instead of a corner badge.
 - [`SyncedHeaderScaffold`](../../lib/widgets/synced_header_scaffold.dart) —
-  the pull-to-sync `CustomScrollView` header shared by all 8 tabs (see
-  `architecture.md`); also where the pull-to-refresh gesture thresholds and
-  the classic Material refresh spinner live. Its persistent compact chip
-  (icon + "Sync off"/"Syncing…"/"Synced"/"Sync issue") reflects device-sync
-  status (`SyncStatusController.syncHeaderStatus`), not the WebDAV-refresh
-  loading state the pull gesture itself triggers - that has its own,
-  separate floating spinner bubble, so nothing was lost by handing the
-  persistent text/icon over. The expanded panel's headline is a separate,
-  more detailed string (`_syncSummary` in `synced_header_scaffold.dart`) -
-  counts of what's actually configured to sync ("2 folders & 1 file
-  synced") rather than just repeating the chip's generic label.
-  Deliberately doesn't add up the individual files inside a synced folder
-  ("1 folder synced", not "1 folder & 4 items synced") - once a folder's
-  synced, its file count is an implementation detail, not something the
-  user picked.
-- [`SyncStatusBadge`](../../lib/widgets/sync_status_badge.dart) — the small
-  corner badge over a thumbnail showing per-item device-sync status
-  (`cloud_done`/`sync`, nothing for not-synced/conflict); used in Files'
-  list and grid tiles today. Reuse this rather than a new ad hoc badge if
-  another view starts showing sync status per item.
+  the pull-to-sync `CustomScrollView` header with the persistent sync-status
+  chip and pull-to-refresh gesture/spinner. Every screen (including
+  `ShareUploadView`/`MoveCopyDestinationPicker`, its last two users) has
+  dropped it for a plain `RefreshIndicator` + `CustomScrollView`
+  (device-sync status now shows per-row via `NooStatusIcon`/the Offline
+  `NooSummaryCard`, not a shared header chip), so the `SyncedHeaderScaffold`
+  class itself is now dead code - kept only because the same file's
+  top-level `formatBytes` helper is still widely used
+  (`files_view.dart`/`favorites_view.dart`/`shell_common.dart`/
+  `widgets/details/*`).
+- [`SegmentedIconGroup`/`ToggleIconButton`](../../lib/widgets/segmented_icon_toggle.dart)
+  and [`SortMenuButton`](../../lib/widgets/sort_menu_button.dart) — the
+  Material sort/filter-chip pieces `ShareUploadView`/
+  `MoveCopyDestinationPicker` used to mirror Files' old controls row with.
+  Both destination pickers dropped that whole row (they only ever browse
+  folders, so sort/hidden/scope/type-filter/grid controls don't apply), so
+  these two files are now dead code too - `Breadcrumbs` is the only shared
+  widget promoted to noo styling instead of removed, since Files' own
+  `FileBreadcrumbRow` proved the same trail is still wanted elsewhere.
 - [`SeekBarPainter`/`SeekBarPreview`](../../lib/widgets/seek_bar_painter.dart)
   — the four `MediaProgressBarStyle` presets (Default/Wavy/Slim/Squiggly)
   for the video player's seek bar, plus a perpetually-animated

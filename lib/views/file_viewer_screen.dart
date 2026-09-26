@@ -1,24 +1,30 @@
-import 'dart:convert';
-import 'dart:io';
-import 'dart:math' as math;
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:open_file/open_file.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:pdfx/pdfx.dart';
 import 'package:provider/provider.dart';
-import 'package:video_player/video_player.dart';
 import '../models/nextcloud_item.dart';
 import '../providers/item_operations.dart';
 import '../providers/session_controller.dart';
-import '../providers/settings_controller.dart';
 import '../services/download_service.dart';
+import '../theme/design_tokens.dart';
 import '../widgets/details/details_sheet.dart';
 import '../widgets/frosted_glass_container.dart';
 import '../widgets/marquee_title.dart';
-import '../widgets/seek_bar_painter.dart';
+import '../widgets/noo/core/noo_button.dart';
+import '../widgets/noo/nav/noo_top_bar.dart';
+import '../widgets/noo/noo_layout.dart';
+import '../widgets/noo/overlays/noo_dialog.dart';
+import '../widgets/noo/overlays/noo_overlay_header.dart';
+import '../widgets/noo/overlays/noo_sheet.dart';
 import '../widgets/share_sheet.dart';
+import '../widgets/viewer/media_action_bar.dart';
+import '../widgets/viewer/media_image_preview.dart';
+import '../widgets/viewer/media_pdf_preview.dart';
+import '../widgets/viewer/media_text_preview.dart';
+import '../widgets/viewer/media_unsupported_preview.dart';
+import '../widgets/viewer/media_video_preview.dart';
 
 const _textPreviewExtensions = {
   '.txt',
@@ -266,33 +272,69 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
     });
   }
 
+  /// Delete confirmation, restyled as [showNooDialog] (desktop) /
+  /// [showNooSheet] (mobile) instead of an [AlertDialog] - same pattern as
+  /// `confirmRemoveAccount` in `settings_dialogs.dart`.
+  Future<bool> _confirmDelete(String name) async {
+    var confirmed = false;
+    void cancel() => Navigator.pop(context);
+    void confirm() {
+      confirmed = true;
+      Navigator.pop(context);
+    }
+
+    Widget buttons() => Row(
+      children: [
+        Expanded(
+          child: NooButton(
+            variant: NooButtonVariant.secondary,
+            size: NooButtonSize.card,
+            fullWidth: true,
+            onTap: cancel,
+            child: const Text('Cancel'),
+          ),
+        ),
+        const SizedBox(width: NooSpace.sm),
+        Expanded(
+          child: NooButton(
+            variant: NooButtonVariant.danger,
+            size: NooButtonSize.card,
+            fullWidth: true,
+            onTap: confirm,
+            child: const Text('Delete'),
+          ),
+        ),
+      ],
+    );
+
+    final message = 'Delete "$name" from the server? This cannot be undone.';
+    final colors = context.nooColors;
+    if (NooLayout.isDesktop(context)) {
+      await showNooDialog(
+        context,
+        title: 'Delete file',
+        children: [
+          Text(message, style: NooText.body.copyWith(color: colors.fg2)),
+          buttons(),
+        ],
+      );
+    } else {
+      await showNooSheet(
+        context,
+        children: [
+          NooOverlayHeader(title: 'Delete file', onClose: cancel),
+          Text(message, style: NooText.body.copyWith(color: colors.fg2)),
+          buttons(),
+        ],
+      );
+    }
+    return confirmed;
+  }
+
   Future<void> _deleteCurrentItem(ItemOperations ops) async {
     final item = _currentItem;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Delete file'),
-          content: Text(
-            'Delete "${item.name}" from the server? This cannot be undone.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(dialogContext).colorScheme.error,
-              ),
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Delete'),
-            ),
-          ],
-        );
-      },
-    );
-    if (confirmed != true || !mounted) return;
+    final confirmed = await _confirmDelete(item.name);
+    if (!confirmed || !mounted) return;
 
     setState(() => _isBusy = true);
     final success = await ops.deleteItem(item.path);
@@ -325,12 +367,19 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
   @override
   Widget build(BuildContext context) {
     final session = context.read<SessionController>();
-    final settings = context.read<SettingsController>();
     final ops = context.read<ItemOperations>();
-    final colorScheme = Theme.of(context).colorScheme;
+    final colors = context.nooColors;
+    // The stage behind the media itself is pure black rather than `bg` -
+    // the near-universal "letterbox" convention of photo/video viewers
+    // (matting an image/video in the app's warm neutral background reads
+    // as unfinished, and black also hides any letterboxing from
+    // `BoxFit.contain`/`AspectRatio` at the screen edges). PDFs/text/
+    // unsupported-file previews aren't "viewed" the same way - they're
+    // read, so they stay on the normal `bg` like any other screen.
+    final stageColor = _isSwipeable ? Colors.black : colors.bg;
 
     return Scaffold(
-      backgroundColor: colorScheme.surface,
+      backgroundColor: stageColor,
       body: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => setState(() => _controlsVisible = !_controlsVisible),
@@ -338,7 +387,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
           children: [
             Positioned.fill(
               child: Container(
-                color: colorScheme.surface,
+                color: stageColor,
                 child: _buildBody(context, session),
               ),
             ),
@@ -349,10 +398,8 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                 top: 0,
                 child: LinearProgressIndicator(
                   value: _downloadProgress,
-                  color: colorScheme.primary,
-                  backgroundColor: colorScheme.onSurface.withValues(
-                    alpha: 0.16,
-                  ),
+                  color: colors.accent,
+                  backgroundColor: colors.fg1.withValues(alpha: 0.16),
                 ),
               ),
             AnimatedSlide(
@@ -365,33 +412,32 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
                     child: FrostedGlassContainer(
-                      opacity: settings.bottomBarOpacity,
-                      blurSigma: settings.bottomBarBlur,
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 6,
                           vertical: 6,
                         ),
-                        child: Row(
-                          children: [
-                            _ActionIconButton(
-                              icon: Icons.arrow_back_rounded,
-                              tooltip: 'Back',
-                              onTap: () => Navigator.pop(context),
-                            ),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: MarqueeTitle(
-                                text: _currentItem.name,
-                                style: Theme.of(context).textTheme.titleSmall
-                                    ?.copyWith(
-                                      color: colorScheme.onSurface,
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                        child: IconTheme.merge(
+                          data: IconThemeData(color: colors.fg1, size: 24),
+                          child: Row(
+                            children: [
+                              NooTopBarButton(
+                                icon: LucideIcons.arrowLeft,
+                                tooltip: 'Back',
+                                onTap: () => Navigator.pop(context),
                               ),
-                            ),
-                            const SizedBox(width: 10),
-                          ],
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: MarqueeTitle(
+                                  text: _currentItem.name,
+                                  style: NooText.label.copyWith(
+                                    color: colors.fg1,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -407,15 +453,13 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                 offset: _controlsVisible ? Offset.zero : const Offset(0, 1.4),
                 child: IgnorePointer(
                   ignoring: !_controlsVisible,
-                  child: _MediaActionBar(
+                  child: MediaActionBar(
                     isFavorite: _currentItem.isFavorite,
                     isBusy: _isBusy,
                     // Favorite/delete/download-to-device all need a live
                     // server - hidden rather than shown-and-failing while
                     // browsing an already-local file from the Offline tab.
                     showServerActions: !_isOffline,
-                    opacity: settings.bottomBarOpacity,
-                    blurSigma: settings.bottomBarBlur,
                     onShare: () => ShareSheet.show(context, _currentItem),
                     onFavorite: () => _toggleFavorite(ops),
                     onDelete: () => _deleteCurrentItem(ops),
@@ -436,7 +480,6 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
     if (!_isSwipeable) {
       return _buildStaticPreview(context, session);
     }
-    final settings = context.read<SettingsController>();
 
     return PageView.builder(
       controller: _pageController,
@@ -446,20 +489,18 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
         final mediaItem = _mediaItems[index];
         if (!_isOffline) {
           if (mediaItem.type == NextcloudItemType.image) {
-            return _ImagePreview(
+            return MediaImagePreview(
               key: ValueKey(mediaItem.id),
               url: session.service!.fileUrl(mediaItem.path),
               headers: session.service!.authHeaders,
             );
           }
-          return _VideoPreview(
+          return MediaVideoPreview(
             key: ValueKey(mediaItem.id),
             url: session.service!.fileUrl(mediaItem.path),
             headers: session.service!.authHeaders,
             isActive: index == _currentIndex,
             controlsBottomOffset: _controlsVisible ? 108 : 24,
-            opacity: settings.bottomBarOpacity,
-            blurSigma: settings.bottomBarBlur,
           );
         }
         // Offline: each swiped-to item resolves its own local path on
@@ -472,29 +513,35 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
           future: widget.localPathResolver!(mediaItem),
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
-              return const Center(child: CircularProgressIndicator());
+              return Center(
+                child: CircularProgressIndicator(
+                  color: context.nooColors.accent,
+                ),
+              );
             }
             final localPath = snapshot.data;
             if (localPath == null) {
               return Center(
                 child: Icon(
-                  Icons.cloud_off_rounded,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  LucideIcons.cloudOff,
+                  color: context.nooColors.fg3,
                   size: 64,
                 ),
               );
             }
             if (mediaItem.type == NextcloudItemType.image) {
-              return _ImagePreview(url: null, headers: const {}, localPath: localPath);
+              return MediaImagePreview(
+                url: null,
+                headers: const {},
+                localPath: localPath,
+              );
             }
-            return _VideoPreview(
+            return MediaVideoPreview(
               url: null,
               headers: const {},
               localPath: localPath,
               isActive: index == _currentIndex,
               controlsBottomOffset: _controlsVisible ? 108 : 24,
-              opacity: settings.bottomBarOpacity,
-              blurSigma: settings.bottomBarBlur,
             );
           },
         );
@@ -510,827 +557,25 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
         return const SizedBox.shrink();
       default:
         if (_isPdf) {
-          return _PdfPreview(
+          return MediaPdfPreview(
             item: widget.item,
             session: session,
             localPathResolver: widget.localPathResolver,
           );
         }
         if (_isText) {
-          return _TextPreview(
+          return MediaTextPreview(
             item: widget.item,
             session: session,
             localPathResolver: widget.localPathResolver,
           );
         }
-        return _UnsupportedPreview(
+        return MediaUnsupportedPreview(
           item: widget.item,
           isBusy: _isBusy,
           onOpenExternally: () => _openExternally(session),
           onOpenDetails: () => DetailsSheet.show(context, widget.item),
         );
     }
-  }
-}
-
-/// The floating action bar (share/favorite/open/download/delete), sized and
-/// positioned to match the app-wide frosted-glass bottom navigation bar.
-class _MediaActionBar extends StatelessWidget {
-  final bool isFavorite;
-  final bool isBusy;
-  final bool showServerActions;
-  final double opacity;
-  final double blurSigma;
-  final VoidCallback onShare;
-  final VoidCallback onFavorite;
-  final VoidCallback onDelete;
-  final VoidCallback onOpenExternally;
-  final VoidCallback onDownload;
-  final VoidCallback onDetails;
-
-  const _MediaActionBar({
-    required this.isFavorite,
-    required this.isBusy,
-    required this.showServerActions,
-    required this.opacity,
-    required this.blurSigma,
-    required this.onShare,
-    required this.onFavorite,
-    required this.onDelete,
-    required this.onOpenExternally,
-    required this.onDownload,
-    required this.onDetails,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 20, left: 20, right: 20),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480),
-          child: FrostedGlassContainer(
-            opacity: opacity,
-            blurSigma: blurSigma,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _ActionIconButton(
-                    icon: Icons.share_rounded,
-                    tooltip: 'Share',
-                    onTap: isBusy ? null : onShare,
-                  ),
-                  if (showServerActions)
-                    _ActionIconButton(
-                      icon: isFavorite
-                          ? Icons.favorite_rounded
-                          : Icons.favorite_border_rounded,
-                      tooltip: 'Favorite',
-                      color: isFavorite ? Colors.red : null,
-                      onTap: onFavorite,
-                    ),
-                  _ActionIconButton(
-                    icon: Icons.open_in_new_rounded,
-                    tooltip: 'Open externally',
-                    onTap: isBusy ? null : onOpenExternally,
-                  ),
-                  if (showServerActions)
-                    _ActionIconButton(
-                      icon: Icons.download_rounded,
-                      tooltip: 'Download',
-                      onTap: isBusy ? null : onDownload,
-                    ),
-                  if (showServerActions)
-                    _ActionIconButton(
-                      icon: Icons.delete_outline_rounded,
-                      tooltip: 'Delete',
-                      color: colorScheme.error,
-                      onTap: isBusy ? null : onDelete,
-                    ),
-                  _ActionIconButton(
-                    icon: Icons.info_outline_rounded,
-                    tooltip: 'Details',
-                    onTap: onDetails,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ActionIconButton extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback? onTap;
-  final Color? color;
-
-  const _ActionIconButton({
-    required this.icon,
-    required this.tooltip,
-    required this.onTap,
-    this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final fg = onTap == null
-        ? colorScheme.onSurface.withValues(alpha: 0.4)
-        : (color ?? colorScheme.onSurface);
-
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onTap,
-        customBorder: const CircleBorder(),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          child: Icon(icon, color: fg, size: 22),
-        ),
-      ),
-    );
-  }
-}
-
-class _ImagePreview extends StatefulWidget {
-  final String? url;
-  final Map<String, String> headers;
-
-  /// When set, read the image from this on-disk path instead of [url] -
-  /// already-resolved by the caller (see
-  /// `FileViewerScreen.localPathResolver`'s doc comment).
-  final String? localPath;
-
-  const _ImagePreview({
-    super.key,
-    required this.url,
-    required this.headers,
-    this.localPath,
-  });
-
-  @override
-  State<_ImagePreview> createState() => _ImagePreviewState();
-}
-
-class _ImagePreviewState extends State<_ImagePreview>
-    with SingleTickerProviderStateMixin {
-  static const _doubleTapScale = 3.0;
-
-  final TransformationController _transformController =
-      TransformationController();
-  late final AnimationController _animController;
-  Animation<Matrix4>? _animation;
-  Offset _doubleTapPosition = Offset.zero;
-
-  @override
-  void initState() {
-    super.initState();
-    _animController =
-        AnimationController(
-          vsync: this,
-          duration: const Duration(milliseconds: 220),
-        )..addListener(() {
-          if (_animation != null) {
-            _transformController.value = _animation!.value;
-          }
-        });
-  }
-
-  @override
-  void dispose() {
-    _animController.dispose();
-    _transformController.dispose();
-    super.dispose();
-  }
-
-  void _onDoubleTapDown(TapDownDetails details) {
-    _doubleTapPosition = details.localPosition;
-  }
-
-  void _onDoubleTap() {
-    final isZoomedIn = _transformController.value.getMaxScaleOnAxis() > 1.01;
-    final Matrix4 endMatrix;
-    if (isZoomedIn) {
-      endMatrix = Matrix4.identity();
-    } else {
-      final p = _doubleTapPosition;
-      endMatrix = Matrix4.identity()
-        ..translateByDouble(
-          -p.dx * (_doubleTapScale - 1),
-          -p.dy * (_doubleTapScale - 1),
-          0,
-          1,
-        )
-        ..scaleByDouble(_doubleTapScale, _doubleTapScale, _doubleTapScale, 1);
-    }
-    _animation = Matrix4Tween(
-      begin: _transformController.value,
-      end: endMatrix,
-    ).animate(CurveTween(curve: Curves.easeOut).animate(_animController));
-    _animController.forward(from: 0);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return SizedBox.expand(
-      child: GestureDetector(
-        onDoubleTapDown: _onDoubleTapDown,
-        onDoubleTap: _onDoubleTap,
-        child: InteractiveViewer(
-          transformationController: _transformController,
-          minScale: 0.8,
-          maxScale: 5.0,
-          child: Center(
-            child: widget.localPath != null
-                ? Image.file(
-                    File(widget.localPath!),
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stack) => Center(
-                      child: Icon(
-                        Icons.broken_image_outlined,
-                        color: colorScheme.onSurfaceVariant,
-                        size: 64,
-                      ),
-                    ),
-                  )
-                : Image.network(
-                    widget.url!,
-                    headers: widget.headers,
-                    fit: BoxFit.contain,
-                    loadingBuilder: (context, child, progress) {
-                      if (progress == null) return child;
-                      return Center(
-                        child: CircularProgressIndicator(
-                          color: colorScheme.primary,
-                        ),
-                      );
-                    },
-                    errorBuilder: (context, error, stack) => Center(
-                      child: Icon(
-                        Icons.broken_image_outlined,
-                        color: colorScheme.onSurfaceVariant,
-                        size: 64,
-                      ),
-                    ),
-                  ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _VideoPreview extends StatefulWidget {
-  final String? url;
-  final Map<String, String> headers;
-  final bool isActive;
-
-  /// When set, read the video from this on-disk path instead of [url] -
-  /// already-resolved by the caller (see
-  /// `FileViewerScreen.localPathResolver`'s doc comment).
-  final String? localPath;
-
-  /// Distance from the bottom of the screen the transport controls should
-  /// sit at. Passed in by the parent so the controls can track the floating
-  /// action bar: resting just above it when visible, sliding down to hug
-  /// the screen edge when the bar (and rest of the chrome) is hidden.
-  final double controlsBottomOffset;
-
-  /// Opacity/blur for the transport controls' frosted-glass background,
-  /// matching the app-wide bottom bar and media action bar styling.
-  final double opacity;
-  final double blurSigma;
-
-  const _VideoPreview({
-    super.key,
-    required this.url,
-    required this.headers,
-    this.localPath,
-    this.isActive = true,
-    this.controlsBottomOffset = 24,
-    this.opacity = 0.55,
-    this.blurSigma = 28,
-  });
-
-  @override
-  State<_VideoPreview> createState() => _VideoPreviewState();
-}
-
-class _VideoPreviewState extends State<_VideoPreview> {
-  VideoPlayerController? _controller;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _init();
-  }
-
-  Future<void> _init() async {
-    try {
-      final controller = widget.localPath != null
-          ? VideoPlayerController.file(File(widget.localPath!))
-          : VideoPlayerController.networkUrl(
-              Uri.parse(widget.url!),
-              httpHeaders: widget.headers,
-            );
-      await controller.initialize();
-      if (!mounted) {
-        controller.dispose();
-        return;
-      }
-      setState(() => _controller = controller);
-      if (widget.isActive) controller.play();
-    } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
-    }
-  }
-
-  @override
-  void didUpdateWidget(covariant _VideoPreview oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.isActive != widget.isActive) {
-      if (widget.isActive) {
-        _controller?.play();
-      } else {
-        _controller?.pause();
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller?.dispose();
-    super.dispose();
-  }
-
-  String _formatDuration(Duration d) {
-    final minutes = d.inMinutes.remainder(60);
-    final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final progressBarStyle = context
-        .watch<SettingsController>()
-        .mediaProgressBarStyle;
-    if (_error != null) {
-      return Center(
-        child: Text(
-          'Could not play video: $_error',
-          style: TextStyle(color: colorScheme.onSurfaceVariant),
-        ),
-      );
-    }
-    final controller = _controller;
-    if (controller == null || !controller.value.isInitialized) {
-      return Center(
-        child: CircularProgressIndicator(color: colorScheme.primary),
-      );
-    }
-
-    return SizedBox.expand(
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Center(
-            child: AspectRatio(
-              aspectRatio: controller.value.aspectRatio,
-              child: VideoPlayer(controller),
-            ),
-          ),
-          AnimatedPositioned(
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeInOutCubic,
-            left: 16,
-            right: 16,
-            bottom: widget.controlsBottomOffset,
-            child: AnimatedBuilder(
-              animation: controller,
-              builder: (context, _) {
-                final colorScheme = Theme.of(context).colorScheme;
-                final fg = colorScheme.onSurface;
-                // Same frosted-glass treatment (and user opacity/blur
-                // settings) as the back button and media action bar, so the
-                // transport controls match the rest of the app's chrome.
-                return FrostedGlassContainer(
-                  borderRadius: 24,
-                  opacity: widget.opacity,
-                  blurSigma: widget.blurSigma,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 4,
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          children: [
-                            _ActionIconButton(
-                              icon: controller.value.isPlaying
-                                  ? Icons.pause_rounded
-                                  : Icons.play_arrow_rounded,
-                              tooltip: controller.value.isPlaying
-                                  ? 'Pause'
-                                  : 'Play',
-                              onTap: () => controller.value.isPlaying
-                                  ? controller.pause()
-                                  : controller.play(),
-                            ),
-                            Expanded(
-                              child: Text(
-                                '${_formatDuration(controller.value.position)} / ${_formatDuration(controller.value.duration)}',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: fg, fontSize: 13),
-                              ),
-                            ),
-                            _ActionIconButton(
-                              icon: controller.value.volume == 0
-                                  ? Icons.volume_off_rounded
-                                  : Icons.volume_up_rounded,
-                              tooltip: controller.value.volume == 0
-                                  ? 'Unmute'
-                                  : 'Mute',
-                              onTap: () => controller.setVolume(
-                                controller.value.volume == 0 ? 1 : 0,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                          child: _WavySeekBar(
-                            controller: controller,
-                            playedColor: fg,
-                            trackColor: fg.withValues(alpha: 0.3),
-                            style: progressBarStyle,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// A Material You "expressive" wavy seek bar: the played portion of the
-/// track animates as a travelling sine wave while playing and settles flat
-/// when paused, matching the Android 16+ media player style. Drag or tap
-/// anywhere on it to seek.
-class _WavySeekBar extends StatefulWidget {
-  final VideoPlayerController controller;
-  final Color playedColor;
-  final Color trackColor;
-  final MediaProgressBarStyle style;
-
-  const _WavySeekBar({
-    required this.controller,
-    required this.playedColor,
-    required this.trackColor,
-    required this.style,
-  });
-
-  @override
-  State<_WavySeekBar> createState() => _WavySeekBarState();
-}
-
-class _WavySeekBarState extends State<_WavySeekBar>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _waveController = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 900),
-  );
-  double? _dragRatio;
-
-  @override
-  void dispose() {
-    _waveController.dispose();
-    super.dispose();
-  }
-
-  void _seekToRatio(double ratio) {
-    final duration = widget.controller.value.duration;
-    widget.controller.seekTo(duration * ratio.clamp(0.0, 1.0));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final value = widget.controller.value;
-    final animatesWave =
-        widget.style == MediaProgressBarStyle.wavy ||
-        widget.style == MediaProgressBarStyle.squiggly;
-    final isPlaying = animatesWave && value.isPlaying && _dragRatio == null;
-    if (isPlaying && !_waveController.isAnimating) {
-      _waveController.repeat();
-    } else if (!isPlaying && _waveController.isAnimating) {
-      _waveController.stop();
-    }
-
-    final durationMs = value.duration.inMilliseconds;
-    final baseRatio = durationMs > 0
-        ? value.position.inMilliseconds / durationMs
-        : 0.0;
-    final ratio = (_dragRatio ?? baseRatio).clamp(0.0, 1.0);
-
-    return SizedBox(
-      height: 28,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          void updateFromDx(double dx) {
-            setState(
-              () => _dragRatio = (dx / constraints.maxWidth).clamp(0.0, 1.0),
-            );
-          }
-
-          return GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onHorizontalDragStart: (details) =>
-                updateFromDx(details.localPosition.dx),
-            onHorizontalDragUpdate: (details) =>
-                updateFromDx(details.localPosition.dx),
-            onHorizontalDragEnd: (_) {
-              if (_dragRatio != null) _seekToRatio(_dragRatio!);
-              setState(() => _dragRatio = null);
-            },
-            onTapUp: (details) =>
-                _seekToRatio(details.localPosition.dx / constraints.maxWidth),
-            child: AnimatedBuilder(
-              animation: _waveController,
-              builder: (context, _) {
-                return CustomPaint(
-                  size: Size(constraints.maxWidth, 28),
-                  painter: SeekBarPainter(
-                    style: widget.style,
-                    progress: ratio,
-                    phase: _waveController.value * 2 * math.pi,
-                    animate: isPlaying,
-                    playedColor: widget.playedColor,
-                    trackColor: widget.trackColor,
-                  ),
-                );
-              },
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _PdfPreview extends StatefulWidget {
-  final NextcloudItem item;
-  final SessionController session;
-
-  /// When set, read bytes from the local path it resolves to instead of
-  /// fetching from the server - see
-  /// `FileViewerScreen.localPathResolver`'s doc comment.
-  final Future<String?> Function(NextcloudItem item)? localPathResolver;
-
-  const _PdfPreview({
-    required this.item,
-    required this.session,
-    this.localPathResolver,
-  });
-
-  @override
-  State<_PdfPreview> createState() => _PdfPreviewState();
-}
-
-class _PdfPreviewState extends State<_PdfPreview> {
-  PdfControllerPinch? _controller;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    try {
-      final Uint8List bytes;
-      if (widget.localPathResolver != null) {
-        final localPath = await widget.localPathResolver!(widget.item);
-        if (localPath == null) {
-          if (mounted) {
-            setState(() => _error = 'No longer available offline');
-          }
-          return;
-        }
-        bytes = await File(localPath).readAsBytes();
-      } else {
-        bytes = Uint8List.fromList(
-          await widget.session.service!.fetchBytes(widget.item.path),
-        );
-      }
-      if (!mounted) return;
-      setState(() {
-        _controller = PdfControllerPinch(
-          document: PdfDocument.openData(bytes),
-        );
-      });
-    } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller?.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    if (_error != null) {
-      return Center(
-        child: Text(
-          'Could not load PDF: $_error',
-          style: TextStyle(color: colorScheme.onSurfaceVariant),
-        ),
-      );
-    }
-    if (_controller == null) {
-      return Center(
-        child: CircularProgressIndicator(color: colorScheme.primary),
-      );
-    }
-    // pdfx's own default minScale (1.0 = the page's true/100% size) is
-    // often *larger* than the fit-to-width size a wide page first renders
-    // at, since that initial render is just normal box layout, not the
-    // InteractiveViewer transform pinching engages on first touch - so the
-    // moment you touch the page it snaps up to 1.0 and, with the default
-    // floor, can never pinch back down past it. A low floor here lets you
-    // zoom back out past that to the fit-width view you started at.
-    return PdfViewPinch(controller: _controller!, minScale: 0.3);
-  }
-}
-
-class _TextPreview extends StatefulWidget {
-  final NextcloudItem item;
-  final SessionController session;
-
-  /// When set, read bytes from the local path it resolves to instead of
-  /// fetching from the server - see
-  /// `FileViewerScreen.localPathResolver`'s doc comment.
-  final Future<String?> Function(NextcloudItem item)? localPathResolver;
-
-  const _TextPreview({
-    required this.item,
-    required this.session,
-    this.localPathResolver,
-  });
-
-  @override
-  State<_TextPreview> createState() => _TextPreviewState();
-}
-
-class _TextPreviewState extends State<_TextPreview> {
-  String? _content;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    try {
-      final List<int> bytes;
-      if (widget.localPathResolver != null) {
-        final localPath = await widget.localPathResolver!(widget.item);
-        if (localPath == null) {
-          if (mounted) {
-            setState(() => _error = 'No longer available offline');
-          }
-          return;
-        }
-        bytes = await File(localPath).readAsBytes();
-      } else {
-        bytes = await widget.session.service!.fetchBytes(widget.item.path);
-      }
-      if (mounted) {
-        setState(() => _content = utf8.decode(bytes, allowMalformed: true));
-      }
-    } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    if (_error != null) {
-      return Center(
-        child: Text(
-          'Could not load file: $_error',
-          style: TextStyle(color: colorScheme.onSurfaceVariant),
-        ),
-      );
-    }
-    if (_content == null) {
-      return Center(
-        child: CircularProgressIndicator(color: colorScheme.primary),
-      );
-    }
-    return Container(
-      color: colorScheme.surface,
-      padding: const EdgeInsets.all(20),
-      child: SingleChildScrollView(
-        child: SelectableText(
-          _content!,
-          style: TextStyle(
-            color: colorScheme.onSurface,
-            fontFamily: 'monospace',
-            fontSize: 13,
-            height: 1.5,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _UnsupportedPreview extends StatelessWidget {
-  final NextcloudItem item;
-  final bool isBusy;
-  final VoidCallback onOpenExternally;
-  final VoidCallback onOpenDetails;
-
-  const _UnsupportedPreview({
-    required this.item,
-    required this.isBusy,
-    required this.onOpenExternally,
-    required this.onOpenDetails,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.insert_drive_file_rounded,
-              color: colorScheme.onSurfaceVariant,
-              size: 72,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              item.name,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: colorScheme.onSurface,
-                fontWeight: FontWeight.w600,
-                fontSize: 16,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'No inline preview for this file type.',
-              style: TextStyle(
-                color: colorScheme.onSurfaceVariant,
-                fontSize: 13,
-              ),
-            ),
-            const SizedBox(height: 28),
-            FilledButton.icon(
-              onPressed: isBusy ? null : onOpenExternally,
-              icon: const Icon(Icons.open_in_new_rounded),
-              label: const Text('Open with...'),
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: onOpenDetails,
-              icon: const Icon(Icons.info_outline_rounded),
-              label: const Text('Details'),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }

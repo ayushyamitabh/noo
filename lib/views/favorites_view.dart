@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/app_tab.dart';
@@ -13,16 +13,22 @@ import '../providers/item_operations.dart';
 import '../providers/session_controller.dart';
 import '../providers/settings_controller.dart';
 import '../services/download_service.dart';
+import '../theme/design_tokens.dart';
 import '../widgets/details/details_sheet.dart';
-import '../widgets/item_icon.dart';
-import '../widgets/more_tabs_button.dart';
-import '../widgets/profile_avatar_button.dart';
-import '../widgets/segmented_icon_toggle.dart';
-import '../widgets/selectable_thumbnail.dart';
+import '../widgets/files_controls_row.dart';
+import '../widgets/noo/files/noo_file_kind.dart';
+import '../widgets/noo/files/noo_file_row.dart';
+import '../widgets/noo/files/noo_file_table.dart';
+import '../widgets/noo/files/noo_file_tile.dart';
+import '../widgets/noo/lists/noo_grouped_list.dart';
+import '../widgets/noo/lists/noo_settings_row.dart';
+import '../widgets/noo/media/noo_grid_card.dart';
+import '../widgets/noo/noo_layout.dart';
+import '../widgets/noo/overlays/noo_sheet.dart';
+import '../widgets/noo/core/noo_button.dart';
 import '../widgets/share_sheet.dart';
-import '../widgets/sort_menu_button.dart';
 import '../widgets/sticky_header_delegate.dart';
-import '../widgets/synced_header_scaffold.dart';
+import '../widgets/synced_header_scaffold.dart' show formatBytes;
 import 'file_viewer_screen.dart';
 import 'move_copy_destination_picker.dart';
 
@@ -35,9 +41,11 @@ import 'move_copy_destination_picker.dart';
 /// wide list also means the breadcrumb-vs-content mismatch a filter
 /// toggle had - the trail showing wherever Files was last browsing while
 /// the content showed something else entirely - simply can't happen).
-/// Shares Files' own sort/hidden/storage-scope/grid-list display prefs
-/// (via `FilesController.applyFilesDisplayPrefs`) rather than a separate
-/// parallel settings dimension.
+/// Shares Files' own sort/hidden/type-filter/storage-scope/grid-list
+/// display prefs (via `FilesController.applyFilesDisplayPrefs`, and
+/// `FilesControlsRow` for the controls themselves) rather than a separate
+/// parallel settings dimension. Renders content only - the shell owns the
+/// top bar, bottom bar, drawer and FAB.
 class FavoritesView extends StatefulWidget {
   final ScrollController scrollController;
 
@@ -79,7 +87,14 @@ class _FavoritesViewState extends State<FavoritesView>
   /// scroll (row already fits).
   Future<void> _playScrollHint(ScrollController scrollController) async {
     await Future.delayed(const Duration(milliseconds: 500));
-    if (!mounted || !scrollController.hasClients) return;
+    // `hasClients` only means a position is attached, not that it's
+    // finished its first layout - reading maxScrollExtent before that
+    // throws (min/maxScrollExtent are still null internally).
+    if (!mounted ||
+        !scrollController.hasClients ||
+        !scrollController.position.hasContentDimensions) {
+      return;
+    }
     final maxExtent = scrollController.position.maxScrollExtent;
     if (maxExtent <= 0) return;
     final double peak = maxExtent < 36 ? maxExtent : 36;
@@ -348,174 +363,87 @@ class _FavoritesViewState extends State<FavoritesView>
     );
   }
 
-  Widget _buildControlsRow(FilesController files) {
-    return SizedBox(
-      height: 44,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
+  /// A single item's actions (the same list the multi-select bar offers,
+  /// just for one item) - mirrors `FilesView._showItemActionsSheet`.
+  void _showItemActionsSheet(BuildContext context, NextcloudItem item) {
+    final actions = _buildSelectionActions([item]);
+    showNooSheet(
+      context,
+      children: [
+        NooGroupedList(
           children: [
-            IconButton(
-              icon: Icon(
-                files.filesSortAscending
-                    ? Icons.arrow_upward_rounded
-                    : Icons.arrow_downward_rounded,
-                size: 20,
+            for (final action in actions)
+              NooSettingsRow(
+                icon: action.icon,
+                label: Text(action.label),
+                onTap: () {
+                  Navigator.pop(context);
+                  action.onTap();
+                },
               ),
-              visualDensity: VisualDensity.compact,
-              tooltip: files.filesSortAscending ? 'Ascending' : 'Descending',
-              onPressed: files.toggleFilesSortOrder,
-            ),
-            SizedBox(
-              width: 130,
-              child: SortMenuButton(
-                field: files.filesSortField,
-                onChanged: files.setFilesSortField,
-              ),
-            ),
-            ToggleIconButton(
-              icon: files.showHiddenFiles
-                  ? Icons.visibility_rounded
-                  : Icons.visibility_off_rounded,
-              isSelected: files.showHiddenFiles,
-              onTap: () => files.toggleShowHiddenFiles(),
-              tooltip: 'Show hidden files',
-            ),
-            const SizedBox(width: 4),
-            SegmentedIconGroup(
-              children: [
-                ToggleIconButton(
-                  icon: Symbols.circles_rounded,
-                  isSelected: files.storageScope == StorageScope.cloud,
-                  onTap: () => files.setStorageScope(StorageScope.cloud),
-                  tooltip: 'Cloud storage',
-                ),
-                ToggleIconButton(
-                  icon: Symbols.hard_drive_rounded,
-                  isSelected: files.storageScope == StorageScope.external,
-                  onTap: () => files.setStorageScope(StorageScope.external),
-                  tooltip: 'External storage',
-                ),
-              ],
-            ),
-            const SizedBox(width: 8),
-            SegmentedIconGroup(
-              children: [
-                ToggleIconButton(
-                  icon: Icons.view_list_rounded,
-                  isSelected: !files.isGridView,
-                  onTap: () => files.setGridView(false),
-                  tooltip: 'List view',
-                ),
-                ToggleIconButton(
-                  icon: Icons.grid_view_rounded,
-                  isSelected: files.isGridView,
-                  onTap: () => files.setGridView(true),
-                  tooltip: 'Grid view',
-                ),
-              ],
-            ),
           ],
         ),
-      ),
+      ],
     );
   }
 
-  Widget _buildListTile(
+  /// A real image/video thumbnail for [item]'s file tile/card, sized so
+  /// `NooFileTile`'s `FittedBox` (which needs a concretely-sized child to
+  /// scale) always has one to work with; null when there's nothing to show
+  /// (falls back to the kind's soft-color tile).
+  Widget? _thumbnailFor(
     BuildContext context,
-    NextcloudItem item,
-    List<NextcloudItem> siblings,
-  ) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final session = context.watch<SessionController>();
-    final isSelected = _selectedIds.contains(item.id);
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Material(
-          color: isSelected
-              ? colorScheme.primaryContainer.withValues(alpha: 0.5)
-              : colorScheme.surfaceContainerLow,
-          child: InkWell(
-            onTap: () {
-              if (_isSelecting) {
-                _toggleSelection(item);
-              } else {
-                _openFavorite(context, item, siblings);
-              }
-            },
-            onLongPress: () => _toggleSelection(item),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  SelectableThumbnail(
-                    isSelected: isSelected,
-                    size: 44,
-                    checkmarkSize: 24,
-                    child: ItemThumbnail(
-                      item: item,
-                      service: session.service,
-                      size: 44,
-                      borderRadius: 12,
-                      iconSize: 22,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.name,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          item.isFolder
-                              ? 'Folder'
-                              : '${formatBytes(item.size)} • ${DateFormat.yMMMd().format(item.lastModified)}',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGridCard(
-    BuildContext context,
-    NextcloudItem item,
-    List<NextcloudItem> siblings,
-  ) {
-    final theme = Theme.of(context);
-    final session = context.watch<SessionController>();
-    final isSelected = _selectedIds.contains(item.id);
+    NextcloudItem item, {
+    required double extent,
+  }) {
     final isMedia =
         (item.type == NextcloudItemType.image ||
             item.type == NextcloudItemType.video) &&
         item.previewUrl != null;
-    final iconColor = getIconColor(context, item.type);
+    if (!isMedia) return null;
+    final session = context.watch<SessionController>();
+    return Image.network(
+      item.previewUrl!,
+      width: extent,
+      height: extent,
+      headers: session.service?.authHeaders,
+      fit: BoxFit.cover,
+      filterQuality: FilterQuality.low,
+      gaplessPlayback: true,
+      errorBuilder: (ctx, err, stack) => const SizedBox.shrink(),
+    );
+  }
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: Material(
-        color: theme.colorScheme.surfaceContainerLow,
-        child: InkWell(
+  String _metaFor(NextcloudItem item) {
+    return item.isFolder
+        ? 'Folder'
+        : '${formatBytes(item.size)} · ${DateFormat.yMMMd().format(item.lastModified)}';
+  }
+
+  Widget _buildRow(
+    BuildContext context,
+    NextcloudItem item,
+    List<NextcloudItem> siblings,
+  ) {
+    final isSelected = _selectedIds.contains(item.id);
+    final kind = NooFileKind.from(
+      name: item.name,
+      mimeType: item.mimeType,
+      isDirectory: item.isFolder,
+    );
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(NooRadii.card),
+        child: NooFileRow(
+          kind: kind,
+          name: item.name,
+          meta: _metaFor(item),
+          favorite: item.isFavorite,
+          iosStyle: NooLayout.iosStyle(context),
+          selected: isSelected,
+          thumbnail: _thumbnailFor(context, item, extent: NooSizes.rowMobile),
           onTap: () {
             if (_isSelecting) {
               _toggleSelection(item);
@@ -524,66 +452,87 @@ class _FavoritesViewState extends State<FavoritesView>
             }
           },
           onLongPress: () => _toggleSelection(item),
-          child: SelectableThumbnail(
-            isSelected: isSelected,
-            checkmarkSize: 32,
-            child: isMedia
-                ? Image.network(
-                    item.previewUrl!,
-                    headers: session.service?.authHeaders,
-                    fit: BoxFit.cover,
-                    filterQuality: FilterQuality.low,
-                    gaplessPlayback: true,
-                    errorBuilder: (ctx, err, stack) => Container(
-                      color: theme.colorScheme.secondaryContainer,
-                      child: Icon(
-                        getItemIcon(item.type),
-                        color: theme.colorScheme.onSecondaryContainer,
-                        size: 32,
-                      ),
-                    ),
-                  )
-                : Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: iconColor.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(
-                            getItemIcon(item.type),
-                            color: iconColor,
-                            size: 24,
-                          ),
-                        ),
-                        Text(
-                          item.name,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-          ),
+          onMore: () => _showItemActionsSheet(context, item),
         ),
       ),
     );
   }
 
+  Widget _buildTableRow(
+    BuildContext context,
+    NextcloudItem item,
+    List<NextcloudItem> siblings,
+  ) {
+    final isSelected = _selectedIds.contains(item.id);
+    final kind = NooFileKind.from(
+      name: item.name,
+      mimeType: item.mimeType,
+      isDirectory: item.isFolder,
+    );
+
+    return NooFileTableRow(
+      kind: kind,
+      name: item.name,
+      col2: item.isFolder ? null : DateFormat.yMMMd().format(item.lastModified),
+      col3: item.isFolder ? null : formatBytes(item.size),
+      favorite: item.isFavorite,
+      selected: isSelected,
+      thumbnail: _thumbnailFor(context, item, extent: NooFileTileSize.desktop.extent),
+      onTap: () {
+        if (_isSelecting) {
+          _toggleSelection(item);
+        } else {
+          _openFavorite(context, item, siblings);
+        }
+      },
+      // Desktop has no long-press gesture; right-click is this row's
+      // equivalent entry point into multi-select.
+      onSecondaryTap: () => _toggleSelection(item),
+      onMore: () => _showItemActionsSheet(context, item),
+    );
+  }
+
+  Widget _buildGridCard(
+    BuildContext context,
+    NextcloudItem item,
+    List<NextcloudItem> siblings,
+    bool isDesktop,
+  ) {
+    final colors = context.nooColors;
+    final isSelected = _selectedIds.contains(item.id);
+    final kind = NooFileKind.from(
+      name: item.name,
+      mimeType: item.mimeType,
+      isDirectory: item.isFolder,
+    );
+    final thumbnailHeight = isDesktop ? 118.0 : 104.0;
+
+    return NooGridCard(
+      name: item.name,
+      meta: item.isFolder ? 'Folder' : formatBytes(item.size),
+      placeholderColor: kind.background(colors),
+      icon: kind.icon,
+      iconColor: kind.foreground(colors),
+      thumbnailHeight: thumbnailHeight,
+      thumbnail: _thumbnailFor(context, item, extent: thumbnailHeight),
+      selected: isSelected,
+      verticalOverflowIcon: !NooLayout.iosStyle(context),
+      onTap: () {
+        if (_isSelecting) {
+          _toggleSelection(item);
+        } else {
+          _openFavorite(context, item, siblings);
+        }
+      },
+      onLongPress: () => _toggleSelection(item),
+      onMore: () => _showItemActionsSheet(context, item),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final colors = context.nooColors;
+    final isDesktop = NooLayout.isDesktop(context);
     final favoritesController = context.watch<FavoritesController>();
     final filesController = context.watch<FilesController>();
 
@@ -600,18 +549,26 @@ class _FavoritesViewState extends State<FavoritesView>
         .where((i) => _selectedIds.contains(i.id))
         .toList();
 
+    final controlsRow = Padding(
+      padding: const EdgeInsets.fromLTRB(
+        NooSpace.sm,
+        NooSpace.sm,
+        NooSpace.sm,
+        NooSpace.xs,
+      ),
+      child: FilesControlsRow(folderPath: filesController.currentFolderPath),
+    );
+
     final contentSlivers = <Widget>[
       SliverPersistentHeader(
         pinned: !_isSelecting,
         delegate: StickyHeaderDelegate(
-          height: 60,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-            child: _buildControlsRow(filesController),
-          ),
+          height: _isSelecting ? 56 : 64,
+          child: _isSelecting
+              ? _buildSelectionBar(context, selectedItems)
+              : controlsRow,
         ),
       ),
-      const SliverToBoxAdapter(child: SizedBox(height: 8)),
       if (favoritesController.isLoading && favorites.isEmpty)
         const SliverFillRemaining(
           hasScrollBody: false,
@@ -626,32 +583,25 @@ class _FavoritesViewState extends State<FavoritesView>
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.error_outline_rounded,
-                    size: 64,
-                    color: colorScheme.error,
-                  ),
+                  Icon(LucideIcons.circleAlert, size: 56, color: colors.danger),
                   const SizedBox(height: 16),
                   Text(
                     'Could not load favorites',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      color: colorScheme.error,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: NooText.cardTitle.copyWith(color: colors.danger),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     favoritesController.errorMessage!,
                     textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
+                    style: NooText.body.copyWith(color: colors.fg3),
                   ),
                   const SizedBox(height: 20),
-                  FilledButton.icon(
-                    onPressed: favoritesController.fetchAll,
-                    icon: const Icon(Icons.refresh_rounded),
-                    label: const Text('Retry'),
+                  NooButton(
+                    variant: NooButtonVariant.secondary,
+                    size: NooButtonSize.field,
+                    icon: LucideIcons.refreshCw,
+                    onTap: favoritesController.fetchAll,
+                    child: const Text('Retry'),
                   ),
                 ],
               ),
@@ -665,17 +615,11 @@ class _FavoritesViewState extends State<FavoritesView>
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.favorite_border_rounded,
-                  size: 64,
-                  color: colorScheme.outlineVariant,
-                ),
+                Icon(LucideIcons.star, size: 56, color: colors.fg3),
                 const SizedBox(height: 12),
                 Text(
                   'No favorites yet',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
+                  style: NooText.cardTitle.copyWith(color: colors.fg2),
                 ),
               ],
             ),
@@ -683,30 +627,70 @@ class _FavoritesViewState extends State<FavoritesView>
         )
       else if (filesController.isGridView)
         SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          padding: EdgeInsets.symmetric(
+            horizontal: NooLayout.gutter(context),
+            vertical: NooSpace.xs,
+          ),
           sliver: SliverGrid(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 1.1,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: isDesktop ? 5 : 2,
+              crossAxisSpacing: isDesktop ? 16 : 10,
+              mainAxisSpacing: isDesktop ? 16 : 10,
+              childAspectRatio: isDesktop ? 0.92 : 0.85,
             ),
             delegate: SliverChildBuilderDelegate((context, index) {
-              return _buildGridCard(context, favorites[index], siblings);
+              return _buildGridCard(context, favorites[index], siblings, isDesktop);
             }, childCount: favorites.length),
+          ),
+        )
+      else if (isDesktop)
+        SliverPadding(
+          padding: EdgeInsets.symmetric(horizontal: NooLayout.gutter(context)),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate((context, index) {
+              if (index == 0) {
+                return NooFileTableHeader(
+                  col2Label: 'Modified',
+                  col3Label: 'Size',
+                  sortColumn: switch (filesController.filesSortField) {
+                    FileSortField.name => 0,
+                    FileSortField.dateModified => 1,
+                    FileSortField.size => 2,
+                    FileSortField.dateCreated => null,
+                  },
+                  sortAscending: filesController.filesSortAscending,
+                  onSort: (column) {
+                    final field = [
+                      FileSortField.name,
+                      FileSortField.dateModified,
+                      FileSortField.size,
+                    ][column];
+                    if (field == filesController.filesSortField) {
+                      filesController.toggleFilesSortOrder();
+                    } else {
+                      filesController.setFilesSortField(field);
+                    }
+                  },
+                );
+              }
+              return _buildTableRow(
+                context,
+                favorites[index - 1],
+                siblings,
+              );
+            }, childCount: favorites.length + 1),
           ),
         )
       else
         SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          padding: EdgeInsets.symmetric(horizontal: NooLayout.gutter(context)),
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate((context, index) {
-              return _buildListTile(context, favorites[index], siblings);
+              return _buildRow(context, favorites[index], siblings);
             }, childCount: favorites.length),
           ),
         ),
       const SliverToBoxAdapter(child: SizedBox(height: 100)),
-      const SliverFillRemaining(hasScrollBody: false, child: SizedBox()),
     ];
 
     return PopScope(
@@ -714,28 +698,30 @@ class _FavoritesViewState extends State<FavoritesView>
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop && _isSelecting) _clearSelection();
       },
-      child: SyncedHeaderScaffold(
-        scrollController: widget.scrollController,
-        actions: const [MoreTabsButton(), ProfileAvatarButton()],
-        onRefresh: favoritesController.fetchAll,
-        selectionBar: _isSelecting
-            ? _buildSelectionBar(context, theme, selectedItems)
-            : null,
-        contentSlivers: contentSlivers,
+      child: ColoredBox(
+        color: colors.bg,
+        child: RefreshIndicator(
+          color: colors.accent,
+          backgroundColor: colors.surface,
+          onRefresh: favoritesController.fetchAll,
+          child: CustomScrollView(
+            controller: widget.scrollController,
+            slivers: contentSlivers,
+          ),
+        ),
       ),
     );
   }
 
-  /// Replaces the top bar entirely while selecting (see
-  /// `SyncedHeaderScaffold.selectionBar`) - mirrors Files/Photos' identical
-  /// selection bar.
+  /// Replaces the controls row's own sticky slot while selecting - mirrors
+  /// Files/Photos' identical selection bar.
   Widget _buildSelectionBar(
     BuildContext context,
-    ThemeData theme,
     List<NextcloudItem> selectedItems,
   ) {
+    final colors = context.nooColors;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: NooSpace.sm),
       child: Row(
         children: [
           SizedBox(
@@ -746,7 +732,7 @@ class _FavoritesViewState extends State<FavoritesView>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.close_rounded, size: 20),
+                    icon: Icon(LucideIcons.x, size: 20, color: colors.fg1),
                     tooltip: 'Cancel selection',
                     onPressed: _clearSelection,
                     visualDensity: VisualDensity.compact,
@@ -754,8 +740,9 @@ class _FavoritesViewState extends State<FavoritesView>
                   const SizedBox(width: 8),
                   Text(
                     '${selectedItems.length} selected',
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
+                    style: NooText.cardTitle.copyWith(
+                      fontSize: 17,
+                      color: colors.fg1,
                     ),
                   ),
                 ],
@@ -771,7 +758,7 @@ class _FavoritesViewState extends State<FavoritesView>
                 children: [
                   for (final action in _buildSelectionActions(selectedItems))
                     IconButton(
-                      icon: Icon(action.icon, size: 20),
+                      icon: Icon(action.icon, size: 20, color: colors.fg1),
                       tooltip: action.label,
                       onPressed: action.onTap,
                       visualDensity: VisualDensity.compact,

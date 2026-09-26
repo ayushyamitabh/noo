@@ -10,6 +10,7 @@ Reference files in this project:
 - `Noo Design System.dc.html` is the visual component sheet.
 - `noo-kit.js` holds the tokens (`TH`), the icon set (`SVG`/`ic`), file-type mapping (`KIND`) and mock data.
 - `Mobile Screen.dc.html` and `Desktop Screen.dc.html` are the reference builds for each screen.
+- [Noo — Missing Screens](https://claude.ai/artifact/3AGPqqMdkLSC2ypCh2CQs4) is a live design canvas (Claude Design, not a static file in this repo) covering the screens this doc originally had no recipe for: Media viewer, Search, the Upload/Move/Copy destination picker, and the Details sheet's tab switch. It has both an iOS row (built first, ready for later) and an Android row (built to match right now) - same content, chrome adapted per the platform rule above. §4 below is the written-up version of what's approved there; go back to the canvas for pixel-level layout, not just the summary.
 
 ---
 
@@ -295,6 +296,43 @@ Sidebar items are 38px tall with radius 12, an 18px icon and a 14/500 label. The
   2. **Share with people:** an input ("Name, email or group"), then the people with access. The owner comes first; the others each have a permission pill ("Can edit ▾").
   3. **Share link:** a toggle, then the URL field in mono with a primary "Copy link" button, then option chips (permission, expiry, password, allow download).
   4. **Send file directly:** an outline button, with a caption saying that link settings don't apply.
+- **Details sheet:** header (file tile, name, size · folder, close) as in the
+  Share sheet above, then a segmented control switching Info/Versions/Activity
+  in place below it - there's no separate tab-strip component, so the
+  segmented control (already used for List/Grid and the Shares scope) is the
+  one that does this job too. Info is a flat label/value list (Size, Type,
+  Location, Modified, Created, ...). Versions and Activity reuse their own
+  row/feed treatment. Same on every platform - this sheet has no iOS/Android
+  split.
+- **Media viewer** (the full-screen photo/video viewer): a black stage
+  regardless of theme, like a native photo/video viewer - not `bg`. A
+  translucent, blurred top bar (back, filename, meta) and bottom bar float
+  over the media; this is the one deliberate exception to "no blur" in
+  product UI, since it's chrome over photo/video content, not over the app's
+  own surfaces. Back is a plain arrow (`arrow-left`), not the iOS
+  chevron+label pushed-screen pattern - platform split still to do. The
+  bottom bar holds every action in one row (share, favorite, open
+  externally, download, delete, details) on every platform; don't add a
+  top-bar overflow menu for the same actions. Video adds a transport row
+  above the action row: time · seek bar · time, then play/pause and mute
+  centered below it.
+- **Search:** pushed from the shell's search entry point (`menu`/`search`
+  icon in the top bar, or the inline field below an iOS large title -
+  DESIGN_SYSTEM §2 "Search field" placement). The destination screen is one
+  shared recipe for both platforms: back arrow + the pill `NooSearchField`
+  (not the inset-panel text-field shape - a search field is always the pill,
+  except the one named iOS-inline exception) taking over the top row,
+  autofocus, a clear button once there's a query. Below it: a file list
+  (mobile rows / desktop table, same as Files), or a centered icon + short
+  sentence-case message for the empty ("Search your files") and no-results
+  states.
+- **Upload / Move / Copy destination picker:** a pushed screen (outside the
+  tab shell, so it carries its own complete top bar) titled "Upload to" /
+  "Move to" / "Copy to". Back arrow (Android) or "Cancel" text (iOS) leading,
+  no trailing action. Breadcrumb row, then a folder-only list (no files: this
+  screen only browses folders) using the standard file row/tile at the
+  folder kind. Bottom bar: a meta line ("Moving 3 items") above a full-width
+  52px primary CTA ("Upload here" / "Move here" / "Copy here").
 
 ---
 
