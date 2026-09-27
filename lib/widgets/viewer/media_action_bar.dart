@@ -4,15 +4,19 @@ import '../../theme/design_tokens.dart';
 import '../frosted_glass_container.dart';
 import 'viewer_icon_button.dart';
 
-/// The floating action bar (share/favorite/open/download/delete/details)
-/// overlaid on the media viewer - kept on `FrostedGlassContainer`'s blurred
-/// chrome as a deliberate exception to the design system's flat product UI
-/// (see `file_viewer_screen.dart`'s build() comment for why), unlike the
-/// now-flat bottom nav bar (`bottom_nav_bar.dart`) this screen sits above.
+/// The bottom panel overlaid on the media viewer: an optional transport row
+/// ([transportControls], video only) above the action row
+/// (share/favorite/open/download/delete/details) - one continuous flush,
+/// full-width `FrostedGlassContainer` panel, not two separate floating
+/// pills. Kept on that blurred chrome as a deliberate exception to the
+/// design system's flat product UI (see `file_viewer_screen.dart`'s
+/// build() comment for why), unlike the now-flat bottom nav bar
+/// (`bottom_nav_bar.dart`) this screen sits above.
 class MediaActionBar extends StatelessWidget {
   final bool isFavorite;
   final bool isBusy;
   final bool showServerActions;
+  final Widget? transportControls;
   final VoidCallback onShare;
   final VoidCallback onFavorite;
   final VoidCallback onDelete;
@@ -25,6 +29,7 @@ class MediaActionBar extends StatelessWidget {
     required this.isFavorite,
     required this.isBusy,
     required this.showServerActions,
+    this.transportControls,
     required this.onShare,
     required this.onFavorite,
     required this.onDelete,
@@ -35,15 +40,23 @@ class MediaActionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.nooColors;
+    // This panel always sits on a black media stage regardless of the
+    // app's own light/dark theme (see FrostedGlassContainer's doc
+    // comment) - fixed dark-palette values, not `context.nooColors`, so
+    // favorite/delete stay legible even when the ambient theme is light.
+    const dark = NooColors.dark;
 
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 20, left: 20, right: 20),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480),
-          child: FrostedGlassContainer(
-            child: Padding(
+      top: false,
+      child: FrostedGlassContainer(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (transportControls != null) ...[
+              transportControls!,
+              Divider(height: 1, color: Colors.white.withValues(alpha: 0.14)),
+            ],
+            Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -62,6 +75,7 @@ class MediaActionBar extends StatelessWidget {
                       tooltip: isFavorite
                           ? 'Remove from favorites'
                           : 'Favorite',
+                      color: isFavorite ? dark.accentText : null,
                       onTap: onFavorite,
                     ),
                   ViewerIconButton(
@@ -79,7 +93,7 @@ class MediaActionBar extends StatelessWidget {
                     ViewerIconButton(
                       icon: LucideIcons.trash2,
                       tooltip: 'Delete',
-                      color: colors.danger,
+                      color: dark.danger,
                       onTap: isBusy ? null : onDelete,
                     ),
                   ViewerIconButton(
@@ -90,7 +104,7 @@ class MediaActionBar extends StatelessWidget {
                 ],
               ),
             ),
-          ),
+          ],
         ),
       ),
     );

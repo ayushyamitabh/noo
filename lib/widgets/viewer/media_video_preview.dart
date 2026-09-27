@@ -6,12 +6,16 @@ import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 import '../../providers/settings_controller.dart';
 import '../../theme/design_tokens.dart';
-import '../frosted_glass_container.dart';
 import '../seek_bar_painter.dart';
 import 'viewer_icon_button.dart';
 
-/// Playing video page for [FileViewerScreen]'s swipeable `PageView`, plus
-/// its floating transport controls (play/pause, position, mute, seek bar).
+/// Playing video page for [FileViewerScreen]'s swipeable `PageView`. Just
+/// the video surface - the transport controls ([VideoTransportControls])
+/// are built by the parent, inside the same bottom panel as
+/// [MediaActionBar], once this reports its controller up via
+/// [onController]. Keeping playback lifecycle (`initState`/`dispose`) here
+/// and the controls' *presentation* in the parent is what lets both sit in
+/// one continuous panel without the parent owning playback.
 class MediaVideoPreview extends StatefulWidget {
   final String? url;
   final Map<String, String> headers;
@@ -22,11 +26,12 @@ class MediaVideoPreview extends StatefulWidget {
   /// `FileViewerScreen.localPathResolver`'s doc comment).
   final String? localPath;
 
-  /// Distance from the bottom of the screen the transport controls should
-  /// sit at. Passed in by the parent so the controls can track the floating
-  /// action bar: resting just above it when visible, sliding down to hug
-  /// the screen edge when the bar (and rest of the chrome) is hidden.
-  final double controlsBottomOffset;
+  /// Reports the live controller once initialized, and `null` on dispose,
+  /// so the parent can render [VideoTransportControls] for it. The parent
+  /// only passes this for the *active* page (see `file_viewer_screen.dart`'s
+  /// `_buildBody`) - a neighboring, inactive `PageView` page never reports
+  /// up, so an adjacent video can't steal the transport row.
+  final ValueChanged<VideoPlayerController?>? onController;
 
   const MediaVideoPreview({
     super.key,
@@ -34,7 +39,7 @@ class MediaVideoPreview extends StatefulWidget {
     required this.headers,
     this.localPath,
     this.isActive = true,
-    this.controlsBottomOffset = 24,
+    this.onController,
   });
 
   @override
@@ -65,6 +70,7 @@ class _MediaVideoPreviewState extends State<MediaVideoPreview> {
         return;
       }
       setState(() => _controller = controller);
+      widget.onController?.call(controller);
       if (widget.isActive) controller.play();
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
@@ -81,26 +87,32 @@ class _MediaVideoPreviewState extends State<MediaVideoPreview> {
         _controller?.pause();
       }
     }
+    // Newly given a callback (this page just became active) and already
+    // initialized: report it, but not synchronously - `didUpdateWidget`
+    // runs as part of the *parent's* own widget-tree update (the
+    // `onPageChanged` setState that made this page active), and the
+    // parent's `onController` calls `setState` itself, which would trip
+    // "setState called during build" if invoked in the same pass. Defer to
+    // the next frame instead of waiting for `_init` (which won't run again).
+    if (oldWidget.onController == null &&
+        widget.onController != null &&
+        _controller != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onController!(_controller);
+      });
+    }
   }
 
   @override
   void dispose() {
+    widget.onController?.call(null);
     _controller?.dispose();
     super.dispose();
-  }
-
-  String _formatDuration(Duration d) {
-    final minutes = d.inMinutes.remainder(60);
-    final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = context.nooColors;
-    final progressBarStyle = context
-        .watch<SettingsController>()
-        .mediaProgressBarStyle;
     if (_error != null) {
       return Center(
         child: Text(
@@ -115,89 +127,88 @@ class _MediaVideoPreviewState extends State<MediaVideoPreview> {
     }
 
     return SizedBox.expand(
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Center(
-            child: AspectRatio(
-              aspectRatio: controller.value.aspectRatio,
-              child: VideoPlayer(controller),
-            ),
-          ),
-          AnimatedPositioned(
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeInOutCubic,
-            left: 16,
-            right: 16,
-            bottom: widget.controlsBottomOffset,
-            child: AnimatedBuilder(
-              animation: controller,
-              builder: (context, _) {
-                final fg = colors.fg1;
-                // Same frosted-glass treatment (and user opacity/blur
-                // settings) as the back button and media action bar, so the
-                // transport controls match the rest of the app's chrome.
-                return FrostedGlassContainer(
-                  borderRadius: 24,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 4,
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          children: [
-                            ViewerIconButton(
-                              icon: controller.value.isPlaying
-                                  ? LucideIcons.pause
-                                  : LucideIcons.play,
-                              tooltip: controller.value.isPlaying
-                                  ? 'Pause'
-                                  : 'Play',
-                              onTap: () => controller.value.isPlaying
-                                  ? controller.pause()
-                                  : controller.play(),
-                            ),
-                            Expanded(
-                              child: Text(
-                                '${_formatDuration(controller.value.position)} / ${_formatDuration(controller.value.duration)}',
-                                textAlign: TextAlign.center,
-                                style: NooText.meta.copyWith(color: fg),
-                              ),
-                            ),
-                            ViewerIconButton(
-                              icon: controller.value.volume == 0
-                                  ? LucideIcons.volumeX
-                                  : LucideIcons.volume2,
-                              tooltip: controller.value.volume == 0
-                                  ? 'Unmute'
-                                  : 'Mute',
-                              onTap: () => controller.setVolume(
-                                controller.value.volume == 0 ? 1 : 0,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                          child: WavySeekBar(
-                            controller: controller,
-                            playedColor: fg,
-                            trackColor: fg.withValues(alpha: 0.3),
-                            style: progressBarStyle,
-                          ),
-                        ),
-                      ],
+      child: Center(
+        child: AspectRatio(
+          aspectRatio: controller.value.aspectRatio,
+          child: VideoPlayer(controller),
+        ),
+      ),
+    );
+  }
+}
+
+/// The transport row content (play/pause, position, mute, seek bar) for
+/// [controller] - no panel chrome of its own. Rendered by
+/// `file_viewer_screen.dart` inside the same bottom panel as
+/// [MediaActionBar], directly above the action row, once
+/// [MediaVideoPreview.onController] reports a live controller.
+class VideoTransportControls extends StatelessWidget {
+  final VideoPlayerController controller;
+
+  const VideoTransportControls({super.key, required this.controller});
+
+  String _formatDuration(Duration d) {
+    final minutes = d.inMinutes.remainder(60);
+    final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final progressBarStyle = context
+        .watch<SettingsController>()
+        .mediaProgressBarStyle;
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        const fg = Colors.white;
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  ViewerIconButton(
+                    icon: controller.value.isPlaying
+                        ? LucideIcons.pause
+                        : LucideIcons.play,
+                    tooltip: controller.value.isPlaying ? 'Pause' : 'Play',
+                    onTap: () => controller.value.isPlaying
+                        ? controller.pause()
+                        : controller.play(),
+                  ),
+                  Expanded(
+                    child: Text(
+                      '${_formatDuration(controller.value.position)} / ${_formatDuration(controller.value.duration)}',
+                      textAlign: TextAlign.center,
+                      style: NooText.meta.copyWith(color: fg),
                     ),
                   ),
-                );
-              },
-            ),
+                  ViewerIconButton(
+                    icon: controller.value.volume == 0
+                        ? LucideIcons.volumeX
+                        : LucideIcons.volume2,
+                    tooltip: controller.value.volume == 0 ? 'Unmute' : 'Mute',
+                    onTap: () => controller.setVolume(
+                      controller.value.volume == 0 ? 1 : 0,
+                    ),
+                  ),
+                ],
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                child: WavySeekBar(
+                  controller: controller,
+                  playedColor: fg,
+                  trackColor: fg.withValues(alpha: 0.3),
+                  style: progressBarStyle,
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

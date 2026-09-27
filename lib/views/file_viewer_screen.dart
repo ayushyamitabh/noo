@@ -4,6 +4,7 @@ import 'package:open_file/open_file.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:video_player/video_player.dart';
 import '../models/nextcloud_item.dart';
 import '../providers/item_operations.dart';
 import '../providers/session_controller.dart';
@@ -140,6 +141,12 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
   late final List<NextcloudItem> _mediaItems;
   late int _currentIndex;
   late final PageController _pageController;
+
+  /// The active page's video controller, once `MediaVideoPreview` reports
+  /// it - only ever set by the *current* page (see `_buildBody`), so a
+  /// neighboring `PageView` page can't steal the transport row. Drives
+  /// `VideoTransportControls` inside the bottom `MediaActionBar` panel.
+  VideoPlayerController? _videoController;
 
   NextcloudItem get _currentItem => _mediaItems[_currentIndex];
 
@@ -402,6 +409,28 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                   backgroundColor: colors.fg1.withValues(alpha: 0.16),
                 ),
               ),
+            // Scrim behind the top bar, per the approved canvas
+            // (https://claude.ai/artifact/3AGPqqMdkLSC2ypCh2CQs4): a plain
+            // gradient fade, not `FrostedGlassContainer`'s blur - just
+            // enough to keep the back button/title legible over bright
+            // media without another blurred layer stacked on the bar itself.
+            if (_isSwipeable)
+              IgnorePointer(
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 220),
+                  opacity: _controlsVisible ? 1 : 0,
+                  child: Container(
+                    height: 150,
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Color(0x8C000000), Colors.transparent],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             AnimatedSlide(
               duration: const Duration(milliseconds: 220),
               curve: Curves.easeInOutCubic,
@@ -409,35 +438,41 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
               child: IgnorePointer(
                 ignoring: !_controlsVisible,
                 child: SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                    child: FrostedGlassContainer(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 6,
+                  bottom: false,
+                  child: FrostedGlassContainer(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 6,
+                      ),
+                      child: IconTheme.merge(
+                        // Fixed white, not `colors.fg1`: this bar always
+                        // sits on the dark translucent panel over a black
+                        // media stage (see `FrostedGlassContainer`'s doc
+                        // comment), regardless of the app's light/dark
+                        // theme.
+                        data: const IconThemeData(
+                          color: Colors.white,
+                          size: 24,
                         ),
-                        child: IconTheme.merge(
-                          data: IconThemeData(color: colors.fg1, size: 24),
-                          child: Row(
-                            children: [
-                              NooTopBarButton(
-                                icon: LucideIcons.arrowLeft,
-                                tooltip: 'Back',
-                                onTap: () => Navigator.pop(context),
-                              ),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: MarqueeTitle(
-                                  text: _currentItem.name,
-                                  style: NooText.label.copyWith(
-                                    color: colors.fg1,
-                                  ),
+                        child: Row(
+                          children: [
+                            NooTopBarButton(
+                              icon: LucideIcons.arrowLeft,
+                              tooltip: 'Back',
+                              onTap: () => Navigator.pop(context),
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: MarqueeTitle(
+                                text: _currentItem.name,
+                                style: NooText.label.copyWith(
+                                  color: Colors.white,
                                 ),
                               ),
-                              const SizedBox(width: 10),
-                            ],
-                          ),
+                            ),
+                            const SizedBox(width: 10),
+                          ],
                         ),
                       ),
                     ),
@@ -445,6 +480,26 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                 ),
               ),
             ),
+            if (_isSwipeable)
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: IgnorePointer(
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 220),
+                    opacity: _controlsVisible ? 1 : 0,
+                    child: Container(
+                      height: 260,
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.bottomCenter,
+                          end: Alignment.topCenter,
+                          colors: [Color(0x99000000), Colors.transparent],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             Align(
               alignment: Alignment.bottomCenter,
               child: AnimatedSlide(
@@ -460,6 +515,12 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                     // server - hidden rather than shown-and-failing while
                     // browsing an already-local file from the Offline tab.
                     showServerActions: !_isOffline,
+                    transportControls:
+                        _isSwipeable &&
+                            _currentItem.type == NextcloudItemType.video &&
+                            _videoController != null
+                        ? VideoTransportControls(controller: _videoController!)
+                        : null,
                     onShare: () => ShareSheet.show(context, _currentItem),
                     onFavorite: () => _toggleFavorite(ops),
                     onDelete: () => _deleteCurrentItem(ops),
@@ -484,9 +545,17 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
     return PageView.builder(
       controller: _pageController,
       itemCount: _mediaItems.length,
-      onPageChanged: (index) => setState(() => _currentIndex = index),
+      onPageChanged: (index) => setState(() {
+        _currentIndex = index;
+        // The outgoing page's `onController` stops being passed below (it's
+        // no longer the active index) and reports null on its own dispose,
+        // but that can lag a frame or two behind this rebuild - clear
+        // eagerly so the transport row never briefly shows the old video.
+        _videoController = null;
+      }),
       itemBuilder: (context, index) {
         final mediaItem = _mediaItems[index];
+        final isActive = index == _currentIndex;
         if (!_isOffline) {
           if (mediaItem.type == NextcloudItemType.image) {
             return MediaImagePreview(
@@ -499,8 +568,10 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
             key: ValueKey(mediaItem.id),
             url: session.service!.fileUrl(mediaItem.path),
             headers: session.service!.authHeaders,
-            isActive: index == _currentIndex,
-            controlsBottomOffset: _controlsVisible ? 108 : 24,
+            isActive: isActive,
+            onController: isActive
+                ? (c) => setState(() => _videoController = c)
+                : null,
           );
         }
         // Offline: each swiped-to item resolves its own local path on
@@ -540,8 +611,10 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
               url: null,
               headers: const {},
               localPath: localPath,
-              isActive: index == _currentIndex,
-              controlsBottomOffset: _controlsVisible ? 108 : 24,
+              isActive: isActive,
+              onController: isActive
+                  ? (c) => setState(() => _videoController = c)
+                  : null,
             );
           },
         );
