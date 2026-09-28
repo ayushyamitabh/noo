@@ -57,6 +57,22 @@ void main() {
     });
   });
 
+  group('NooColors.fromDynamicScheme', () {
+    test('scrim comes from the fixed palette, not the opaque dynamic role', () {
+      // Material 3's ColorScheme.scrim is fully opaque black - using it
+      // directly as a sheet/dialog barrierColor hid the screen behind
+      // completely instead of dimming it.
+      final dynamicScheme = ColorScheme.fromSeed(
+        seedColor: const Color(0xFF009688),
+        brightness: Brightness.light,
+      );
+      expect(dynamicScheme.scrim.a, 1.0);
+      final nooColors = NooColors.fromDynamicScheme(dynamicScheme);
+      expect(nooColors.scrim, NooColors.light.scrim);
+      expect(nooColors.scrim.a, lessThan(1.0));
+    });
+  });
+
   group('NooAvatar', () {
     testNooWidgets('current user uses accent-soft/accent-text', (
       tester,

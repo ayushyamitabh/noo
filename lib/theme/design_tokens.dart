@@ -133,7 +133,12 @@ class NooColors extends ThemeExtension<NooColors> {
   /// palettes. `success`/`successSoft`/`warning`/`warningSoft`/`info`/
   /// `infoSoft` have no Material dynamic equivalent and are content-identity
   /// colors regardless (file-type tiles) rather than brand colors, so they
-  /// always come from the fixed palette matching [cs]'s brightness.
+  /// always come from the fixed palette matching [cs]'s brightness. Same
+  /// for `scrim`: Material 3's `ColorScheme.scrim` role is fully *opaque*
+  /// black (`0xFF000000`), meant to be used at reduced opacity by whoever
+  /// paints it, not painted directly - using it as-is for a sheet/dialog's
+  /// `barrierColor` hid the screen behind completely instead of dimming it,
+  /// so this uses the fixed palette's already-translucent scrim instead.
   factory NooColors.fromDynamicScheme(ColorScheme cs) {
     final fixed = cs.brightness == Brightness.dark ? dark : light;
     return NooColors(
@@ -157,7 +162,7 @@ class NooColors extends ThemeExtension<NooColors> {
       warningSoft: fixed.warningSoft,
       info: fixed.info,
       infoSoft: fixed.infoSoft,
-      scrim: cs.scrim,
+      scrim: fixed.scrim,
     );
   }
 

@@ -96,7 +96,12 @@ class DetailsSheet extends StatelessWidget {
 /// [StatefulWidget] rather than three fields on [DetailsSheet] so the
 /// selection survives independently of how the header/container around it
 /// is built (mobile embeds this once, desktop hands it to [showNooDialog]
-/// directly).
+/// directly). All three tabs are built once and kept mounted in an
+/// [IndexedStack] rather than swapped in/out of the tree - Versions and
+/// Activity each fetch on their own first build (see their `_requested`
+/// guard), so switching tabs via a bare `switch` on the selected type would
+/// tear down and rebuild whichever tab isn't showing, discarding its
+/// fetched data and re-requesting it every time the user switched back.
 class _DetailsBody extends StatefulWidget {
   final NextcloudItem item;
 
@@ -138,11 +143,14 @@ class _DetailsBodyState extends State<_DetailsBody> {
           ],
         ),
         const SizedBox(height: NooSpace.lg),
-        switch (_tab) {
-          _DetailsTab.info => DetailsInfoTab(item: widget.item),
-          _DetailsTab.versions => DetailsVersionsTab(item: widget.item),
-          _DetailsTab.activity => DetailsActivityTab(item: widget.item),
-        },
+        IndexedStack(
+          index: _tab.index,
+          children: [
+            DetailsInfoTab(item: widget.item),
+            DetailsVersionsTab(item: widget.item),
+            DetailsActivityTab(item: widget.item),
+          ],
+        ),
       ],
     );
   }
