@@ -7,13 +7,13 @@ import 'package:google_fonts/google_fonts.dart';
 /// `Theme.of(context).extension<NooColors>()!` (or a `context.nooColors`
 /// getter, once one exists) instead of the Material [ColorScheme] roles.
 ///
-/// Two independent sources feed this, matching the app's color settings:
-/// the fixed [light]/[dark] palettes below (the design system's own
-/// default look), or [NooColors.fromDynamicScheme] when the user has
-/// Material You dynamic color turned on - there's no third option (no
-/// custom accent picker), since the design system explicitly rules out
-/// "add new colors". [withAmoled] layers on top of either source when the
-/// user's AMOLED toggle is on.
+/// Three sources feed this, matching the app's color settings: the fixed
+/// [light]/[dark] palettes below (the design system's own default look,
+/// also what the accent picker's "Default" violet swatch selects),
+/// [NooColors.fromDynamicScheme] when the user has Material You dynamic
+/// color turned on, or [NooColors.fromSeed] for a custom accent-picker
+/// swatch. [withAmoled] layers on top of any of the three when the user's
+/// AMOLED toggle is on.
 @immutable
 class NooColors extends ThemeExtension<NooColors> {
   final Color bg;
@@ -158,6 +158,34 @@ class NooColors extends ThemeExtension<NooColors> {
       info: fixed.info,
       infoSoft: fixed.infoSoft,
       scrim: cs.scrim,
+    );
+  }
+
+  /// Derives an accent-only variant of the fixed [light]/[dark] palette for
+  /// a user-chosen custom seed color (Settings' accent-color picker) -
+  /// unlike [fromDynamicScheme], only the accent roles change; bg/surface/
+  /// fg etc. stay the Noo warm-neutral palette, since picking a named
+  /// accent ("Ocean Teal") is meant to retint the brand color, not reshape
+  /// the whole surface to match a wallpaper the way dynamic color does.
+  /// [seedColor] equal to the fixed palette's own accent (the picker's
+  /// "Default" violet swatch) returns the untouched fixed palette, so the
+  /// out-of-box look stays pixel-identical rather than going through
+  /// [ColorScheme.fromSeed]'s tonal-palette math for no reason.
+  factory NooColors.fromSeed(Color seedColor, Brightness brightness) {
+    final fixed = brightness == Brightness.dark ? dark : light;
+    if (seedColor == light.accent) return fixed;
+    final cs = ColorScheme.fromSeed(
+      seedColor: seedColor,
+      brightness: brightness,
+    );
+    return fixed.copyWith(
+      accent: seedColor,
+      // Light accentText matches accent exactly, same as the fixed
+      // palette - dark needs a lighter, desaturated tint for contrast
+      // against a dark surface, which is exactly what Material's tonal
+      // primary (tone ~80 in dark mode) is designed to give.
+      accentText: brightness == Brightness.dark ? cs.primary : seedColor,
+      accentSoft: cs.primaryContainer,
     );
   }
 
@@ -391,10 +419,8 @@ class NooText {
     fontWeight: FontWeight.w400,
   );
 
-  static TextStyle get label => GoogleFonts.instrumentSans(
-    fontSize: 13,
-    fontWeight: FontWeight.w600,
-  );
+  static TextStyle get label =>
+      GoogleFonts.instrumentSans(fontSize: 13, fontWeight: FontWeight.w600);
 
   static TextStyle get meta => GoogleFonts.instrumentSans(
     fontSize: 13,

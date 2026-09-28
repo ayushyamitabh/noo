@@ -5,6 +5,15 @@ import 'design_tokens.dart';
 class AppTheme {
   static const Color defaultNextcloudBlue = Color(0xFF0082C9);
 
+  /// The design system's own fixed violet - [NooColors.light]/`.dark`'s
+  /// `accent`, and the accent picker's "Default" swatch. Also
+  /// [SettingsController]'s initial [SettingsController.seedColor], so a
+  /// fresh install (or any device without Material You dynamic color) keeps
+  /// today's violet look rather than picking up the leftover
+  /// [defaultNextcloudBlue] default from before seed colors actually did
+  /// anything to the Noo-styled UI (see [NooColors.fromSeed]).
+  static const Color defaultAccent = Color(0xFF8D0DE3);
+
   // Flutter's Material 3 default (ZoomPageTransitionsBuilder) doesn't
   // implement Android's predictive-back gesture at all. Opting into
   // PredictiveBackPageTransitionsBuilder here (Android only) is required —
@@ -24,6 +33,7 @@ class AppTheme {
   static const _sliderTheme = SliderThemeData(year2023: false);
 
   static const List<Color> seedColors = [
+    defaultAccent, // Default (Noo Violet)
     Color(0xFF0082C9), // Nextcloud Blue
     Color(0xFF009688), // Ocean Teal
     Color(0xFF6750A4), // Deep Purple
@@ -87,7 +97,7 @@ class AppTheme {
           );
     final nooColors = (useDynamicColor && dynamicScheme != null)
         ? NooColors.fromDynamicScheme(dynamicScheme)
-        : NooColors.light;
+        : NooColors.fromSeed(seedColor, Brightness.light);
 
     return ThemeData(
       useMaterial3: true,
@@ -131,7 +141,7 @@ class AppTheme {
           );
     var nooColors = (useDynamicColor && dynamicScheme != null)
         ? NooColors.fromDynamicScheme(dynamicScheme)
-        : NooColors.dark;
+        : NooColors.fromSeed(seedColor, Brightness.dark);
 
     if (amoled) {
       // True OLED black across every surface tone Material 3 hands out -

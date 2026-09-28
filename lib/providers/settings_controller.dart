@@ -37,7 +37,7 @@ class SettingsController extends ChangeNotifier {
   final Future<SharedPreferences> _prefsFuture =
       SharedPreferences.getInstance();
 
-  Color _seedColor = AppTheme.defaultNextcloudBlue;
+  Color _seedColor = AppTheme.defaultAccent;
   ThemeMode _themeMode = ThemeMode.system;
   bool _useDynamicColor = true;
   bool _amoledDark = false;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:noo/theme/app_theme.dart';
 import 'package:noo/theme/design_tokens.dart';
 import 'package:noo/widgets/noo/core/noo_avatar.dart';
 import 'package:noo/widgets/noo/core/noo_badge.dart';
@@ -16,6 +17,45 @@ import 'noo_test_utils.dart';
 
 void main() {
   setUpNooTests();
+
+  group('NooColors.fromSeed', () {
+    test('the default accent returns the untouched fixed palette', () {
+      expect(
+        identical(
+          NooColors.fromSeed(AppTheme.defaultAccent, Brightness.light),
+          NooColors.light,
+        ),
+        isTrue,
+      );
+      expect(
+        identical(
+          NooColors.fromSeed(AppTheme.defaultAccent, Brightness.dark),
+          NooColors.dark,
+        ),
+        isTrue,
+      );
+    });
+
+    test('a custom seed retints only the accent roles', () {
+      const seed = Color(0xFF009688); // Ocean Teal
+      final light = NooColors.fromSeed(seed, Brightness.light);
+      expect(light.accent, seed);
+      expect(light.accentText, seed);
+      expect(light.accentSoft, isNot(NooColors.light.accentSoft));
+      // The rest of the palette is untouched - a named accent choice
+      // retints the brand color, it doesn't reshape the surface.
+      expect(light.bg, NooColors.light.bg);
+      expect(light.surface, NooColors.light.surface);
+      expect(light.fg1, NooColors.light.fg1);
+
+      final dark = NooColors.fromSeed(seed, Brightness.dark);
+      expect(dark.accent, seed);
+      // Dark accentText is a lighter/desaturated tint for contrast, not
+      // the raw seed itself.
+      expect(dark.accentText, isNot(seed));
+      expect(dark.bg, NooColors.dark.bg);
+    });
+  });
 
   group('NooAvatar', () {
     testNooWidgets('current user uses accent-soft/accent-text', (

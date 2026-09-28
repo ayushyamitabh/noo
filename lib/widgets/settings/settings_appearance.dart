@@ -28,12 +28,13 @@ String _seekBarStyleLabel(MediaProgressBarStyle style) {
 
 /// Settings section 6: appearance. Only the theme mode (System/Light/Dark)
 /// is in the design system's own recipe - the accent-color picker, dynamic
-/// color, AMOLED and the video seek-bar style are all settings that predate
-/// the design system and have no place in it (a single fixed accent, no
-/// per-user color choice). They still work, just demoted into a separate
-/// "Advanced appearance" group beneath the main card per the rebuild brief,
-/// rather than dropped - see the handoff report for whether to remove them
-/// outright.
+/// color, AMOLED and the video seek-bar style predate the design system, so
+/// they're demoted into a separate "Advanced appearance" group beneath the
+/// main card rather than folded into it. The accent picker itself picks a
+/// [NooColors] variant (see [NooColors.fromSeed]/[NooColors.fromDynamicScheme]):
+/// "Default" is the fixed violet palette, the named swatches retint just
+/// the accent roles, and "Match wallpaper" (the `wallpaper`-icon swatch)
+/// follows Material You dynamic color instead.
 class SettingsAppearanceSection extends StatelessWidget {
   const SettingsAppearanceSection({super.key});
 
@@ -55,9 +56,21 @@ class SettingsAppearanceSection extends StatelessWidget {
                 value: settings.themeMode,
                 onChanged: settings.setThemeMode,
                 options: const [
-                  NooSegmentOption(value: ThemeMode.system, icon: LucideIcons.monitor, label: 'System'),
-                  NooSegmentOption(value: ThemeMode.light, icon: LucideIcons.sun, label: 'Light'),
-                  NooSegmentOption(value: ThemeMode.dark, icon: LucideIcons.moon, label: 'Dark'),
+                  NooSegmentOption(
+                    value: ThemeMode.system,
+                    icon: LucideIcons.monitor,
+                    label: 'System',
+                  ),
+                  NooSegmentOption(
+                    value: ThemeMode.light,
+                    icon: LucideIcons.sun,
+                    label: 'Light',
+                  ),
+                  NooSegmentOption(
+                    value: ThemeMode.dark,
+                    icon: LucideIcons.moon,
+                    label: 'Dark',
+                  ),
                 ],
               ),
             ),
@@ -70,20 +83,33 @@ class SettingsAppearanceSection extends StatelessWidget {
             NooSettingsRow(
               icon: LucideIcons.palette,
               label: const Text('Accent color'),
-              subtitle: Text(settings.useDynamicColor ? 'Matching your wallpaper' : 'Custom color'),
-              trailing: _AccentSwatchDot(color: settings.useDynamicColor ? null : settings.seedColor),
+              subtitle: Text(
+                settings.useDynamicColor
+                    ? 'Matching your wallpaper'
+                    : settings.seedColor == AppTheme.defaultAccent
+                    ? 'Default'
+                    : 'Custom color',
+              ),
+              trailing: _AccentSwatchDot(
+                color: settings.useDynamicColor ? null : settings.seedColor,
+              ),
               onTap: () => _openAccentPicker(context, settings),
             ),
             NooSettingsRow(
               icon: LucideIcons.sparkles,
               label: const Text('AMOLED black'),
               subtitle: const Text('Use pure black backgrounds in dark mode'),
-              trailing: NooToggle(checked: settings.amoledDark, onChanged: settings.setAmoledDark),
+              trailing: NooToggle(
+                checked: settings.amoledDark,
+                onChanged: settings.setAmoledDark,
+              ),
             ),
             NooSettingsRow(
               icon: LucideIcons.waves,
               label: const Text('Seek bar style'),
-              subtitle: const Text('The progress bar style used when playing videos'),
+              subtitle: const Text(
+                'The progress bar style used when playing videos',
+              ),
               value: _seekBarStyleLabel(settings.mediaProgressBarStyle),
               onTap: () => _openSeekBarPicker(context, settings),
             ),
@@ -112,7 +138,9 @@ class _AccentSwatchDot extends StatelessWidget {
         color: color ?? colors.surface3,
         shape: BoxShape.circle,
       ),
-      child: color == null ? Icon(LucideIcons.wallpaper, size: 12, color: colors.fg2) : null,
+      child: color == null
+          ? Icon(LucideIcons.wallpaper, size: 12, color: colors.fg2)
+          : null,
     );
   }
 }
@@ -219,7 +247,11 @@ class _SeekBarStyleOption extends StatelessWidget {
   final bool isSelected;
   final VoidCallback onTap;
 
-  const _SeekBarStyleOption({required this.style, required this.isSelected, required this.onTap});
+  const _SeekBarStyleOption({
+    required this.style,
+    required this.isSelected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {

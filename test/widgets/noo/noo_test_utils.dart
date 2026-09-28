@@ -15,10 +15,13 @@ void setUpNooTests() {
 /// Themes built through the real [AppTheme] (non-dynamic), so the
 /// [NooColors] extension is registered exactly as in the app. Built lazily
 /// inside test bodies - AppTheme touches Google Fonts, which needs the test
-/// binding to exist first.
+/// binding to exist first. Seeded with [AppTheme.defaultAccent] (not just
+/// any color) so component tests exercise the exact fixed [NooColors.light]/
+/// `.dark` palette their color assertions are written against, rather than
+/// a [NooColors.fromSeed] retint - see its doc comment.
 ThemeData nooTheme(Brightness brightness) => brightness == Brightness.light
-    ? AppTheme.light(AppTheme.defaultNextcloudBlue, useDynamicColor: false)
-    : AppTheme.dark(AppTheme.defaultNextcloudBlue, useDynamicColor: false);
+    ? AppTheme.light(AppTheme.defaultAccent, useDynamicColor: false)
+    : AppTheme.dark(AppTheme.defaultAccent, useDynamicColor: false);
 
 Future<void> pumpNoo(
   WidgetTester tester,
@@ -43,7 +46,8 @@ Future<void> pumpNoo(
 /// Runs [body] once per theme, each as its own named test.
 void testNooWidgets(
   String description,
-  Future<void> Function(WidgetTester tester, ThemeData theme, NooColors colors) body,
+  Future<void> Function(WidgetTester tester, ThemeData theme, NooColors colors)
+  body,
 ) {
   for (final brightness in Brightness.values) {
     testWidgets('$description (${brightness.name})', (tester) async {
@@ -59,7 +63,10 @@ BoxDecoration decorationOf(WidgetTester tester, Finder finder) {
   final boxes = find.ancestor(
     of: finder,
     matching: find.byWidgetPredicate(
-      (w) => w is DecoratedBox && w.decoration is BoxDecoration && (w.decoration as BoxDecoration).color != null,
+      (w) =>
+          w is DecoratedBox &&
+          w.decoration is BoxDecoration &&
+          (w.decoration as BoxDecoration).color != null,
     ),
     matchRoot: true,
   );
