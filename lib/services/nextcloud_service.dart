@@ -44,6 +44,19 @@ DateTime? _parseDavDate(String? raw) {
   }
 }
 
+/// Nextcloud's WebDAV server has no real per-file creation-time tracking
+/// for most setups, so its `creationdate` property routinely comes back as
+/// a placeholder Unix-epoch date ("Thu, 01 Jan 1970 00:00:00 GMT") instead
+/// of being omitted - [_parseDavDate] parses that "successfully" into a
+/// real (if bogus) `DateTime`, so every item's created date read January
+/// 1970. Treat it as absent instead, the same as a missing/unparseable
+/// value: `NextcloudItem`'s constructor then falls back to `lastModified`.
+DateTime? _parseDavCreationDate(String? raw) {
+  final parsed = _parseDavDate(raw);
+  if (parsed != null && parsed.millisecondsSinceEpoch <= 0) return null;
+  return parsed;
+}
+
 /// The OCS Activity API reports each event's time as an ISO 8601 string in
 /// a `datetime` field (e.g. "2025-09-15T12:34:56+00:00") - there is no
 /// numeric `timestamp` field despite that being a very easy name to guess.
@@ -356,7 +369,7 @@ class NextcloudService {
 
       final size = int.tryParse(sizeStr ?? '0') ?? 0;
       final lastMod = _parseDavDate(lastModStr) ?? DateTime.now();
-      final created = _parseDavDate(createdStr);
+      final created = _parseDavCreationDate(createdStr);
       final itemType = NextcloudItem.deduceType(name, isCollection, mimeType);
       final validId = (fileId != null && fileId.isNotEmpty) ? fileId : name;
 
@@ -671,7 +684,7 @@ class NextcloudService {
 
       final size = int.tryParse(sizeStr ?? '0') ?? 0;
       final lastMod = _parseDavDate(lastModStr) ?? DateTime.now();
-      final created = _parseDavDate(createdStr);
+      final created = _parseDavCreationDate(createdStr);
       final itemType = NextcloudItem.deduceType(name, false, mimeType);
       final validId = (fileId != null && fileId.isNotEmpty) ? fileId : name;
 
@@ -835,7 +848,7 @@ class NextcloudService {
 
       final size = int.tryParse(sizeStr ?? '0') ?? 0;
       final lastMod = _parseDavDate(lastModStr) ?? DateTime.now();
-      final created = _parseDavDate(createdStr);
+      final created = _parseDavCreationDate(createdStr);
       final itemType = NextcloudItem.deduceType(name, isCollection, mimeType);
       final validId = (fileId != null && fileId.isNotEmpty) ? fileId : name;
 
@@ -1000,7 +1013,7 @@ class NextcloudService {
 
       final size = int.tryParse(sizeStr ?? '0') ?? 0;
       final lastMod = _parseDavDate(lastModStr) ?? DateTime.now();
-      final created = _parseDavDate(createdStr);
+      final created = _parseDavCreationDate(createdStr);
       final itemType = NextcloudItem.deduceType(name, false, mimeType);
       final validId = (fileId != null && fileId.isNotEmpty) ? fileId : name;
 

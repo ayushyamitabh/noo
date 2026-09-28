@@ -73,6 +73,15 @@ rather than needing a rewrite for multi-account support.
   there is no WebDAV client dependency. `_parseDavDate`/`_davPath` in this
   file exist because WebDAV responses use RFC 1123 dates and either bare
   paths or full URLs for `href`; reuse them rather than re-deriving.
+  `creationdate` specifically needs `_parseDavCreationDate`, not
+  `_parseDavDate` directly - Nextcloud has no real per-file creation-time
+  tracking for most setups, so that property routinely comes back as a
+  placeholder Unix-epoch date rather than being omitted, which
+  `_parseDavDate` alone parses "successfully" into a real (if bogus)
+  January 1970 `DateTime`. `_parseDavCreationDate` treats that placeholder
+  as absent instead, so `NextcloudItem.dateCreated` falls back to
+  `lastModified` (its constructor's default) the same as it would for a
+  missing/unparseable value.
 - **Everything else** (shares, activity, trash, favorites, quota, user info,
   file versions) goes through Nextcloud's OCS APIs (`/ocs/v2.php/...`), JSON
   in, with the `OCS-APIRequest: true` header required on every OCS call.
