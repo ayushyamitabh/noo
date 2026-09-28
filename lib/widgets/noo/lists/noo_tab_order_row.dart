@@ -11,6 +11,11 @@ class NooTabOrderRow extends StatelessWidget {
   final bool pinned;
   final VoidCallback? onTogglePin;
 
+  /// False hides the trailing pin toggle entirely - for reorder-only lists
+  /// (Settings' Action bar section) that have no "pinned" concept, just an
+  /// order.
+  final bool showPin;
+
   /// This row's index inside its `ReorderableListView` - when set, only the
   /// grip icon starts a drag (`ReorderableDragStartListener` wraps just the
   /// icon, not the whole row), so a vertical drag/scroll starting anywhere
@@ -25,6 +30,7 @@ class NooTabOrderRow extends StatelessWidget {
     required this.label,
     this.pinned = false,
     this.onTogglePin,
+    this.showPin = true,
     this.dragIndex,
   });
 
@@ -50,23 +56,24 @@ class NooTabOrderRow extends StatelessWidget {
               style: NooText.bodyL.copyWith(height: 1, color: colors.fg1),
             ),
           ),
-          GestureDetector(
-            onTap: onTogglePin,
-            child: Container(
-              width: 36,
-              height: 36,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: pinned ? colors.accentSoft : colors.surface2,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                pinned ? LucideIcons.pin : LucideIcons.pinOff,
-                size: 16,
-                color: pinned ? colors.accentText : colors.fg3,
+          if (showPin)
+            GestureDetector(
+              onTap: onTogglePin,
+              child: Container(
+                width: 36,
+                height: 36,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: pinned ? colors.accentSoft : colors.surface2,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  pinned ? LucideIcons.pin : LucideIcons.pinOff,
+                  size: 16,
+                  color: pinned ? colors.accentText : colors.fg3,
+                ),
               ),
             ),
-          ),
         ],
       ),
     );

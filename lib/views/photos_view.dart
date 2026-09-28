@@ -11,6 +11,7 @@ import '../providers/item_operations.dart';
 import '../providers/photos_controller.dart';
 import '../providers/pick_controller.dart';
 import '../providers/session_controller.dart';
+import '../providers/settings_controller.dart';
 import '../services/download_service.dart';
 import '../theme/design_tokens.dart';
 import '../widgets/details/details_sheet.dart';
@@ -113,6 +114,7 @@ class _PhotosViewState extends State<PhotosView> {
     if (pick.isPicking) {
       return [
         SelectionAction(
+          kind: SelectionActionKind.favorite,
           icon: LucideIcons.check,
           label: 'Use ${selected.length} item(s)',
           onTap: () => pick.confirmPick(selected),
@@ -123,13 +125,15 @@ class _PhotosViewState extends State<PhotosView> {
     // uses for favorite/unfavorite (see `files_view.dart`) rather than a
     // filled heart.
     final allFavorited = selected.every((i) => i.isFavorite);
-    return [
+    final actions = [
       SelectionAction(
+        kind: SelectionActionKind.favorite,
         icon: allFavorited ? LucideIcons.starOff : LucideIcons.star,
         label: allFavorited ? 'Remove from favorites' : 'Favorite',
         onTap: () => _favoriteSelected(selected),
       ),
       SelectionAction(
+        kind: SelectionActionKind.share,
         icon: LucideIcons.share2,
         label: 'Share',
         onTap: () => selected.length == 1
@@ -137,32 +141,41 @@ class _PhotosViewState extends State<PhotosView> {
             : _shareSelected(context, selected),
       ),
       SelectionAction(
+        kind: SelectionActionKind.download,
         icon: LucideIcons.download,
         label: 'Download',
         onTap: () => _downloadSelected(context, selected),
       ),
       SelectionAction(
+        kind: SelectionActionKind.delete,
         icon: LucideIcons.trash2,
         label: 'Delete',
         onTap: () => _confirmDeleteSelected(context, selected),
       ),
       SelectionAction(
+        kind: SelectionActionKind.copy,
         icon: LucideIcons.copy,
         label: 'Copy',
         onTap: () => _moveOrCopySelected(selected, copy: true),
       ),
       SelectionAction(
+        kind: SelectionActionKind.move,
         icon: LucideIcons.folderInput,
         label: 'Move',
         onTap: () => _moveOrCopySelected(selected, copy: false),
       ),
       if (selected.length == 1)
         SelectionAction(
+          kind: SelectionActionKind.details,
           icon: LucideIcons.info,
           label: 'Details',
           onTap: () => DetailsSheet.show(context, selected.single),
         ),
     ];
+    return orderSelectionActions(
+      actions,
+      context.read<SettingsController>().selectionActionOrder,
+    );
   }
 
   /// Splits an already-filtered/sorted list into contiguous month runs

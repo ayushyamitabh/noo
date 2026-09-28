@@ -5,6 +5,7 @@ import '../widgets/noo/nav/noo_toolbar.dart';
 import '../widgets/noo/noo_layout.dart';
 import '../widgets/settings/settings_account_card.dart';
 import '../widgets/settings/settings_accounts.dart';
+import '../widgets/settings/settings_action_bar.dart';
 import '../widgets/settings/settings_appearance.dart';
 import '../widgets/settings/settings_file_sync.dart';
 import '../widgets/settings/settings_files_cache.dart';
@@ -12,9 +13,11 @@ import '../widgets/settings/settings_security.dart';
 import '../widgets/settings/settings_swipe.dart';
 import '../widgets/settings/settings_tabs.dart';
 
-/// Settings, pushed on top of the shell (DESIGN_SYSTEM.md 4's 8-section
+/// Settings, pushed on top of the shell (DESIGN_SYSTEM.md 4's 9-section
 /// order: account card, accounts, security, file sync, files cache,
-/// appearance, tabs, swipe on a file). One column of [SettingsSection]s on
+/// appearance, tabs, action bar, swipe on a file). One column of
+/// [SettingsSection]s (and [SettingsActionBarSection], which has no option
+/// rows of its own to put in one - just the reorder list) on
 /// mobile; a 2-column grid of cards on desktop - see each
 /// `widgets/settings/*.dart` file for a section's own content and any
 /// setting that had to be slotted in or grouped under "Advanced appearance".
@@ -29,6 +32,7 @@ class AccountView extends StatelessWidget {
     SettingsFilesCacheSection(),
     SettingsAppearanceSection(),
     SettingsTabsSection(),
+    SettingsActionBarSection(),
     SettingsSwipeSection(),
   ];
 
@@ -48,7 +52,9 @@ class AccountView extends StatelessWidget {
             ),
       body: SafeArea(
         top: false,
-        child: desktop ? _DesktopGrid(sections: _sections) : _MobileList(sections: _sections),
+        child: desktop
+            ? _DesktopGrid(sections: _sections)
+            : _MobileList(sections: _sections),
       ),
     );
   }
@@ -61,10 +67,18 @@ class _MobileList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(NooSpace.sm, NooSpace.sm, NooSpace.sm, NooSpace.xxl),
+      padding: const EdgeInsets.fromLTRB(
+        NooSpace.sm,
+        NooSpace.sm,
+        NooSpace.sm,
+        NooSpace.xxl,
+      ),
       physics: const BouncingScrollPhysics(),
       children: [
-        for (final section in sections) ...[section, const SizedBox(height: NooSpace.xl)],
+        for (final section in sections) ...[
+          section,
+          const SizedBox(height: NooSpace.xl),
+        ],
       ],
     );
   }
@@ -112,7 +126,10 @@ class _Column extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final child in children) ...[child, const SizedBox(height: NooSpace.xl)],
+        for (final child in children) ...[
+          child,
+          const SizedBox(height: NooSpace.xl),
+        ],
       ],
     );
   }

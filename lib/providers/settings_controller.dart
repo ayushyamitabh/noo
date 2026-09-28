@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/app_tab.dart';
+import '../models/selection_action.dart';
 import '../theme/app_theme.dart';
 
 /// What swiping a Files list-view item left/right does, user-configurable
@@ -24,6 +25,7 @@ class SettingsController extends ChangeNotifier {
   static const _prefUseDynamicColor = 'ui_use_dynamic_color';
   static const _prefSeedColor = 'ui_seed_color';
   static const _prefTabOrder = 'ui_tab_order';
+  static const _prefSelectionActionOrder = 'ui_selection_action_order';
   static const _prefHiddenTabs = 'ui_hidden_tabs';
   static const _prefDefaultTab = 'ui_default_tab';
   static const _prefSwipeLeftAction = 'ui_swipe_left_action';
@@ -46,6 +48,9 @@ class SettingsController extends ChangeNotifier {
   List<AppTab> _tabOrder = AppTab.values.toList();
   Set<AppTab> _hiddenTabs = {};
   AppTab _defaultTab = AppTab.files;
+
+  List<SelectionActionKind> _selectionActionOrder = SelectionActionKind.values
+      .toList();
 
   SwipeAction _swipeLeftAction = SwipeAction.delete;
   SwipeAction _swipeRightAction = SwipeAction.favorite;
@@ -85,6 +90,12 @@ class SettingsController extends ChangeNotifier {
   List<AppTab> get tabOrder => _tabOrder;
   Set<AppTab> get hiddenTabs => _hiddenTabs;
   AppTab get defaultTab => _defaultTab;
+
+  /// The priority order bulk actions (favorite, share, download, ...) show
+  /// in on the multi-select action bar - see [orderSelectionActions]. Every
+  /// [SelectionActionKind] is always present here (nothing is hidden, only
+  /// reordered), so [NooSelectionBar]'s fixed inline slots are always full.
+  List<SelectionActionKind> get selectionActionOrder => _selectionActionOrder;
 
   /// The tabs the bottom nav bar should actually show, in order.
   List<AppTab> get visibleTabs =>
@@ -132,6 +143,25 @@ class SettingsController extends ChangeNotifier {
           if (!order.contains(tab)) order.add(tab);
         }
         _tabOrder = order;
+      }
+
+      final savedActionOrderNames = prefs.getStringList(
+        _prefSelectionActionOrder,
+      );
+      if (savedActionOrderNames != null) {
+        final order = <SelectionActionKind>[];
+        for (final name in savedActionOrderNames) {
+          final match = SelectionActionKind.values
+              .where((k) => k.name == name)
+              .firstOrNull;
+          if (match != null) order.add(match);
+        }
+        // Forward-compat: a kind added in a later app update won't be in an
+        // older saved order yet, so append anything missing.
+        for (final kind in SelectionActionKind.values) {
+          if (!order.contains(kind)) order.add(kind);
+        }
+        _selectionActionOrder = order;
       }
 
       final savedHiddenNames = prefs.getStringList(_prefHiddenTabs);
@@ -231,6 +261,17 @@ class SettingsController extends ChangeNotifier {
     notifyListeners();
     _prefsFuture.then(
       (p) => p.setStringList(_prefTabOrder, order.map((t) => t.name).toList()),
+    );
+  }
+
+  void setSelectionActionOrder(List<SelectionActionKind> order) {
+    _selectionActionOrder = order;
+    notifyListeners();
+    _prefsFuture.then(
+      (p) => p.setStringList(
+        _prefSelectionActionOrder,
+        order.map((k) => k.name).toList(),
+      ),
     );
   }
 

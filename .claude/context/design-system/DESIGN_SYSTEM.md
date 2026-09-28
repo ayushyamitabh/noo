@@ -178,7 +178,9 @@ multi-select)
   desktop - there can be up to 9: favorite, share, download, delete, copy,
   move, rename, sync, details); the rest sit behind a trailing "More"
   button that opens the same grouped-list sheet a file row's own overflow
-  menu (`ellipsis`/`ellipsis-vertical`) already uses.
+  menu (`ellipsis`/`ellipsis-vertical`) already uses. Which actions land in
+  the inline slots vs. "More" is the user's own priority order (Settings
+  → Action bar, §4's 9-part list), not a fixed per-kind assignment.
 - Mobile: inline actions are plain 20px accent-text icons, no fill; "More"
   is the same 40px `NooOverflowButton` treatment (`ellipsis`/
   `ellipsis-vertical`, fg-3) file rows use for their own overflow menu.
@@ -317,7 +319,12 @@ Sidebar items are 38px tall with radius 12, an 18px icon and a 14/500 label. The
   5. Files cache
   6. Appearance
   7. Tabs
-  8. Swipe on a file
+  8. Action bar - a reorder-only list (no pin/hide, unlike Tabs): the
+     priority order for the Selection action bar's bulk actions (favorite,
+     share, download, delete, copy, move, rename, sync, details) - the
+     first few (3 mobile / 4 desktop) land in the bar's fixed inline
+     slots, the rest sit behind "More". See §2 "Selection action bar".
+  9. Swipe on a file
 
   Mobile uses one column of grouped lists. Desktop uses a 2-column grid of cards with a 1px line and radius 20.
 - **Share sheet / dialog:** sections in this order:

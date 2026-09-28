@@ -14,12 +14,15 @@ import 'package:noo/widgets/noo/lists/noo_tab_order_row.dart';
 import 'noo_test_utils.dart';
 
 /// [n] actions labelled A, B, C, ... each incrementing an entry in [taps]
-/// keyed by its own label when tapped.
+/// keyed by its own label when tapped. [n] must be at most
+/// `SelectionActionKind.values.length` - each generated action needs its
+/// own distinct kind.
 List<SelectionAction> _actions(int n, Map<String, int> taps) =>
     List.generate(n, (i) {
       final label = String.fromCharCode(65 + i);
       taps[label] = 0;
       return SelectionAction(
+        kind: SelectionActionKind.values[i],
         icon: LucideIcons.star,
         label: label,
         onTap: () => taps[label] = taps[label]! + 1,

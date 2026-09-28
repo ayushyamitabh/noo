@@ -419,6 +419,7 @@ class _FilesViewState extends State<FilesView>
     if (pick.isPicking) {
       return [
         SelectionAction(
+          kind: SelectionActionKind.favorite,
           icon: LucideIcons.check,
           label: 'Use ${selected.length} item(s)',
           onTap: () => pick.confirmPick(selected),
@@ -427,13 +428,15 @@ class _FilesViewState extends State<FilesView>
     }
     final allFavorited = selected.every((i) => i.isFavorite);
     final allSynced = selected.every((i) => sync.isPathSynced(i.path));
-    return [
+    final actions = [
       SelectionAction(
+        kind: SelectionActionKind.favorite,
         icon: allFavorited ? LucideIcons.starOff : LucideIcons.star,
         label: allFavorited ? 'Remove from favorites' : 'Favorite',
         onTap: () => _favoriteSelected(context, selected),
       ),
       SelectionAction(
+        kind: SelectionActionKind.share,
         icon: LucideIcons.share2,
         label: 'Share',
         onTap: () => selected.length == 1
@@ -441,43 +444,54 @@ class _FilesViewState extends State<FilesView>
             : _shareSelected(context, selected),
       ),
       SelectionAction(
+        kind: SelectionActionKind.download,
         icon: LucideIcons.download,
         label: 'Download',
         onTap: () => _downloadSelected(context, selected),
       ),
       SelectionAction(
+        kind: SelectionActionKind.delete,
         icon: LucideIcons.trash2,
         label: 'Delete',
         onTap: () => _confirmDeleteSelected(context, selected),
       ),
       SelectionAction(
+        kind: SelectionActionKind.copy,
         icon: LucideIcons.copy,
         label: 'Copy',
         onTap: () => _moveOrCopySelected(context, selected, copy: true),
       ),
       SelectionAction(
+        kind: SelectionActionKind.move,
         icon: LucideIcons.folderInput,
         label: 'Move',
         onTap: () => _moveOrCopySelected(context, selected, copy: false),
       ),
       if (selected.length == 1)
         SelectionAction(
+          kind: SelectionActionKind.rename,
           icon: LucideIcons.filePen,
           label: 'Rename',
           onTap: () => _renameItem(selected.single),
         ),
       SelectionAction(
+        kind: SelectionActionKind.sync,
         icon: LucideIcons.hardDriveDownload,
         label: allSynced ? 'Stop syncing to device' : 'Sync to device',
         onTap: () => _toggleSyncSelected(context, sync, selected),
       ),
       if (selected.length == 1)
         SelectionAction(
+          kind: SelectionActionKind.details,
           icon: LucideIcons.info,
           label: 'Details',
           onTap: () => DetailsSheet.show(context, selected.single),
         ),
     ];
+    return orderSelectionActions(
+      actions,
+      context.read<SettingsController>().selectionActionOrder,
+    );
   }
 
   Future<void> _renameItem(NextcloudItem item) async {

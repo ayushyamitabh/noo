@@ -96,13 +96,15 @@ class _FavoritesViewState extends State<FavoritesView> {
   /// The bulk actions shown in the sticky selection toolbar for the
   /// currently-selected items - same set Files/Photos offer.
   List<SelectionAction> _buildSelectionActions(List<NextcloudItem> selected) {
-    return [
+    final actions = [
       SelectionAction(
+        kind: SelectionActionKind.favorite,
         icon: LucideIcons.starOff,
         label: 'Remove from favorites',
         onTap: () => _unfavoriteSelected(selected),
       ),
       SelectionAction(
+        kind: SelectionActionKind.share,
         icon: LucideIcons.share2,
         label: 'Share',
         onTap: () => selected.length == 1
@@ -110,32 +112,41 @@ class _FavoritesViewState extends State<FavoritesView> {
             : _shareSelected(context, selected),
       ),
       SelectionAction(
+        kind: SelectionActionKind.download,
         icon: LucideIcons.download,
         label: 'Download',
         onTap: () => _downloadSelected(context, selected),
       ),
       SelectionAction(
+        kind: SelectionActionKind.delete,
         icon: LucideIcons.trash2,
         label: 'Delete',
         onTap: () => _confirmDeleteSelected(context, selected),
       ),
       SelectionAction(
+        kind: SelectionActionKind.copy,
         icon: LucideIcons.copy,
         label: 'Copy',
         onTap: () => _moveOrCopySelected(selected, copy: true),
       ),
       SelectionAction(
+        kind: SelectionActionKind.move,
         icon: LucideIcons.folderInput,
         label: 'Move',
         onTap: () => _moveOrCopySelected(selected, copy: false),
       ),
       if (selected.length == 1)
         SelectionAction(
+          kind: SelectionActionKind.details,
           icon: LucideIcons.info,
           label: 'Details',
           onTap: () => DetailsSheet.show(context, selected.single),
         ),
     ];
+    return orderSelectionActions(
+      actions,
+      context.read<SettingsController>().selectionActionOrder,
+    );
   }
 
   Future<void> _unfavoriteSelected(List<NextcloudItem> items) async {
