@@ -20,6 +20,7 @@ import '../widgets/noo/core/noo_segmented_control.dart';
 import '../widgets/noo/core/noo_toggle.dart';
 import '../widgets/noo/files/noo_file_kind.dart';
 import '../widgets/noo/lists/noo_grouped_list.dart';
+import '../widgets/noo/lists/noo_selection_bar.dart';
 import '../widgets/noo/lists/noo_settings_row.dart';
 import '../widgets/noo/media/noo_photo_group.dart';
 import '../widgets/noo/media/noo_photo_tile.dart';
@@ -57,12 +58,9 @@ class PhotosView extends StatefulWidget {
   State<PhotosView> createState() => _PhotosViewState();
 }
 
-class _PhotosViewState extends State<PhotosView>
-    with SingleTickerProviderStateMixin {
+class _PhotosViewState extends State<PhotosView> {
   bool _requested = false;
   final Set<String> _selectedIds = {};
-  final ScrollController _selectionActionsScrollController = ScrollController();
-  final List<AnimationController> _scrollHintControllers = [];
 
   // Session-local only (not one of PhotosController's persisted display
   // prefs) - a pure narrowing of the already-fetched/filtered/sorted list,
@@ -74,79 +72,13 @@ class _PhotosViewState extends State<PhotosView>
 
   void _toggleSelection(NextcloudItem item) {
     HapticFeedback.selectionClick();
-    final enteringSelection = _selectedIds.isEmpty;
     setState(() {
       if (!_selectedIds.remove(item.id)) _selectedIds.add(item.id);
     });
-    if (enteringSelection && _isSelecting) {
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _playScrollHint(_selectionActionsScrollController),
-      );
-    }
   }
 
   void _clearSelection() {
     setState(_selectedIds.clear);
-  }
-
-  /// A one-shot hint that the selection actions row actually scrolls -
-  /// mirrors `FilesView`'s identical controls-row hint (see its doc
-  /// comment): nudges it right and back, once, the first time a selection
-  /// starts. No-ops if there's nothing to scroll (row already fits).
-  Future<void> _playScrollHint(ScrollController scrollController) async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    // `hasClients` only means a position is attached, not that it's
-    // finished its first layout - reading maxScrollExtent before that
-    // throws (min/maxScrollExtent are still null internally).
-    if (!mounted ||
-        !scrollController.hasClients ||
-        !scrollController.position.hasContentDimensions) {
-      return;
-    }
-    final maxExtent = scrollController.position.maxScrollExtent;
-    if (maxExtent <= 0) return;
-    final double peak = maxExtent < 36 ? maxExtent : 36;
-    final controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    );
-    _scrollHintControllers.add(controller);
-    final hint = TweenSequence<double>([
-      TweenSequenceItem(
-        tween: Tween(
-          begin: 0.0,
-          end: peak,
-        ).chain(CurveTween(curve: Curves.easeInOutSine)),
-        weight: 50,
-      ),
-      TweenSequenceItem(
-        tween: Tween(
-          begin: peak,
-          end: 0.0,
-        ).chain(CurveTween(curve: Curves.easeInOutSine)),
-        weight: 50,
-      ),
-    ]).animate(controller);
-    void onTick() {
-      if (scrollController.hasClients) {
-        scrollController.jumpTo(hint.value);
-      }
-    }
-
-    hint.addListener(onTick);
-    await controller.forward();
-    hint.removeListener(onTick);
-    _scrollHintControllers.remove(controller);
-    controller.dispose();
-  }
-
-  @override
-  void dispose() {
-    for (final controller in _scrollHintControllers) {
-      controller.dispose();
-    }
-    _selectionActionsScrollController.dispose();
-    super.dispose();
   }
 
   /// Mirrors `FilesView._handlePickTap` - Photos has no folders, so this is
@@ -181,52 +113,52 @@ class _PhotosViewState extends State<PhotosView>
     if (pick.isPicking) {
       return [
         SelectionAction(
-          icon: Icons.check_rounded,
+          icon: LucideIcons.check,
           label: 'Use ${selected.length} item(s)',
           onTap: () => pick.confirmPick(selected),
         ),
       ];
     }
+    // Matches the star/star-off convention Files' own selection toolbar
+    // uses for favorite/unfavorite (see `files_view.dart`) rather than a
+    // filled heart.
+    final allFavorited = selected.every((i) => i.isFavorite);
     return [
       SelectionAction(
-        icon: selected.every((i) => i.isFavorite)
-            ? Icons.favorite_rounded
-            : Icons.favorite_border_rounded,
-        label: selected.every((i) => i.isFavorite)
-            ? 'Remove from favorites'
-            : 'Favorite',
+        icon: allFavorited ? LucideIcons.starOff : LucideIcons.star,
+        label: allFavorited ? 'Remove from favorites' : 'Favorite',
         onTap: () => _favoriteSelected(selected),
       ),
       SelectionAction(
-        icon: Icons.share_rounded,
+        icon: LucideIcons.share2,
         label: 'Share',
         onTap: () => selected.length == 1
             ? ShareSheet.show(context, selected.single)
             : _shareSelected(context, selected),
       ),
       SelectionAction(
-        icon: Icons.download_rounded,
+        icon: LucideIcons.download,
         label: 'Download',
         onTap: () => _downloadSelected(context, selected),
       ),
       SelectionAction(
-        icon: Icons.delete_outline_rounded,
+        icon: LucideIcons.trash2,
         label: 'Delete',
         onTap: () => _confirmDeleteSelected(context, selected),
       ),
       SelectionAction(
-        icon: Icons.copy_rounded,
+        icon: LucideIcons.copy,
         label: 'Copy',
         onTap: () => _moveOrCopySelected(selected, copy: true),
       ),
       SelectionAction(
-        icon: Icons.drive_file_move_rounded,
+        icon: LucideIcons.folderInput,
         label: 'Move',
         onTap: () => _moveOrCopySelected(selected, copy: false),
       ),
       if (selected.length == 1)
         SelectionAction(
-          icon: Icons.info_outline_rounded,
+          icon: LucideIcons.info,
           label: 'Details',
           onTap: () => DetailsSheet.show(context, selected.single),
         ),
@@ -462,15 +394,13 @@ class _PhotosViewState extends State<PhotosView>
             const SizedBox(width: 8),
             NooChip(
               selected: _typeFilter == _PhotoTypeFilter.image,
-              onTap: () =>
-                  setState(() => _typeFilter = _PhotoTypeFilter.image),
+              onTap: () => setState(() => _typeFilter = _PhotoTypeFilter.image),
               child: const Text('Photos'),
             ),
             const SizedBox(width: 8),
             NooChip(
               selected: _typeFilter == _PhotoTypeFilter.video,
-              onTap: () =>
-                  setState(() => _typeFilter = _PhotoTypeFilter.video),
+              onTap: () => setState(() => _typeFilter = _PhotoTypeFilter.video),
               child: const Text('Videos'),
             ),
             const SizedBox(width: 8),
@@ -491,43 +421,58 @@ class _PhotosViewState extends State<PhotosView>
     showNooSheet(
       context,
       children: [
-        NooSegmentedControl<bool>(
-          fill: true,
-          value: photos.sortAscending,
-          onChanged: (asc) {
-            if (asc != photos.sortAscending) photos.toggleSortOrder();
-          },
-          options: const [
-            NooSegmentOption(
-              value: true,
-              icon: LucideIcons.arrowUp,
-              label: 'Ascending',
-            ),
-            NooSegmentOption(
-              value: false,
-              icon: LucideIcons.arrowDown,
-              label: 'Descending',
-            ),
-          ],
-        ),
-        NooGroupedList(
-          children: [
-            for (final field in FileSortField.values)
-              NooSettingsRow(
-                label: Text(sortFieldLabel(field)),
-                trailing: field == photos.sortField
-                    ? Icon(
-                        LucideIcons.check,
-                        size: 18,
-                        color: context.nooColors.accentText,
-                      )
-                    : null,
-                onTap: () {
-                  photos.setSortField(field);
-                  Navigator.pop(context);
+        // `showNooSheet`'s `children` are built once, up front - a bare
+        // checkmark here would freeze at whatever it was when the sheet
+        // opened, since tapping a row calls `photos.set...`/notifies the
+        // controller, not this already-built widget tree. `ListenableBuilder`
+        // re-runs its `builder` on every notification instead, so the
+        // selection updates live.
+        ListenableBuilder(
+          listenable: photos,
+          builder: (context, _) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              NooSegmentedControl<bool>(
+                fill: true,
+                value: photos.sortAscending,
+                onChanged: (asc) {
+                  if (asc != photos.sortAscending) photos.toggleSortOrder();
                 },
+                options: const [
+                  NooSegmentOption(
+                    value: true,
+                    icon: LucideIcons.arrowUp,
+                    label: 'Ascending',
+                  ),
+                  NooSegmentOption(
+                    value: false,
+                    icon: LucideIcons.arrowDown,
+                    label: 'Descending',
+                  ),
+                ],
               ),
-          ],
+              const SizedBox(height: 22),
+              NooGroupedList(
+                children: [
+                  for (final field in FileSortField.values)
+                    NooSettingsRow(
+                      label: Text(sortFieldLabel(field)),
+                      trailing: field == photos.sortField
+                          ? Icon(
+                              LucideIcons.check,
+                              size: 18,
+                              color: context.nooColors.accentText,
+                            )
+                          : null,
+                      onTap: () {
+                        photos.setSortField(field);
+                        Navigator.pop(context);
+                      },
+                    ),
+                ],
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -541,105 +486,59 @@ class _PhotosViewState extends State<PhotosView>
     showNooSheet(
       context,
       children: [
-        NooGroupedList(
-          children: [
-            NooSettingsRow(
-              icon: LucideIcons.heart,
-              label: const Text('Favorites only'),
-              trailing: NooToggle(
-                checked: photos.showFavoritesOnly,
-                onChanged: (_) => photos.toggleFavoritesFilter(),
-              ),
-            ),
-            NooSettingsRow(
-              icon: LucideIcons.eye,
-              label: const Text('Show hidden files'),
-              trailing: NooToggle(
-                checked: photos.showHidden,
-                onChanged: (_) => photos.toggleShowHidden(),
-              ),
-            ),
-            NooSettingsRow(
-              icon: LucideIcons.hardDrive,
-              label: const Text('External storage'),
-              trailing: NooToggle(
-                checked: files.storageScope == StorageScope.external,
-                onChanged: (external) => files.setStorageScope(
-                  external ? StorageScope.external : StorageScope.cloud,
+        // See `_showSortSheet`'s comment - `Listenable.merge` since these
+        // toggles span two controllers.
+        ListenableBuilder(
+          listenable: Listenable.merge([photos, files]),
+          builder: (context, _) => NooGroupedList(
+            children: [
+              NooSettingsRow(
+                icon: LucideIcons.heart,
+                label: const Text('Favorites only'),
+                trailing: NooToggle(
+                  checked: photos.showFavoritesOnly,
+                  onChanged: (_) => photos.toggleFavoritesFilter(),
                 ),
               ),
-            ),
-          ],
+              NooSettingsRow(
+                icon: LucideIcons.eye,
+                label: const Text('Show hidden files'),
+                trailing: NooToggle(
+                  checked: photos.showHidden,
+                  onChanged: (_) => photos.toggleShowHidden(),
+                ),
+              ),
+              NooSettingsRow(
+                icon: LucideIcons.hardDrive,
+                label: const Text('External storage'),
+                trailing: NooToggle(
+                  checked: files.storageScope == StorageScope.external,
+                  onChanged: (external) => files.setStorageScope(
+                    external ? StorageScope.external : StorageScope.cloud,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
   }
 
   /// Replaces the controls row's own sticky slot while selecting - a close
-  /// button, the "N selected" count, and the horizontally-scrollable bulk
-  /// actions. Mirrors `FilesView`'s identical selection bar.
+  /// button, the "N selected" count, and the bulk actions. Mirrors
+  /// `FilesView`'s identical selection bar.
   Widget _buildSelectionBar(
     BuildContext context,
     PickController pick,
     List<NextcloudItem> selectedItems,
   ) {
-    final colors = context.nooColors;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: NooSpace.sm),
-      child: Row(
-        children: [
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.5,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    icon: Icon(LucideIcons.x, size: 20, color: colors.fg1),
-                    tooltip: 'Cancel selection',
-                    onPressed: _clearSelection,
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${selectedItems.length} selected',
-                    style: NooText.cardTitle.copyWith(
-                      fontSize: 17,
-                      color: colors.fg1,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Expanded(
-            child: SingleChildScrollView(
-              controller: _selectionActionsScrollController,
-              scrollDirection: Axis.horizontal,
-              // Left-aligned (not anchored to the trailing edge) so the
-              // first action's left edge sits at a fixed spot - lining up
-              // with the controls row's own first chip directly below it -
-              // regardless of how many actions there are.
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (final action in _buildSelectionActions(
-                    pick,
-                    selectedItems,
-                  ))
-                    IconButton(
-                      icon: Icon(action.icon, size: 20, color: colors.fg1),
-                      tooltip: action.label,
-                      onPressed: action.onTap,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+    return NooSelectionBar(
+      count: selectedItems.length,
+      actions: _buildSelectionActions(pick, selectedItems),
+      onClose: _clearSelection,
+      isDesktop: NooLayout.isDesktop(context),
+      iosStyle: NooLayout.iosStyle(context),
     );
   }
 

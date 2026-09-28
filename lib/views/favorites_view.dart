@@ -21,6 +21,7 @@ import '../widgets/noo/files/noo_file_row.dart';
 import '../widgets/noo/files/noo_file_table.dart';
 import '../widgets/noo/files/noo_file_tile.dart';
 import '../widgets/noo/lists/noo_grouped_list.dart';
+import '../widgets/noo/lists/noo_selection_bar.dart';
 import '../widgets/noo/lists/noo_settings_row.dart';
 import '../widgets/noo/media/noo_grid_card.dart';
 import '../widgets/noo/noo_layout.dart';
@@ -55,90 +56,21 @@ class FavoritesView extends StatefulWidget {
   State<FavoritesView> createState() => _FavoritesViewState();
 }
 
-class _FavoritesViewState extends State<FavoritesView>
-    with SingleTickerProviderStateMixin {
+class _FavoritesViewState extends State<FavoritesView> {
   bool _requested = false;
   final Set<String> _selectedIds = {};
-  final ScrollController _selectionActionsScrollController = ScrollController();
-  final List<AnimationController> _scrollHintControllers = [];
 
   bool get _isSelecting => _selectedIds.isNotEmpty;
 
   void _toggleSelection(NextcloudItem item) {
     HapticFeedback.selectionClick();
-    final enteringSelection = _selectedIds.isEmpty;
     setState(() {
       if (!_selectedIds.remove(item.id)) _selectedIds.add(item.id);
     });
-    if (enteringSelection && _isSelecting) {
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _playScrollHint(_selectionActionsScrollController),
-      );
-    }
   }
 
   void _clearSelection() {
     setState(_selectedIds.clear);
-  }
-
-  /// Mirrors `FilesView`/`PhotosView`'s identical scroll-hint - see their
-  /// doc comment: nudges the selection actions row right and back, once,
-  /// the first time a selection starts. No-ops if there's nothing to
-  /// scroll (row already fits).
-  Future<void> _playScrollHint(ScrollController scrollController) async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    // `hasClients` only means a position is attached, not that it's
-    // finished its first layout - reading maxScrollExtent before that
-    // throws (min/maxScrollExtent are still null internally).
-    if (!mounted ||
-        !scrollController.hasClients ||
-        !scrollController.position.hasContentDimensions) {
-      return;
-    }
-    final maxExtent = scrollController.position.maxScrollExtent;
-    if (maxExtent <= 0) return;
-    final double peak = maxExtent < 36 ? maxExtent : 36;
-    final controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    );
-    _scrollHintControllers.add(controller);
-    final hint = TweenSequence<double>([
-      TweenSequenceItem(
-        tween: Tween(
-          begin: 0.0,
-          end: peak,
-        ).chain(CurveTween(curve: Curves.easeInOutSine)),
-        weight: 50,
-      ),
-      TweenSequenceItem(
-        tween: Tween(
-          begin: peak,
-          end: 0.0,
-        ).chain(CurveTween(curve: Curves.easeInOutSine)),
-        weight: 50,
-      ),
-    ]).animate(controller);
-    void onTick() {
-      if (scrollController.hasClients) {
-        scrollController.jumpTo(hint.value);
-      }
-    }
-
-    hint.addListener(onTick);
-    await controller.forward();
-    hint.removeListener(onTick);
-    _scrollHintControllers.remove(controller);
-    controller.dispose();
-  }
-
-  @override
-  void dispose() {
-    for (final controller in _scrollHintControllers) {
-      controller.dispose();
-    }
-    _selectionActionsScrollController.dispose();
-    super.dispose();
   }
 
   /// A favorited folder switches to the Files tab, navigated there; a
@@ -166,40 +98,40 @@ class _FavoritesViewState extends State<FavoritesView>
   List<SelectionAction> _buildSelectionActions(List<NextcloudItem> selected) {
     return [
       SelectionAction(
-        icon: Icons.favorite_border_rounded,
+        icon: LucideIcons.starOff,
         label: 'Remove from favorites',
         onTap: () => _unfavoriteSelected(selected),
       ),
       SelectionAction(
-        icon: Icons.share_rounded,
+        icon: LucideIcons.share2,
         label: 'Share',
         onTap: () => selected.length == 1
             ? ShareSheet.show(context, selected.single)
             : _shareSelected(context, selected),
       ),
       SelectionAction(
-        icon: Icons.download_rounded,
+        icon: LucideIcons.download,
         label: 'Download',
         onTap: () => _downloadSelected(context, selected),
       ),
       SelectionAction(
-        icon: Icons.delete_outline_rounded,
+        icon: LucideIcons.trash2,
         label: 'Delete',
         onTap: () => _confirmDeleteSelected(context, selected),
       ),
       SelectionAction(
-        icon: Icons.copy_rounded,
+        icon: LucideIcons.copy,
         label: 'Copy',
         onTap: () => _moveOrCopySelected(selected, copy: true),
       ),
       SelectionAction(
-        icon: Icons.drive_file_move_rounded,
+        icon: LucideIcons.folderInput,
         label: 'Move',
         onTap: () => _moveOrCopySelected(selected, copy: false),
       ),
       if (selected.length == 1)
         SelectionAction(
-          icon: Icons.info_outline_rounded,
+          icon: LucideIcons.info,
           label: 'Details',
           onTap: () => DetailsSheet.show(context, selected.single),
         ),
@@ -477,7 +409,11 @@ class _FavoritesViewState extends State<FavoritesView>
       col3: item.isFolder ? null : formatBytes(item.size),
       favorite: item.isFavorite,
       selected: isSelected,
-      thumbnail: _thumbnailFor(context, item, extent: NooFileTileSize.desktop.extent),
+      thumbnail: _thumbnailFor(
+        context,
+        item,
+        extent: NooFileTileSize.desktop.extent,
+      ),
       onTap: () {
         if (_isSelecting) {
           _toggleSelection(item);
@@ -639,7 +575,12 @@ class _FavoritesViewState extends State<FavoritesView>
               childAspectRatio: isDesktop ? 0.92 : 0.85,
             ),
             delegate: SliverChildBuilderDelegate((context, index) {
-              return _buildGridCard(context, favorites[index], siblings, isDesktop);
+              return _buildGridCard(
+                context,
+                favorites[index],
+                siblings,
+                isDesktop,
+              );
             }, childCount: favorites.length),
           ),
         )
@@ -673,11 +614,7 @@ class _FavoritesViewState extends State<FavoritesView>
                   },
                 );
               }
-              return _buildTableRow(
-                context,
-                favorites[index - 1],
-                siblings,
-              );
+              return _buildTableRow(context, favorites[index - 1], siblings);
             }, childCount: favorites.length + 1),
           ),
         )
@@ -719,56 +656,12 @@ class _FavoritesViewState extends State<FavoritesView>
     BuildContext context,
     List<NextcloudItem> selectedItems,
   ) {
-    final colors = context.nooColors;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: NooSpace.sm),
-      child: Row(
-        children: [
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.5,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    icon: Icon(LucideIcons.x, size: 20, color: colors.fg1),
-                    tooltip: 'Cancel selection',
-                    onPressed: _clearSelection,
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${selectedItems.length} selected',
-                    style: NooText.cardTitle.copyWith(
-                      fontSize: 17,
-                      color: colors.fg1,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Expanded(
-            child: SingleChildScrollView(
-              controller: _selectionActionsScrollController,
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (final action in _buildSelectionActions(selectedItems))
-                    IconButton(
-                      icon: Icon(action.icon, size: 20, color: colors.fg1),
-                      tooltip: action.label,
-                      onPressed: action.onTap,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+    return NooSelectionBar(
+      count: selectedItems.length,
+      actions: _buildSelectionActions(selectedItems),
+      onClose: _clearSelection,
+      isDesktop: NooLayout.isDesktop(context),
+      iosStyle: NooLayout.iosStyle(context),
     );
   }
 }

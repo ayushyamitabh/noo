@@ -10,7 +10,7 @@ Reference files in this project:
 - `Noo Design System.dc.html` is the visual component sheet.
 - `noo-kit.js` holds the tokens (`TH`), the icon set (`SVG`/`ic`), file-type mapping (`KIND`) and mock data.
 - `Mobile Screen.dc.html` and `Desktop Screen.dc.html` are the reference builds for each screen.
-- [Noo — Missing Screens](https://claude.ai/artifact/3AGPqqMdkLSC2ypCh2CQs4) is a live design canvas (Claude Design, not a static file in this repo) covering the screens this doc originally had no recipe for: Media viewer, Search, the Upload/Move/Copy destination picker, and the Details sheet's tab switch. It has both an iOS row (built first, ready for later) and an Android row (built to match right now) - same content, chrome adapted per the platform rule above. §4 below is the written-up version of what's approved there; go back to the canvas for pixel-level layout, not just the summary.
+- [Noo — Missing Screens](https://claude.ai/artifact/3AGPqqMdkLSC2ypCh2CQs4) is a live design canvas (Claude Design, not a static file in this repo) covering pieces this doc originally had no recipe for: Media viewer, Search, the Upload/Move/Copy destination picker, the Details sheet's tab switch, and the Selection action bar (mobile + desktop). It has both an iOS row (built first, ready for later) and an Android row (built to match right now) - same content, chrome adapted per the platform rule above. §4 below is the written-up version of what's approved there; go back to the canvas for pixel-level layout, not just the summary.
 
 ---
 
@@ -159,6 +159,31 @@ Use **Lucide** (pinned to `lucide-static@0.460.0`) at a 1.8 stroke. Sizes are 14
 - The row slides and uncovers a 96px action block. Delete is white on danger-fill; Favorite is white on accent.
 - The block has a 20px icon above a 12/600 label.
 - Swipe actions are set in Settings → Swipe on a file.
+
+**Selection action bar** (Files, Photos, Favorites - anywhere with
+multi-select)
+- Replaces that screen's own sort/filter row in place while selecting -
+  never a second bar stacked underneath it, and never the shell's own top
+  bar/toolbar, which don't change for selection.
+- A `surface` card, radius 20, in the screen's usual gutter (12 mobile, 24
+  desktop) - selection reads as a distinct mode, not a bare row of buttons
+  on `bg`.
+- Left to right: a 36px `surface-2` close circle (`x`), then "N selected"
+  (17/500), then the bulk actions, trailing-anchored. Fixed width, never
+  scrolls: only the first few actions show inline (3 on mobile, 4 on
+  desktop - there can be up to 9: favorite, share, download, delete, copy,
+  move, rename, sync, details); the rest sit behind a trailing "More"
+  button that opens the same grouped-list sheet a file row's own overflow
+  menu (`ellipsis`/`ellipsis-vertical`) already uses.
+- Mobile: inline actions are plain 20px accent-text icons, no fill; "More"
+  is the same 40px `NooOverflowButton` treatment (`ellipsis`/
+  `ellipsis-vertical`, fg-3) file rows use for their own overflow menu.
+- Desktop: inline actions are labelled tonal pills (accent-soft/
+  accent-text), danger-soft/danger for the one labelled "Delete" - desktop
+  has the room for labels, and the app's other toolbar actions are already
+  labelled buttons rather than bare icons. "More" is a secondary pill
+  (surface-2/fg-1) with a trailing `chevron-down`, so it reads as "opens a
+  menu" rather than another bulk action.
 
 **Grid card**
 - Surface fill, radius 18. Mobile uses 2 columns with a 10px gap; desktop uses 5 columns with a 16px gap.

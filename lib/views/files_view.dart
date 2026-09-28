@@ -35,6 +35,7 @@ import '../widgets/noo/files/noo_file_tile.dart';
 import '../widgets/noo/files/noo_status_icon.dart';
 import '../widgets/noo/files/noo_swipe_action.dart';
 import '../widgets/noo/lists/noo_grouped_list.dart';
+import '../widgets/noo/lists/noo_selection_bar.dart';
 import '../widgets/noo/lists/noo_settings_row.dart';
 import '../widgets/noo/lists/noo_summary_card.dart';
 import '../widgets/noo/media/noo_grid_card.dart';
@@ -231,7 +232,6 @@ class _FilesViewState extends State<FilesView>
   final Set<String> _selectedIds = {};
   int _lastPathDepth = 1;
   final ScrollController _controlsScrollController = ScrollController();
-  final ScrollController _selectionActionsScrollController = ScrollController();
   final List<AnimationController> _scrollHintControllers = [];
 
   bool get _isSelecting => _selectedIds.isNotEmpty;
@@ -247,9 +247,8 @@ class _FilesViewState extends State<FilesView>
 
   /// The on-device copy of [item] for the Offline tab; null online, where
   /// thumbnails come from server previews instead.
-  File? _localFileFor(BuildContext context, NextcloudItem item) => _offline
-      ? context.read<OfflineController>().localFileFor(item)
-      : null;
+  File? _localFileFor(BuildContext context, NextcloudItem item) =>
+      _offline ? context.read<OfflineController>().localFileFor(item) : null;
 
   // (Online only - the Offline tab always reloads on first build, since a
   // local listing has no cheap "already loaded" signal.)
@@ -340,21 +339,14 @@ class _FilesViewState extends State<FilesView>
       controller.dispose();
     }
     _controlsScrollController.dispose();
-    _selectionActionsScrollController.dispose();
     super.dispose();
   }
 
   void _toggleSelection(NextcloudItem item) {
     HapticFeedback.selectionClick();
-    final enteringSelection = _selectedIds.isEmpty;
     setState(() {
       if (!_selectedIds.remove(item.id)) _selectedIds.add(item.id);
     });
-    if (enteringSelection && _isSelecting) {
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _playScrollHint(_selectionActionsScrollController),
-      );
-    }
   }
 
   void _clearSelection() {
@@ -766,7 +758,9 @@ class _FilesViewState extends State<FilesView>
                   Icon(LucideIcons.circleAlert, size: 56, color: colors.danger),
                   const SizedBox(height: 16),
                   Text(
-                    _offline ? 'Could not read local files' : 'WebDAV Sync Error',
+                    _offline
+                        ? 'Could not read local files'
+                        : 'WebDAV Sync Error',
                     style: NooText.cardTitle.copyWith(color: colors.danger),
                   ),
                   const SizedBox(height: 8),
@@ -814,7 +808,12 @@ class _FilesViewState extends State<FilesView>
       else if (files.isGridView)
         SliverPadding(
           key: const ValueKey('files-grid'),
-          padding: EdgeInsets.fromLTRB(gutter, NooSpace.xs, gutter, NooSpace.lg),
+          padding: EdgeInsets.fromLTRB(
+            gutter,
+            NooSpace.xs,
+            gutter,
+            NooSpace.lg,
+          ),
           sliver: SliverGrid(
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: isDesktop ? 5 : 2,
@@ -838,7 +837,11 @@ class _FilesViewState extends State<FilesView>
           key: const ValueKey('files-table-header'),
           padding: EdgeInsets.fromLTRB(gutter, NooSpace.xs, gutter, 0),
           sliver: SliverToBoxAdapter(
-            child: _buildDesktopHeader(context, files, browser.currentFolderPath),
+            child: _buildDesktopHeader(
+              context,
+              files,
+              browser.currentFolderPath,
+            ),
           ),
         ),
         SliverPadding(
@@ -872,7 +875,12 @@ class _FilesViewState extends State<FilesView>
                 key: ValueKey('${browser.currentFolderPath}::${item.id}'),
                 index: index,
                 fromRight: navigatingDeeper,
-                child: _buildMobileRow(context, item, index, browser.items.length),
+                child: _buildMobileRow(
+                  context,
+                  item,
+                  index,
+                  browser.items.length,
+                ),
               );
             }, childCount: browser.items.length),
           ),
@@ -955,7 +963,9 @@ class _FilesViewState extends State<FilesView>
         stat: stat,
         caption: caption,
         meta: meta,
-        tone: hasConflicts ? NooSummaryCardTone.danger : NooSummaryCardTone.normal,
+        tone: hasConflicts
+            ? NooSummaryCardTone.danger
+            : NooSummaryCardTone.normal,
         action: NooButton(
           variant: NooButtonVariant.tonal,
           size: NooButtonSize.compact,
@@ -968,75 +978,20 @@ class _FilesViewState extends State<FilesView>
     );
   }
 
-  /// Takes over the controls row's own sticky slot while selecting - a
-  /// close button, the "N selected" count, and the horizontally-scrollable
-  /// bulk actions (in accent-text, per `DESIGN_SYSTEM.md`'s pinned
-  /// selection bar).
+  /// Takes over the controls row's own sticky slot while selecting - see
+  /// `NooSelectionBar` (design canvas
+  /// https://claude.ai/artifact/3AGPqqMdkLSC2ypCh2CQs4, "Selection action
+  /// bar" - DESIGN_SYSTEM.md has no §4 recipe of its own for this).
   Widget _buildSelectionBar(
     BuildContext context,
     List<NextcloudItem> selectedItems,
   ) {
-    final colors = context.nooColors;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: NooSpace.sm),
-      child: Row(
-        children: [
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.5,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    icon: Icon(LucideIcons.x, size: 20, color: colors.fg1),
-                    tooltip: 'Cancel selection',
-                    onPressed: _clearSelection,
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${selectedItems.length} selected',
-                    style: NooText.cardTitle.copyWith(
-                      fontSize: 17,
-                      color: colors.fg1,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Expanded(
-            child: SingleChildScrollView(
-              controller: _selectionActionsScrollController,
-              scrollDirection: Axis.horizontal,
-              // Left-aligned (not anchored to the trailing edge) so the
-              // first action's left edge sits at a fixed spot - lining up
-              // with the controls row's own first icon directly below it -
-              // regardless of how many actions there are.
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (final action in _buildSelectionActions(
-                    context,
-                    selectedItems,
-                  ))
-                    IconButton(
-                      icon: Icon(
-                        action.icon,
-                        size: 20,
-                        color: colors.accentText,
-                      ),
-                      tooltip: action.label,
-                      onPressed: action.onTap,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+    return NooSelectionBar(
+      count: selectedItems.length,
+      actions: _buildSelectionActions(context, selectedItems),
+      onClose: _clearSelection,
+      isDesktop: NooLayout.isDesktop(context),
+      iosStyle: NooLayout.iosStyle(context),
     );
   }
 
@@ -1144,9 +1099,7 @@ class _FilesViewState extends State<FilesView>
     // just some)? Save straight from the local copy instead of a fresh
     // network fetch through DownloadService - see
     // SyncStatusController.localSyncedFilePath.
-    final localPaths = await Future.wait(
-      files.map(sync.localSyncedFilePath),
-    );
+    final localPaths = await Future.wait(files.map(sync.localSyncedFilePath));
     if (localPaths.every((path) => path != null)) {
       try {
         for (var i = 0; i < files.length; i++) {
@@ -1355,7 +1308,11 @@ class _FilesViewState extends State<FilesView>
     FilesController files,
     String folderPath,
   ) {
-    const columns = [FileSortField.name, FileSortField.size, FileSortField.dateModified];
+    const columns = [
+      FileSortField.name,
+      FileSortField.size,
+      FileSortField.dateModified,
+    ];
     final field = files.sortFieldFor(folderPath);
     final sortColumn = columns.indexOf(field);
     return NooFileTableHeader(
@@ -1486,7 +1443,11 @@ class _FilesViewState extends State<FilesView>
               item: item,
               service: session.service,
               localFile: _localFileFor(context, item),
-              fallback: Icon(kind.icon, color: kind.foreground(colors), size: 32),
+              fallback: Icon(
+                kind.icon,
+                color: kind.foreground(colors),
+                size: 32,
+              ),
             )
           : null,
       thumbnailHeight: NooLayout.isDesktop(context) ? 118 : 104,

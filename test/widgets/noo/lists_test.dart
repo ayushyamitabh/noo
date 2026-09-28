@@ -1,15 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:noo/models/selection_action.dart';
 import 'package:noo/widgets/noo/core/noo_progress_bar.dart';
 import 'package:noo/widgets/noo/core/noo_toggle.dart';
 import 'package:noo/widgets/noo/lists/noo_banner.dart';
 import 'package:noo/widgets/noo/lists/noo_grouped_list.dart';
+import 'package:noo/widgets/noo/lists/noo_selection_bar.dart';
 import 'package:noo/widgets/noo/lists/noo_settings_row.dart';
 import 'package:noo/widgets/noo/lists/noo_summary_card.dart';
 import 'package:noo/widgets/noo/lists/noo_tab_order_row.dart';
 
 import 'noo_test_utils.dart';
+
+/// [n] actions labelled A, B, C, ... each incrementing an entry in [taps]
+/// keyed by its own label when tapped.
+List<SelectionAction> _actions(int n, Map<String, int> taps) =>
+    List.generate(n, (i) {
+      final label = String.fromCharCode(65 + i);
+      taps[label] = 0;
+      return SelectionAction(
+        icon: LucideIcons.star,
+        label: label,
+        onTap: () => taps[label] = taps[label]! + 1,
+      );
+    });
 
 void main() {
   setUpNooTests();
@@ -28,15 +43,26 @@ void main() {
       );
       expect(find.byIcon(LucideIcons.info), findsOneWidget);
       expect(decorationOf(tester, find.text('Empty trash')).color, c.surface);
-      expect(tester.widget<Text>(find.text('Empty trash')).style!.color, c.danger);
+      expect(
+        tester.widget<Text>(find.text('Empty trash')).style!.color,
+        c.danger,
+      );
       await tester.tap(find.text('Empty trash'));
       expect(taps, 1);
     });
 
-    testNooWidgets('non-danger action uses accent text', (tester, theme, c) async {
+    testNooWidgets('non-danger action uses accent text', (
+      tester,
+      theme,
+      c,
+    ) async {
       await pumpNoo(
         tester,
-        const NooBanner(actionLabel: 'Undo', actionIsDanger: false, child: Text('x')),
+        const NooBanner(
+          actionLabel: 'Undo',
+          actionIsDanger: false,
+          child: Text('x'),
+        ),
         theme: theme,
       );
       expect(tester.widget<Text>(find.text('Undo')).style!.color, c.accentText);
@@ -44,7 +70,11 @@ void main() {
   });
 
   group('NooGroupedList', () {
-    testNooWidgets('label, aside, 1px line gaps and footer', (tester, theme, c) async {
+    testNooWidgets('label, aside, 1px line gaps and footer', (
+      tester,
+      theme,
+      c,
+    ) async {
       await pumpNoo(
         tester,
         SizedBox(
@@ -65,7 +95,8 @@ void main() {
       expect(find.text('2'), findsOneWidget);
       expect(find.text('Footer note'), findsOneWidget);
       expect(tester.widget<Text>(find.text('Accounts')).style!.color, c.fg2);
-      final gap = tester.getTopLeft(find.byKey(const Key('r2'))).dy -
+      final gap =
+          tester.getTopLeft(find.byKey(const Key('r2'))).dy -
           tester.getBottomLeft(find.byKey(const Key('r1'))).dy;
       expect(gap, 1);
       // Rows paint their own surface; the gaps show the list's line fill.
@@ -73,8 +104,131 @@ void main() {
     });
   });
 
+  group('NooSelectionBar', () {
+    testNooWidgets('mobile: all actions show inline when they fit', (
+      tester,
+      theme,
+      c,
+    ) async {
+      final taps = <String, int>{};
+      await pumpNoo(
+        tester,
+        SizedBox(
+          width: 360,
+          child: NooSelectionBar(
+            count: 2,
+            actions: _actions(2, taps),
+            onClose: () {},
+            isDesktop: false,
+          ),
+        ),
+        theme: theme,
+      );
+      expect(find.text('2 selected'), findsOneWidget);
+      expect(find.byIcon(LucideIcons.star), findsNWidgets(2));
+      expect(find.byIcon(LucideIcons.ellipsisVertical), findsNothing);
+      await tester.tap(find.byIcon(LucideIcons.star).first);
+      expect(taps['A'], 1);
+    });
+
+    testNooWidgets(
+      'mobile: actions beyond the inline count collapse behind More',
+      (tester, theme, c) async {
+        final taps = <String, int>{};
+        await pumpNoo(
+          tester,
+          // Wide enough that the missing-webfont fallback used in tests
+          // (Google Fonts network fetch is off, see noo_test_utils.dart)
+          // doesn't itself force an overflow unrelated to what's tested here.
+          SizedBox(
+            width: 500,
+            child: NooSelectionBar(
+              count: 5,
+              actions: _actions(5, taps),
+              onClose: () {},
+              isDesktop: false,
+            ),
+          ),
+          theme: theme,
+        );
+        // Only the first 3 actions render inline - no horizontally-
+        // scrolling row that could hide the rest with no visible cue.
+        expect(find.byIcon(LucideIcons.star), findsNWidgets(3));
+        expect(find.byIcon(LucideIcons.ellipsisVertical), findsOneWidget);
+
+        await tester.tap(find.byIcon(LucideIcons.ellipsisVertical));
+        await tester.pumpAndSettle();
+        // The sheet lists exactly the overflowed actions (D, E) - the
+        // already-inline ones (A, B, C) aren't duplicated in it.
+        expect(find.text('D'), findsOneWidget);
+        expect(find.text('E'), findsOneWidget);
+        expect(find.text('A'), findsNothing);
+
+        await tester.tap(find.text('D'));
+        await tester.pumpAndSettle();
+        expect(taps['D'], 1);
+      },
+    );
+
+    testNooWidgets(
+      'desktop: actions beyond the inline count collapse behind More',
+      (tester, theme, c) async {
+        final taps = <String, int>{};
+        await pumpNoo(
+          tester,
+          SizedBox(
+            width: 900,
+            child: NooSelectionBar(
+              count: 6,
+              actions: _actions(6, taps),
+              onClose: () {},
+              isDesktop: true,
+            ),
+          ),
+          theme: theme,
+        );
+        // The first 4 actions render as labelled pills; the rest are behind
+        // "More".
+        for (final label in ['A', 'B', 'C', 'D']) {
+          expect(find.text(label), findsOneWidget);
+        }
+        expect(find.text('E'), findsNothing);
+        expect(find.text('More'), findsOneWidget);
+
+        await tester.tap(find.text('More'));
+        await tester.pumpAndSettle();
+        expect(find.text('E'), findsOneWidget);
+        expect(find.text('F'), findsOneWidget);
+      },
+    );
+
+    testNooWidgets('close button fires onClose', (tester, theme, c) async {
+      var closed = false;
+      final taps = <String, int>{};
+      await pumpNoo(
+        tester,
+        SizedBox(
+          width: 360,
+          child: NooSelectionBar(
+            count: 1,
+            actions: _actions(1, taps),
+            onClose: () => closed = true,
+            isDesktop: false,
+          ),
+        ),
+        theme: theme,
+      );
+      await tester.tap(find.byIcon(LucideIcons.x));
+      expect(closed, isTrue);
+    });
+  });
+
   group('NooSettingsRow', () {
-    testNooWidgets('value row shows chevron and fires onTap', (tester, theme, c) async {
+    testNooWidgets('value row shows chevron and fires onTap', (
+      tester,
+      theme,
+      c,
+    ) async {
       var taps = 0;
       await pumpNoo(
         tester,
@@ -101,7 +255,9 @@ void main() {
       expect(taps, 1);
     });
 
-    testWidgets('subtitle row is 60px, trailing wins over value', (tester) async {
+    testWidgets('subtitle row is 60px, trailing wins over value', (
+      tester,
+    ) async {
       await pumpNoo(
         tester,
         const SizedBox(
@@ -123,7 +279,9 @@ void main() {
       expect(tester.getSize(find.byType(NooSettingsRow)).height, 60);
     });
 
-    testWidgets('keeps its 52px height inside a tall bounded parent', (tester) async {
+    testWidgets('keeps its 52px height inside a tall bounded parent', (
+      tester,
+    ) async {
       await pumpNoo(
         tester,
         const SizedBox(
@@ -143,18 +301,31 @@ void main() {
         tester,
         const SizedBox(
           width: 360,
-          child: NooSettingsRow(icon: LucideIcons.logOut, label: Text('Log out'), danger: true),
+          child: NooSettingsRow(
+            icon: LucideIcons.logOut,
+            label: Text('Log out'),
+            danger: true,
+          ),
         ),
         theme: theme,
       );
-      final style = DefaultTextStyle.of(tester.element(find.text('Log out'))).style;
+      final style = DefaultTextStyle.of(
+        tester.element(find.text('Log out')),
+      ).style;
       expect(style.color, c.danger);
-      expect(tester.widget<Icon>(find.byIcon(LucideIcons.logOut)).color, c.danger);
+      expect(
+        tester.widget<Icon>(find.byIcon(LucideIcons.logOut)).color,
+        c.danger,
+      );
     });
   });
 
   group('NooSummaryCard', () {
-    testNooWidgets('stat, caption, progress, meta, action', (tester, theme, c) async {
+    testNooWidgets('stat, caption, progress, meta, action', (
+      tester,
+      theme,
+      c,
+    ) async {
       await pumpNoo(
         tester,
         const SizedBox(
@@ -182,7 +353,11 @@ void main() {
         tester,
         const SizedBox(
           width: 360,
-          child: NooSummaryCard(stat: '3', caption: 'Errors', tone: NooSummaryCardTone.danger),
+          child: NooSummaryCard(
+            stat: '3',
+            caption: 'Errors',
+            tone: NooSummaryCardTone.danger,
+          ),
         ),
         theme: theme,
       );
@@ -194,7 +369,11 @@ void main() {
   });
 
   group('NooTabOrderRow', () {
-    testNooWidgets('pin state drives icon/fill, toggle fires', (tester, theme, c) async {
+    testNooWidgets('pin state drives icon/fill, toggle fires', (
+      tester,
+      theme,
+      c,
+    ) async {
       var pinned = true;
       await pumpNoo(
         tester,
@@ -212,13 +391,19 @@ void main() {
         theme: theme,
       );
       expect(find.text('Files'), findsOneWidget);
-      expect(decorationOf(tester, find.byIcon(LucideIcons.pin)).color, c.accentSoft);
+      expect(
+        decorationOf(tester, find.byIcon(LucideIcons.pin)).color,
+        c.accentSoft,
+      );
 
       await tester.tap(find.byIcon(LucideIcons.pin));
       await tester.pump();
       expect(pinned, isFalse);
       expect(find.byIcon(LucideIcons.pin), findsNothing);
-      expect(decorationOf(tester, find.byIcon(LucideIcons.pinOff)).color, c.surface2);
+      expect(
+        decorationOf(tester, find.byIcon(LucideIcons.pinOff)).color,
+        c.surface2,
+      );
     });
   });
 }
