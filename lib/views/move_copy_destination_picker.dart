@@ -7,12 +7,14 @@ import '../providers/files_controller.dart';
 import '../providers/item_operations.dart';
 import '../theme/design_tokens.dart';
 import '../widgets/breadcrumbs.dart';
+import '../widgets/files_controls_row.dart';
 import '../widgets/more_tabs_button.dart';
 import '../widgets/move_copy_conflict_sheet.dart';
 import '../widgets/noo/core/noo_button.dart';
 import '../widgets/noo/files/noo_file_kind.dart';
 import '../widgets/noo/files/noo_file_row.dart';
 import '../widgets/noo/files/noo_file_table.dart';
+import '../widgets/noo/media/noo_grid_card.dart';
 import '../widgets/noo/nav/noo_top_bar.dart';
 import '../widgets/noo/nav/noo_toolbar.dart';
 import '../widgets/noo/noo_layout.dart';
@@ -86,9 +88,7 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
 
   Future<void> _fetch(String path) async {
     setState(() => _isLoading = true);
-    final raw = await context.read<FilesController>().fetchFolderListing(
-      path,
-    );
+    final raw = await context.read<FilesController>().fetchFolderListing(path);
     if (!mounted) return;
     setState(() {
       _rawItems = raw;
@@ -212,6 +212,19 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
     );
   }
 
+  Widget _buildGridCard(NextcloudItem item) {
+    final colors = context.nooColors;
+    return NooGridCard(
+      name: item.name,
+      meta: 'Folder',
+      placeholderColor: colors.accentSoft,
+      icon: LucideIcons.folder,
+      iconColor: colors.accentText,
+      thumbnailHeight: NooLayout.isDesktop(context) ? 118 : 104,
+      onTap: () => _navigateToFolder(item.path),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.nooColors;
@@ -231,16 +244,34 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
     final slivers = <Widget>[
       SliverToBoxAdapter(
         child: Padding(
-          padding: EdgeInsets.fromLTRB(gutter, NooSpace.md, gutter, NooSpace.sm),
-          child: hasBreadcrumbs
-              ? SizedBox(
+          padding: EdgeInsets.fromLTRB(
+            gutter,
+            NooSpace.md,
+            gutter,
+            NooSpace.sm,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                height: 44,
+                child: FilesControlsRow(
+                  folderPath: _currentPath,
+                  showStorageScope: false,
+                ),
+              ),
+              if (hasBreadcrumbs) ...[
+                const SizedBox(height: 10),
+                SizedBox(
                   height: 32,
                   child: Breadcrumbs(
                     pathStack: _pathStack,
                     onTap: _navigateToPathIndex,
                   ),
-                )
-              : const SizedBox.shrink(),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
       if (_isLoading)
@@ -250,6 +281,22 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
           context,
           icon: LucideIcons.folder,
           message: 'No folders here',
+        )
+      else if (files.isGridView)
+        SliverPadding(
+          padding: EdgeInsets.symmetric(horizontal: gutter),
+          sliver: SliverGrid(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: desktop ? 5 : 2,
+              childAspectRatio: desktop ? 1.05 : 0.92,
+              crossAxisSpacing: desktop ? 16 : 10,
+              mainAxisSpacing: desktop ? 16 : 10,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => _buildGridCard(folders[index]),
+              childCount: folders.length,
+            ),
+          ),
         )
       else if (desktop)
         SliverPadding(
@@ -266,7 +313,8 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
           padding: EdgeInsets.symmetric(horizontal: gutter),
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate(
-              (context, index) => _buildRow(folders[index], index, folders.length),
+              (context, index) =>
+                  _buildRow(folders[index], index, folders.length),
               childCount: folders.length,
             ),
           ),
@@ -312,7 +360,10 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
             color: colors.accent,
             backgroundColor: colors.surface,
             onRefresh: () => _fetch(_currentPath),
-            child: CustomScrollView(controller: _scrollController, slivers: slivers),
+            child: CustomScrollView(
+              controller: _scrollController,
+              slivers: slivers,
+            ),
           ),
         ),
         bottomNavigationBar: DecoratedBox(
@@ -331,13 +382,14 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Text(
                     invalidDestination
                         ? "Can't ${widget.copy ? 'copy' : 'move'} a folder into "
                               "itself or one of its own subfolders"
                         : '$verb $itemCount item${itemCount == 1 ? '' : 's'}',
+                    textAlign: TextAlign.center,
                     style: NooText.meta.copyWith(
                       color: invalidDestination ? colors.danger : colors.fg3,
                     ),
@@ -350,7 +402,9 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
                     disabled: invalidDestination || _isSubmitting,
                     icon: _isSubmitting
                         ? null
-                        : (widget.copy ? LucideIcons.copy : LucideIcons.folderInput),
+                        : (widget.copy
+                              ? LucideIcons.copy
+                              : LucideIcons.folderInput),
                     onTap: invalidDestination || _isSubmitting
                         ? null
                         : () => _confirm(ops),

@@ -343,13 +343,16 @@ Sidebar items are 38px tall with radius 12, an 18px icon and a 14/500 label. The
 - **Media viewer** (the full-screen photo/video viewer): the stage is `bg`,
   following the app's own theme rather than a fixed black - a black stage
   in light mode read as jarringly out of place. A translucent, blurred top
-  bar (back, filename, meta) and bottom bar float over the media in a fixed
-  dark panel regardless of theme (it needs to read over arbitrary photo/
-  video brightness, not over `bg`); this is the one deliberate exception to
-  "no blur" in product UI, since it's chrome over photo/video content, not
-  over the app's own surfaces. Both bars' background extends edge-to-edge
-  behind the status bar/gesture area, with only their content padded clear
-  of it. Back is a plain arrow (`arrow-left`), not the iOS
+  bar (back, filename, meta) and bottom bar float over the media in a
+  `surface`-tinted panel (also theme-following, at a higher opacity than a
+  typical blur so it stays legible over arbitrary photo/video brightness
+  underneath - icons/text are `fg1`, matching); this is the one deliberate
+  exception to "no blur" in product UI, since it's chrome over photo/video
+  content, not over the app's own surfaces. A short edge gradient outside
+  each panel (toward `surface`, not a fixed black) extends that same
+  contrast a little past the panel's hard edge. Both bars' background
+  extends edge-to-edge behind the status bar/gesture area, with only their
+  content padded clear of it. Back is a plain arrow (`arrow-left`), not the iOS
   chevron+label pushed-screen pattern - platform split still to do. The
   bottom bar holds every action in one row (share, favorite, open
   externally, download, delete, details) on every platform; don't add a
@@ -369,10 +372,13 @@ Sidebar items are 38px tall with radius 12, an 18px icon and a 14/500 label. The
 - **Upload / Move / Copy destination picker:** a pushed screen (outside the
   tab shell, so it carries its own complete top bar) titled "Upload to" /
   "Move to" / "Copy to". Back arrow (Android) or "Cancel" text (iOS) leading,
-  no trailing action. Breadcrumb row, then a folder-only list (no files: this
-  screen only browses folders) using the standard file row/tile at the
-  folder kind. Bottom bar: a meta line ("Moving 3 items") above a full-width
-  52px primary CTA ("Upload here" / "Move here" / "Copy here").
+  no trailing action. The same `FilesControlsRow` (sort chip, filter chip,
+  List/Grid toggle right-anchored) Files itself uses, then a breadcrumb row,
+  then a folder-only list/grid (no files: this screen only browses folders)
+  using the standard file row/tile/grid-card at the folder kind. Bottom bar:
+  a centered meta line ("Moving 3 items") above a full-width 52px primary
+  CTA ("Upload here" / "Move here" / "Copy here") - a count, never a
+  filename, even for a single item.
 
 ---
 

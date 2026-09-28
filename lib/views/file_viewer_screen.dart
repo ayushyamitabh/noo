@@ -379,9 +379,9 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
     // The stage follows the app's own theme (`bg`) rather than being pinned
     // to black - a black stage in light mode read as jarringly out of place
     // next to the rest of the light-themed app. The floating top/action
-    // bars stay a fixed dark frosted panel regardless (see
-    // FrostedGlassContainer's doc comment) since they need to read over
-    // arbitrary photo/video brightness, not over this background.
+    // bars now follow the theme too (FrostedGlassContainer's own `surface`
+    // default), at a higher blur opacity to stay legible over arbitrary
+    // photo/video brightness underneath.
     final stageColor = colors.bg;
 
     return Scaffold(
@@ -413,6 +413,10 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
             // gradient fade, not `FrostedGlassContainer`'s blur - just
             // enough to keep the back button/title legible over bright
             // media without another blurred layer stacked on the bar itself.
+            // Fades toward `surface` (the same tint the panel itself uses),
+            // not a fixed black - a black scrim would fight the panel's own
+            // theme-matched icons/text (dark in light theme) instead of
+            // extending its contrast strategy past the panel's hard edge.
             if (_isSwipeable)
               IgnorePointer(
                 child: AnimatedOpacity(
@@ -420,11 +424,14 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                   opacity: _controlsVisible ? 1 : 0,
                   child: Container(
                     height: 150,
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        colors: [Color(0x8C000000), Colors.transparent],
+                        colors: [
+                          colors.surface.withValues(alpha: 0.7),
+                          Colors.transparent,
+                        ],
                       ),
                     ),
                   ),
@@ -449,14 +456,10 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                         vertical: 6,
                       ),
                       child: IconTheme.merge(
-                        // Fixed white, not `colors.fg1`: this bar always
-                        // sits on the dark translucent panel over the media
-                        // stage (see `FrostedGlassContainer`'s doc comment),
-                        // regardless of the app's light/dark theme.
-                        data: const IconThemeData(
-                          color: Colors.white,
-                          size: 24,
-                        ),
+                        // `fg1`, matching FrostedGlassContainer's own
+                        // theme-following panel underneath - both used to
+                        // be a fixed white-on-black regardless of theme.
+                        data: IconThemeData(color: colors.fg1, size: 24),
                         child: Row(
                           children: [
                             NooTopBarButton(
@@ -469,7 +472,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                               child: MarqueeTitle(
                                 text: _currentItem.name,
                                 style: NooText.label.copyWith(
-                                  color: Colors.white,
+                                  color: colors.fg1,
                                 ),
                               ),
                             ),
@@ -491,11 +494,14 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                     opacity: _controlsVisible ? 1 : 0,
                     child: Container(
                       height: 260,
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         gradient: LinearGradient(
                           begin: Alignment.bottomCenter,
                           end: Alignment.topCenter,
-                          colors: [Color(0x99000000), Colors.transparent],
+                          colors: [
+                            colors.surface.withValues(alpha: 0.75),
+                            Colors.transparent,
+                          ],
                         ),
                       ),
                     ),

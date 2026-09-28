@@ -14,7 +14,7 @@ import 'sort_menu_button.dart' show sortFieldLabel;
 String _typeFilterLabel(FilesTypeFilter filter) {
   switch (filter) {
     case FilesTypeFilter.all:
-      return 'All types';
+      return 'Filters';
     case FilesTypeFilter.filesOnly:
       return 'Files only';
     case FilesTypeFilter.foldersOnly:
@@ -47,7 +47,8 @@ class FilesControlsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final files = context.watch<FilesController>();
-    final filtersActive = files.filesTypeFilter != FilesTypeFilter.all ||
+    final filtersActive =
+        files.filesTypeFilter != FilesTypeFilter.all ||
         files.showHiddenFiles ||
         (showStorageScope && files.storageScope != StorageScope.cloud);
 
@@ -114,8 +115,16 @@ class FilesControlsRow extends StatelessWidget {
                   }
                 },
                 options: const [
-                  NooSegmentOption(value: true, icon: LucideIcons.arrowUp, label: 'Ascending'),
-                  NooSegmentOption(value: false, icon: LucideIcons.arrowDown, label: 'Descending'),
+                  NooSegmentOption(
+                    value: true,
+                    icon: LucideIcons.arrowUp,
+                    label: 'Ascending',
+                  ),
+                  NooSegmentOption(
+                    value: false,
+                    icon: LucideIcons.arrowDown,
+                    label: 'Descending',
+                  ),
                 ],
               ),
               const SizedBox(height: 22),
@@ -125,7 +134,11 @@ class FilesControlsRow extends StatelessWidget {
                     NooSettingsRow(
                       label: Text(sortFieldLabel(field)),
                       trailing: field == files.sortFieldFor(folderPath)
-                          ? Icon(LucideIcons.check, size: 18, color: context.nooColors.accentText)
+                          ? Icon(
+                              LucideIcons.check,
+                              size: 18,
+                              color: context.nooColors.accentText,
+                            )
                           : null,
                       onTap: () {
                         files.setSortFieldFor(folderPath, field);
@@ -159,23 +172,38 @@ class FilesControlsRow extends StatelessWidget {
                   NooSettingsRow(
                     label: const Text('Files and folders'),
                     trailing: files.filesTypeFilter == FilesTypeFilter.all
-                        ? Icon(LucideIcons.check, size: 18, color: context.nooColors.accentText)
+                        ? Icon(
+                            LucideIcons.check,
+                            size: 18,
+                            color: context.nooColors.accentText,
+                          )
                         : null,
                     onTap: () => files.setFilesTypeFilter(FilesTypeFilter.all),
                   ),
                   NooSettingsRow(
                     label: const Text('Files only'),
                     trailing: files.filesTypeFilter == FilesTypeFilter.filesOnly
-                        ? Icon(LucideIcons.check, size: 18, color: context.nooColors.accentText)
+                        ? Icon(
+                            LucideIcons.check,
+                            size: 18,
+                            color: context.nooColors.accentText,
+                          )
                         : null,
-                    onTap: () => files.setFilesTypeFilter(FilesTypeFilter.filesOnly),
+                    onTap: () =>
+                        files.setFilesTypeFilter(FilesTypeFilter.filesOnly),
                   ),
                   NooSettingsRow(
                     label: const Text('Folders only'),
-                    trailing: files.filesTypeFilter == FilesTypeFilter.foldersOnly
-                        ? Icon(LucideIcons.check, size: 18, color: context.nooColors.accentText)
+                    trailing:
+                        files.filesTypeFilter == FilesTypeFilter.foldersOnly
+                        ? Icon(
+                            LucideIcons.check,
+                            size: 18,
+                            color: context.nooColors.accentText,
+                          )
                         : null,
-                    onTap: () => files.setFilesTypeFilter(FilesTypeFilter.foldersOnly),
+                    onTap: () =>
+                        files.setFilesTypeFilter(FilesTypeFilter.foldersOnly),
                   ),
                 ],
               ),

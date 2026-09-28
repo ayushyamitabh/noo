@@ -18,6 +18,43 @@ Widget _launcher(void Function(BuildContext) open) => Builder(
       TextButton(onPressed: () => open(context), child: const Text('open')),
 );
 
+/// A short placeholder that swaps in a long list one microtask later -
+/// standing in for a sheet tab that fetches its content on first build
+/// (`_requested`, as `DetailsVersionsTab`/`DetailsActivityTab` do) rather
+/// than having it all synchronously on the very first frame.
+class _AsyncGrowingContent extends StatefulWidget {
+  const _AsyncGrowingContent();
+
+  @override
+  State<_AsyncGrowingContent> createState() => _AsyncGrowingContentState();
+}
+
+class _AsyncGrowingContentState extends State<_AsyncGrowingContent> {
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(Duration.zero, () {
+      if (mounted) setState(() => _loaded = true);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_loaded) {
+      return const SizedBox(height: 40, child: Center(child: Text('Loading')));
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < 30; i++)
+          SizedBox(height: 40, child: Text('Row $i')),
+      ],
+    );
+  }
+}
+
 Finder _dialogCard() => find.byWidgetPredicate(
   (w) =>
       w is Container &&
@@ -136,6 +173,38 @@ void main() {
       expect(sheetHeight, lessThan(500));
       expect(sheetHeight, greaterThan(150));
     });
+
+    testNooWidgets(
+      'content that grows after an async load still switches to peek',
+      (tester, theme, c) async {
+        // Mirrors DetailsVersionsTab/DetailsActivityTab: a small placeholder
+        // first, then a long list once a fetch "completes" - the sheet has
+        // to catch the overflow whenever it happens, not just on its first
+        // frame (that one-shot approach is what shipped the original bug).
+        await pumpNoo(
+          tester,
+          _launcher(
+            (ctx) => showNooSheet<void>(
+              ctx,
+              children: [const _AsyncGrowingContent()],
+            ),
+          ),
+          theme: theme,
+          surfaceSize: const Size(400, 700),
+        );
+        await tester.tap(find.text('open'));
+        await tester.pump();
+        expect(find.byType(DraggableScrollableSheet), findsNothing);
+
+        await tester.pumpAndSettle();
+        expect(find.byType(DraggableScrollableSheet), findsOneWidget);
+        final sheetHeight = tester
+            .getSize(find.byType(DraggableScrollableSheet))
+            .height;
+        expect(sheetHeight, lessThan(500));
+        expect(sheetHeight, greaterThan(150));
+      },
+    );
   });
 
   group('NooDialog', () {

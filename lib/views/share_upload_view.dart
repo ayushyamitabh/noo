@@ -10,11 +10,12 @@ import '../services/share_intent_service.dart';
 import '../services/upload_service.dart';
 import '../theme/design_tokens.dart';
 import '../widgets/breadcrumbs.dart';
-import '../widgets/marquee_title.dart';
+import '../widgets/files_controls_row.dart';
 import '../widgets/noo/core/noo_button.dart';
 import '../widgets/noo/files/noo_file_kind.dart';
 import '../widgets/noo/files/noo_file_row.dart';
 import '../widgets/noo/files/noo_file_table.dart';
+import '../widgets/noo/media/noo_grid_card.dart';
 import '../widgets/noo/nav/noo_top_bar.dart';
 import '../widgets/noo/nav/noo_toolbar.dart';
 import '../widgets/noo/noo_layout.dart';
@@ -51,7 +52,9 @@ class _ShareUploadViewState extends State<ShareUploadView> {
     // Shared files have no relationship to wherever the user was last
     // browsing, so start the destination picker fresh at the root.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) context.read<FilesController>().navigateToAbsoluteFolder('/');
+      if (mounted) {
+        context.read<FilesController>().navigateToAbsoluteFolder('/');
+      }
     });
   }
 
@@ -94,7 +97,12 @@ class _ShareUploadViewState extends State<ShareUploadView> {
 
   // Only folders are valid upload destinations, so the listing - unlike
   // Files' own - never shows plain files at all.
-  Widget _buildRow(BuildContext context, NextcloudItem item, int index, int count) {
+  Widget _buildRow(
+    BuildContext context,
+    NextcloudItem item,
+    int index,
+    int count,
+  ) {
     final colors = context.nooColors;
     final files = context.read<FilesController>();
     final row = NooFileRow(
@@ -130,6 +138,20 @@ class _ShareUploadViewState extends State<ShareUploadView> {
     );
   }
 
+  Widget _buildGridCard(BuildContext context, NextcloudItem item) {
+    final colors = context.nooColors;
+    final files = context.read<FilesController>();
+    return NooGridCard(
+      name: item.name,
+      meta: 'Folder',
+      placeholderColor: colors.accentSoft,
+      icon: LucideIcons.folder,
+      iconColor: colors.accentText,
+      thumbnailHeight: NooLayout.isDesktop(context) ? 118 : 104,
+      onTap: () => files.navigateToFolder(item.path),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.nooColors;
@@ -147,16 +169,34 @@ class _ShareUploadViewState extends State<ShareUploadView> {
     final slivers = <Widget>[
       SliverToBoxAdapter(
         child: Padding(
-          padding: EdgeInsets.fromLTRB(gutter, NooSpace.md, gutter, NooSpace.sm),
-          child: hasBreadcrumbs
-              ? SizedBox(
+          padding: EdgeInsets.fromLTRB(
+            gutter,
+            NooSpace.md,
+            gutter,
+            NooSpace.sm,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                height: 44,
+                child: FilesControlsRow(
+                  folderPath: currentPath,
+                  showStorageScope: false,
+                ),
+              ),
+              if (hasBreadcrumbs) ...[
+                const SizedBox(height: 10),
+                SizedBox(
                   height: 32,
                   child: Breadcrumbs(
                     pathStack: files.pathStack,
                     onTap: (index) => files.navigateToPathIndex(index),
                   ),
-                )
-              : const SizedBox.shrink(),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
       if (files.isLoading)
@@ -166,6 +206,22 @@ class _ShareUploadViewState extends State<ShareUploadView> {
           context,
           icon: LucideIcons.folder,
           message: 'No folders here',
+        )
+      else if (files.isGridView)
+        SliverPadding(
+          padding: EdgeInsets.symmetric(horizontal: gutter),
+          sliver: SliverGrid(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: desktop ? 5 : 2,
+              childAspectRatio: desktop ? 1.05 : 0.92,
+              crossAxisSpacing: desktop ? 16 : 10,
+              mainAxisSpacing: desktop ? 16 : 10,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => _buildGridCard(context, folders[index]),
+              childCount: folders.length,
+            ),
+          ),
         )
       else if (desktop)
         SliverPadding(
@@ -223,12 +279,20 @@ class _ShareUploadViewState extends State<ShareUploadView> {
           color: colors.accent,
           backgroundColor: colors.surface,
           onRefresh: files.refreshData,
-          child: CustomScrollView(controller: _scrollController, slivers: slivers),
+          child: CustomScrollView(
+            controller: _scrollController,
+            slivers: slivers,
+          ),
         ),
       ),
       // A flat surface bar with a top line, peeking up from the bottom edge -
-      // the uploading-file summary (marqueed if it doesn't fit on one line)
-      // sits directly above the destination button.
+      // a centered item-count meta line sits directly above the destination
+      // button (DESIGN_SYSTEM.md's "Upload / Move / Copy destination
+      // picker" recipe: "a meta line ... above a full-width ... primary
+      // CTA" - matches MoveCopyDestinationPicker's identical bar). A count,
+      // not a filename: this is the one-file case just as much as the
+      // many-files case, and a long filename has no good fixed-width
+      // treatment the way a short count always does.
       bottomNavigationBar: DecoratedBox(
         decoration: BoxDecoration(
           color: colors.surface,
@@ -245,48 +309,12 @@ class _ShareUploadViewState extends State<ShareUploadView> {
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // Sized to the text itself (like a real chip) up to the
-                // row's available width - MarqueeTitle needs a concrete
-                // (not just loose) width to know whether/how far to scroll,
-                // so this measures the text once up front rather than
-                // leaving the chip unconstrained.
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final uploadingText = widget.files.length == 1
-                        ? 'Uploading ${widget.files.first.name}'
-                        : 'Uploading ${widget.files.length} files';
-                    final chipTextStyle = NooText.label.copyWith(
-                      color: colors.fg2,
-                    );
-                    const horizontalPadding = 28.0;
-                    final painter = TextPainter(
-                      text: TextSpan(text: uploadingText, style: chipTextStyle),
-                      maxLines: 1,
-                      textDirection: Directionality.of(context),
-                    )..layout(maxWidth: double.infinity);
-                    final chipWidth = (painter.width + horizontalPadding).clamp(
-                      0.0,
-                      constraints.maxWidth,
-                    );
-
-                    return Container(
-                      width: chipWidth,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: NooSpace.smd,
-                        vertical: NooSpace.xs,
-                      ),
-                      decoration: BoxDecoration(
-                        color: colors.surface2,
-                        borderRadius: BorderRadius.circular(NooRadii.pill),
-                      ),
-                      child: SizedBox(
-                        height: 20,
-                        child: MarqueeTitle(text: uploadingText, style: chipTextStyle),
-                      ),
-                    );
-                  },
+                Text(
+                  'Uploading ${widget.files.length} item${widget.files.length == 1 ? '' : 's'}',
+                  textAlign: TextAlign.center,
+                  style: NooText.meta.copyWith(color: colors.fg3),
                 ),
                 const SizedBox(height: NooSpace.sm),
                 NooButton(

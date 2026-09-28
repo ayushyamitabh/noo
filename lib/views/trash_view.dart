@@ -60,8 +60,12 @@ class _TrashViewState extends State<TrashView> {
         sliver: SliverToBoxAdapter(
           child: NooBanner(
             actionLabel: trash.isEmpty ? null : 'Empty trash',
-            onAction: trash.isEmpty ? null : () => _confirmEmptyTrash(context, trash),
-            child: const Text('Deleted items are kept for 30 days, then removed automatically.'),
+            onAction: trash.isEmpty
+                ? null
+                : () => _confirmEmptyTrash(context, trash),
+            child: const Text(
+              'Deleted items are kept for 30 days, then removed automatically.',
+            ),
           ),
         ),
       ),
@@ -115,6 +119,10 @@ class _TrashViewState extends State<TrashView> {
       sliver: SliverList(
         delegate: SliverChildBuilderDelegate((context, index) {
           final item = trash[index];
+          // The overflow menu's only action here is "Delete forever" - a
+          // bare ellipsis obscures that behind an extra tap to discover it,
+          // so this row shows the delete icon directly instead of going
+          // through `NooFileRow.onMore`.
           final row = NooFileRow(
             kind: NooFileKind.from(
               name: item.name,
@@ -124,19 +132,30 @@ class _TrashViewState extends State<TrashView> {
             name: item.name,
             meta: _meta(item),
             iosStyle: NooLayout.iosStyle(context),
-            trailing: SizedBox.square(
-              dimension: 40,
-              child: Semantics(
-                button: true,
-                label: 'Restore',
-                child: InkResponse(
-                  onTap: () => _restore(context, item),
-                  radius: 20,
-                  child: const Icon(LucideIcons.rotateCcw),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Semantics(
+                  button: true,
+                  label: 'Restore',
+                  child: InkResponse(
+                    onTap: () => _restore(context, item),
+                    radius: 20,
+                    child: const Icon(LucideIcons.rotateCcw),
+                  ),
                 ),
-              ),
+                const SizedBox(width: NooSpace.xs),
+                Semantics(
+                  button: true,
+                  label: 'Delete forever',
+                  child: InkResponse(
+                    onTap: () => _confirmDeleteForever(context, item),
+                    radius: 20,
+                    child: Icon(LucideIcons.trash2, color: colors.danger),
+                  ),
+                ),
+              ],
             ),
-            onMore: () => _confirmDeleteForever(context, item),
           );
           final isFirst = index == 0;
           final isLast = index == trash.length - 1;
@@ -186,7 +205,7 @@ class _TrashViewState extends State<TrashView> {
             col2: _deletedLabel(item),
             col3: item.originalLocation ?? 'Unknown location',
             onRestore: () => _restore(context, item),
-            onMore: () => _confirmDeleteForever(context, item),
+            onDelete: () => _confirmDeleteForever(context, item),
           );
         }, childCount: trash.length + 1),
       ),
@@ -196,8 +215,9 @@ class _TrashViewState extends State<TrashView> {
   String _meta(NextcloudItem item) =>
       'Deleted ${_deletedLabel(item)} · ${tabLocationLabel(item.originalLocation ?? item.path, item.name)}';
 
-  String _deletedLabel(NextcloudItem item) =>
-      item.deletedAt != null ? DateFormat.yMMMd().format(item.deletedAt!) : 'recently';
+  String _deletedLabel(NextcloudItem item) => item.deletedAt != null
+      ? DateFormat.yMMMd().format(item.deletedAt!)
+      : 'recently';
 
   Future<void> _restore(BuildContext context, NextcloudItem item) async {
     final messenger = ScaffoldMessenger.of(context);
@@ -301,19 +321,23 @@ class _TrashViewState extends State<TrashView> {
 }
 
 /// Desktop trash row: like `NooFileTableRow`, but its 120px last column
-/// holds a tonal "Restore" button plus the overflow button (permanent
-/// delete) instead of status icons - `NooFileTableRow` has no slot for
-/// screen-specific actions there. Column widths (180/160/120) are matched
-/// by hand to `NooFileTableHeader`'s (private in `noo_file_table.dart`) so
-/// this still lines up under it; promoting an optional `actions` slot onto
-/// `NooFileTableRow` would let this fold back into the shared component.
+/// holds a tonal "Restore" button plus a danger-tonal "Delete" button
+/// (permanent delete) instead of status icons - `NooFileTableRow` has no
+/// slot for screen-specific actions there. A labelled pill, not a bare
+/// overflow icon: it's the row's only destructive action, not a menu of
+/// several, and desktop already prefers labelled buttons to bare icons
+/// (see `NooSelectionBar`'s own desktop actions). Column widths
+/// (180/160/120) are matched by hand to `NooFileTableHeader`'s (private in
+/// `noo_file_table.dart`) so this still lines up under it; promoting an
+/// optional `actions` slot onto `NooFileTableRow` would let this fold back
+/// into the shared component.
 class _TrashDesktopRow extends StatelessWidget {
   final NooFileKind kind;
   final String name;
   final String col2;
   final String col3;
   final VoidCallback onRestore;
-  final VoidCallback onMore;
+  final VoidCallback onDelete;
 
   const _TrashDesktopRow({
     required this.kind,
@@ -321,7 +345,7 @@ class _TrashDesktopRow extends StatelessWidget {
     required this.col2,
     required this.col3,
     required this.onRestore,
-    required this.onMore,
+    required this.onDelete,
   });
 
   @override
@@ -358,11 +382,21 @@ class _TrashDesktopRow extends StatelessWidget {
             ),
             SizedBox(
               width: 180,
-              child: Text(col2, maxLines: 1, overflow: TextOverflow.ellipsis, style: metaStyle),
+              child: Text(
+                col2,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: metaStyle,
+              ),
             ),
             SizedBox(
               width: 160,
-              child: Text(col3, maxLines: 1, overflow: TextOverflow.ellipsis, style: metaStyle),
+              child: Text(
+                col3,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: metaStyle,
+              ),
             ),
             SizedBox(
               width: 120,
@@ -379,7 +413,12 @@ class _TrashDesktopRow extends StatelessWidget {
                       child: const Text('Restore'),
                     ),
                     const SizedBox(width: 4),
-                    NooOverflowButton(size: 24, onTap: onMore),
+                    NooButton(
+                      variant: NooButtonVariant.danger,
+                      size: NooButtonSize.xs,
+                      onTap: onDelete,
+                      child: const Text('Delete'),
+                    ),
                   ],
                 ),
               ),

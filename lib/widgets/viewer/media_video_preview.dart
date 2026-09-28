@@ -161,7 +161,7 @@ class VideoTransportControls extends StatelessWidget {
     return AnimatedBuilder(
       animation: controller,
       builder: (context, _) {
-        const fg = Colors.white;
+        final fg = context.nooColors.fg1;
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
           child: Column(

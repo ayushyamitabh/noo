@@ -40,11 +40,7 @@ class MediaActionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // This panel always sits on a black media stage regardless of the
-    // app's own light/dark theme (see FrostedGlassContainer's doc
-    // comment) - fixed dark-palette values, not `context.nooColors`, so
-    // favorite/delete stay legible even when the ambient theme is light.
-    const dark = NooColors.dark;
+    final colors = context.nooColors;
 
     // The blurred/tinted background lives outside the SafeArea (not inside
     // it) so it extends all the way to the physical bottom edge, behind the
@@ -59,7 +55,7 @@ class MediaActionBar extends StatelessWidget {
           children: [
             if (transportControls != null) ...[
               transportControls!,
-              Divider(height: 1, color: Colors.white.withValues(alpha: 0.14)),
+              Divider(height: 1, color: colors.fg1.withValues(alpha: 0.14)),
             ],
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
@@ -80,7 +76,7 @@ class MediaActionBar extends StatelessWidget {
                       tooltip: isFavorite
                           ? 'Remove from favorites'
                           : 'Favorite',
-                      color: isFavorite ? dark.accentText : null,
+                      color: isFavorite ? colors.accentText : null,
                       onTap: onFavorite,
                     ),
                   ViewerIconButton(
@@ -98,7 +94,7 @@ class MediaActionBar extends StatelessWidget {
                     ViewerIconButton(
                       icon: LucideIcons.trash2,
                       tooltip: 'Delete',
-                      color: dark.danger,
+                      color: colors.danger,
                       onTap: isBusy ? null : onDelete,
                     ),
                   ViewerIconButton(

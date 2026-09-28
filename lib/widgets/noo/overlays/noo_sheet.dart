@@ -38,15 +38,20 @@ Future<T?> showNooSheet<T>(
   );
 }
 
-/// Renders [children] once, unconstrained, to measure their natural height
-/// against the sheet's available height. Content that fits within
-/// [_kNooSheetPeekFraction] just stays as that first (plain, content-sized)
-/// render - the common case for a short menu/option list. Content taller
-/// than that switches to a [DraggableScrollableSheet] opened at the peek
-/// fraction instead, so it never jumps straight to (near) full height with
-/// no room left to adjust. The one extra layout pass for tall content
-/// happens within the sheet's own entrance animation, so it isn't visible
-/// as a jump.
+/// Caps content at [_kNooSheetPeekFraction] of the available height from the
+/// very first frame - never a one-shot "measure, then decide" pass, since
+/// some sheets (Details' Versions/Activity tabs) fetch their content
+/// asynchronously and only reach their real (long) size well after that
+/// first frame, which a one-shot measurement would miss entirely. Content
+/// that never needs more than that cap just sizes to itself as a plain
+/// scroll view, at whatever height that is - the common case for a short
+/// menu/option list, and visually identical to before. [_needsPeek] flips
+/// true - upgrading to a draggable [DraggableScrollableSheet], opened at the
+/// exact same peek height so nothing visibly jumps - the moment a
+/// [ScrollMetricsNotification] reports the content actually overflowing
+/// that cap, however and whenever that happens (immediately for a long
+/// static list, or later, once async content finishes loading and grows
+/// past it).
 class _NooSheetBody extends StatefulWidget {
   final List<Widget> children;
 
@@ -57,44 +62,44 @@ class _NooSheetBody extends StatefulWidget {
 }
 
 class _NooSheetBodyState extends State<_NooSheetBody> {
-  final _contentKey = GlobalKey();
-  bool _measured = false;
   bool _needsPeek = false;
 
-  void _measureAfterFrame(double availableHeight) {
+  void _handleOverflow(ScrollMetrics metrics) {
+    if (_needsPeek || metrics.maxScrollExtent <= 0) return;
+    // `ScrollMetricsNotification` is dispatched mid-layout; deferring avoids
+    // a "setState during build" error.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _measured) return;
-      final box = _contentKey.currentContext?.findRenderObject() as RenderBox?;
-      final contentHeight = box?.size.height ?? 0;
-      setState(() {
-        _measured = true;
-        _needsPeek = contentHeight > availableHeight * _kNooSheetPeekFraction;
-      });
+      if (mounted && !_needsPeek) setState(() => _needsPeek = true);
     });
   }
 
-  Widget _buildContent(ScrollController? scrollController) {
+  Widget _buildScrollable(ScrollController? scrollController) {
     final colors = context.nooColors;
-    return SingleChildScrollView(
-      controller: scrollController,
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
-      child: Column(
-        key: _measured ? null : _contentKey,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 36,
-            height: 5,
-            decoration: BoxDecoration(
-              color: colors.surface3,
-              borderRadius: BorderRadius.circular(NooRadii.pill),
+    return NotificationListener<ScrollMetricsNotification>(
+      onNotification: (notification) {
+        _handleOverflow(notification.metrics);
+        return false;
+      },
+      child: SingleChildScrollView(
+        controller: scrollController,
+        padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 5,
+              decoration: BoxDecoration(
+                color: colors.surface3,
+                borderRadius: BorderRadius.circular(NooRadii.pill),
+              ),
             ),
-          ),
-          for (final child in widget.children) ...[
-            const SizedBox(height: 22),
-            child,
+            for (final child in widget.children) ...[
+              const SizedBox(height: 22),
+              child,
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -104,12 +109,13 @@ class _NooSheetBodyState extends State<_NooSheetBody> {
     return SafeArea(
       child: LayoutBuilder(
         builder: (context, constraints) {
-          if (!_measured) {
-            _measureAfterFrame(constraints.maxHeight);
-            return _buildContent(null);
-          }
           if (!_needsPeek) {
-            return _buildContent(null);
+            return ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: constraints.maxHeight * _kNooSheetPeekFraction,
+              ),
+              child: _buildScrollable(null),
+            );
           }
           return DraggableScrollableSheet(
             initialChildSize: _kNooSheetPeekFraction,
@@ -129,7 +135,7 @@ class _NooSheetBodyState extends State<_NooSheetBody> {
                   }
                   return false;
                 },
-                child: _buildContent(scrollController),
+                child: _buildScrollable(scrollController),
               );
             },
           );
