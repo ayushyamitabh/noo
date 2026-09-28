@@ -11,7 +11,6 @@ import '../widgets/noo/core/noo_segmented_control.dart';
 import '../widgets/noo/files/noo_file_kind.dart';
 import '../widgets/noo/files/noo_file_row.dart';
 import '../widgets/noo/files/noo_file_table.dart';
-import '../widgets/noo/lists/noo_grouped_list.dart';
 import '../widgets/noo/noo_layout.dart';
 import '../widgets/tabs/tab_state_slivers.dart';
 
@@ -162,24 +161,47 @@ class _SharesViewState extends State<SharesView> {
     c.setSharedWithMe(scope == _ShareScope.withYou);
   }
 
+  // A lazily-built `SliverList`, not `NooGroupedList` (its own `Column`
+  // isn't lazy - see files_view.dart's `_buildMobileRow` doc comment, and
+  // trash_view.dart's `_buildMobileList`, which had the same bug: a heavy
+  // account's full share list built eagerly up front). Each row still
+  // reads as one continuous radius-20 card via per-row corner rounding +
+  // a 1px `line` divider.
   Widget _buildMobileList(BuildContext context, List<NextcloudShare> shares) {
+    final colors = context.nooColors;
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: NooSpace.sm),
-      sliver: SliverToBoxAdapter(
-        child: NooGroupedList(
-          children: [
-            for (final share in shares)
-              NooFileRow(
-                kind: NooFileKind.from(name: share.name, isDirectory: share.isFolder),
-                name: share.name,
-                meta: '${share.ownerDisplayName} · ${_permissionLabel(share.permissions)}',
-                iosStyle: NooLayout.iosStyle(context),
-                onTap: share.isFolder ? () => _openFolder(context, share) : null,
-                trailing: Icon(_shareTypeIcon(share.shareType), size: 16),
-                onMore: () => _confirmUnshare(context, share),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate((context, index) {
+          final share = shares[index];
+          final row = NooFileRow(
+            kind: NooFileKind.from(name: share.name, isDirectory: share.isFolder),
+            name: share.name,
+            meta: '${share.ownerDisplayName} · ${_permissionLabel(share.permissions)}',
+            iosStyle: NooLayout.iosStyle(context),
+            onTap: share.isFolder ? () => _openFolder(context, share) : null,
+            trailing: Icon(_shareTypeIcon(share.shareType), size: 16),
+            onMore: () => _confirmUnshare(context, share),
+          );
+          final isFirst = index == 0;
+          final isLast = index == shares.length - 1;
+          return Column(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.vertical(
+                  top: isFirst
+                      ? const Radius.circular(NooRadii.card)
+                      : Radius.zero,
+                  bottom: isLast
+                      ? const Radius.circular(NooRadii.card)
+                      : Radius.zero,
+                ),
+                child: row,
               ),
-          ],
-        ),
+              if (!isLast) Container(height: 1, color: colors.line),
+            ],
+          );
+        }, childCount: shares.length),
       ),
     );
   }

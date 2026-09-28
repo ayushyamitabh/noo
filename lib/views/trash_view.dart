@@ -11,7 +11,6 @@ import '../widgets/noo/files/noo_file_row.dart';
 import '../widgets/noo/files/noo_file_table.dart';
 import '../widgets/noo/files/noo_file_tile.dart';
 import '../widgets/noo/lists/noo_banner.dart';
-import '../widgets/noo/lists/noo_grouped_list.dart';
 import '../widgets/noo/noo_layout.dart';
 import '../widgets/tabs/tab_location.dart';
 import '../widgets/tabs/tab_state_slivers.dart';
@@ -103,38 +102,61 @@ class _TrashViewState extends State<TrashView> {
     );
   }
 
+  // A lazily-built `SliverList`, not `NooGroupedList` (its own `Column`
+  // isn't lazy - see files_view.dart's `_buildMobileRow` doc comment for
+  // the same reasoning): Trash can hold hundreds of items, and building
+  // every row eagerly up front is what made this tab laggy. Each row still
+  // reads as one continuous radius-20 card via per-row corner rounding +
+  // a 1px `line` divider, matching `NooGroupedList`'s look.
   Widget _buildMobileList(BuildContext context, List<NextcloudItem> trash) {
+    final colors = context.nooColors;
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: NooSpace.sm),
-      sliver: SliverToBoxAdapter(
-        child: NooGroupedList(
-          children: [
-            for (final item in trash)
-              NooFileRow(
-                kind: NooFileKind.from(
-                  name: item.name,
-                  mimeType: item.mimeType,
-                  isDirectory: item.isFolder,
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate((context, index) {
+          final item = trash[index];
+          final row = NooFileRow(
+            kind: NooFileKind.from(
+              name: item.name,
+              mimeType: item.mimeType,
+              isDirectory: item.isFolder,
+            ),
+            name: item.name,
+            meta: _meta(item),
+            iosStyle: NooLayout.iosStyle(context),
+            trailing: SizedBox.square(
+              dimension: 40,
+              child: Semantics(
+                button: true,
+                label: 'Restore',
+                child: InkResponse(
+                  onTap: () => _restore(context, item),
+                  radius: 20,
+                  child: const Icon(LucideIcons.rotateCcw),
                 ),
-                name: item.name,
-                meta: _meta(item),
-                iosStyle: NooLayout.iosStyle(context),
-                trailing: SizedBox.square(
-                  dimension: 40,
-                  child: Semantics(
-                    button: true,
-                    label: 'Restore',
-                    child: InkResponse(
-                      onTap: () => _restore(context, item),
-                      radius: 20,
-                      child: const Icon(LucideIcons.rotateCcw),
-                    ),
-                  ),
-                ),
-                onMore: () => _confirmDeleteForever(context, item),
               ),
-          ],
-        ),
+            ),
+            onMore: () => _confirmDeleteForever(context, item),
+          );
+          final isFirst = index == 0;
+          final isLast = index == trash.length - 1;
+          return Column(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.vertical(
+                  top: isFirst
+                      ? const Radius.circular(NooRadii.card)
+                      : Radius.zero,
+                  bottom: isLast
+                      ? const Radius.circular(NooRadii.card)
+                      : Radius.zero,
+                ),
+                child: row,
+              ),
+              if (!isLast) Container(height: 1, color: colors.line),
+            ],
+          );
+        }, childCount: trash.length),
       ),
     );
   }

@@ -93,33 +93,49 @@ class FilesControlsRow extends StatelessWidget {
     showNooSheet(
       context,
       children: [
-        NooSegmentedControl<bool>(
-          fill: true,
-          value: files.sortAscendingFor(folderPath),
-          onChanged: (asc) {
-            if (asc != files.sortAscendingFor(folderPath)) {
-              files.toggleSortOrderFor(folderPath);
-            }
-          },
-          options: const [
-            NooSegmentOption(value: true, icon: LucideIcons.arrowUp, label: 'Ascending'),
-            NooSegmentOption(value: false, icon: LucideIcons.arrowDown, label: 'Descending'),
-          ],
-        ),
-        NooGroupedList(
-          children: [
-            for (final field in FileSortField.values)
-              NooSettingsRow(
-                label: Text(sortFieldLabel(field)),
-                trailing: field == files.sortFieldFor(folderPath)
-                    ? Icon(LucideIcons.check, size: 18, color: context.nooColors.accentText)
-                    : null,
-                onTap: () {
-                  files.setSortFieldFor(folderPath, field);
-                  Navigator.pop(context);
+        // `showNooSheet`'s `children` are built once, up front - a bare
+        // checkmark/value here would freeze at whatever it was when the
+        // sheet opened, since tapping a row calls `files.set...` and
+        // notifies the controller, not this already-built widget tree.
+        // `ListenableBuilder` re-runs its `builder` on every
+        // `FilesController.notifyListeners()` instead, so the selection
+        // updates live - see the identical fix in `_showFilterSheet`.
+        ListenableBuilder(
+          listenable: files,
+          builder: (context, _) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              NooSegmentedControl<bool>(
+                fill: true,
+                value: files.sortAscendingFor(folderPath),
+                onChanged: (asc) {
+                  if (asc != files.sortAscendingFor(folderPath)) {
+                    files.toggleSortOrderFor(folderPath);
+                  }
                 },
+                options: const [
+                  NooSegmentOption(value: true, icon: LucideIcons.arrowUp, label: 'Ascending'),
+                  NooSegmentOption(value: false, icon: LucideIcons.arrowDown, label: 'Descending'),
+                ],
               ),
-          ],
+              const SizedBox(height: 22),
+              NooGroupedList(
+                children: [
+                  for (final field in FileSortField.values)
+                    NooSettingsRow(
+                      label: Text(sortFieldLabel(field)),
+                      trailing: field == files.sortFieldFor(folderPath)
+                          ? Icon(LucideIcons.check, size: 18, color: context.nooColors.accentText)
+                          : null,
+                      onTap: () {
+                        files.setSortFieldFor(folderPath, field);
+                        Navigator.pop(context);
+                      },
+                    ),
+                ],
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -129,54 +145,66 @@ class FilesControlsRow extends StatelessWidget {
     showNooSheet(
       context,
       children: [
-        NooGroupedList(
-          label: 'Show',
-          children: [
-            NooSettingsRow(
-              label: const Text('Files and folders'),
-              trailing: files.filesTypeFilter == FilesTypeFilter.all
-                  ? Icon(LucideIcons.check, size: 18, color: context.nooColors.accentText)
-                  : null,
-              onTap: () => files.setFilesTypeFilter(FilesTypeFilter.all),
-            ),
-            NooSettingsRow(
-              label: const Text('Files only'),
-              trailing: files.filesTypeFilter == FilesTypeFilter.filesOnly
-                  ? Icon(LucideIcons.check, size: 18, color: context.nooColors.accentText)
-                  : null,
-              onTap: () => files.setFilesTypeFilter(FilesTypeFilter.filesOnly),
-            ),
-            NooSettingsRow(
-              label: const Text('Folders only'),
-              trailing: files.filesTypeFilter == FilesTypeFilter.foldersOnly
-                  ? Icon(LucideIcons.check, size: 18, color: context.nooColors.accentText)
-                  : null,
-              onTap: () => files.setFilesTypeFilter(FilesTypeFilter.foldersOnly),
-            ),
-          ],
-        ),
-        NooGroupedList(
-          children: [
-            NooSettingsRow(
-              icon: LucideIcons.eye,
-              label: const Text('Show hidden files'),
-              trailing: NooToggle(
-                checked: files.showHiddenFiles,
-                onChanged: (_) => files.toggleShowHiddenFiles(),
-              ),
-            ),
-            if (showStorageScope)
-              NooSettingsRow(
-                icon: LucideIcons.hardDrive,
-                label: const Text('External storage'),
-                trailing: NooToggle(
-                  checked: files.storageScope == StorageScope.external,
-                  onChanged: (external) => files.setStorageScope(
-                    external ? StorageScope.external : StorageScope.cloud,
+        // See `_showSortSheet`'s comment: without this, none of the
+        // checkmarks/toggles below would move until the sheet is closed
+        // and reopened.
+        ListenableBuilder(
+          listenable: files,
+          builder: (context, _) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              NooGroupedList(
+                label: 'Show',
+                children: [
+                  NooSettingsRow(
+                    label: const Text('Files and folders'),
+                    trailing: files.filesTypeFilter == FilesTypeFilter.all
+                        ? Icon(LucideIcons.check, size: 18, color: context.nooColors.accentText)
+                        : null,
+                    onTap: () => files.setFilesTypeFilter(FilesTypeFilter.all),
                   ),
-                ),
+                  NooSettingsRow(
+                    label: const Text('Files only'),
+                    trailing: files.filesTypeFilter == FilesTypeFilter.filesOnly
+                        ? Icon(LucideIcons.check, size: 18, color: context.nooColors.accentText)
+                        : null,
+                    onTap: () => files.setFilesTypeFilter(FilesTypeFilter.filesOnly),
+                  ),
+                  NooSettingsRow(
+                    label: const Text('Folders only'),
+                    trailing: files.filesTypeFilter == FilesTypeFilter.foldersOnly
+                        ? Icon(LucideIcons.check, size: 18, color: context.nooColors.accentText)
+                        : null,
+                    onTap: () => files.setFilesTypeFilter(FilesTypeFilter.foldersOnly),
+                  ),
+                ],
               ),
-          ],
+              const SizedBox(height: 22),
+              NooGroupedList(
+                children: [
+                  NooSettingsRow(
+                    icon: LucideIcons.eye,
+                    label: const Text('Show hidden files'),
+                    trailing: NooToggle(
+                      checked: files.showHiddenFiles,
+                      onChanged: (_) => files.toggleShowHiddenFiles(),
+                    ),
+                  ),
+                  if (showStorageScope)
+                    NooSettingsRow(
+                      icon: LucideIcons.hardDrive,
+                      label: const Text('External storage'),
+                      trailing: NooToggle(
+                        checked: files.storageScope == StorageScope.external,
+                        onChanged: (external) => files.setStorageScope(
+                          external ? StorageScope.external : StorageScope.cloud,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
         ),
       ],
     );
