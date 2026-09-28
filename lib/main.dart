@@ -74,8 +74,7 @@ void main() {
               SyncStatusController(context.read(), context.read()),
         ),
         ChangeNotifierProvider(
-          create: (context) =>
-              PhotosController(context.read(), context.read()),
+          create: (context) => PhotosController(context.read(), context.read()),
         ),
         ChangeNotifierProvider(
           create: (context) =>
@@ -481,9 +480,16 @@ class _MainShellViewState extends State<MainShellView> {
             : null,
         drawer: pickRequest == null ? const AppDrawer() : null,
         // Android-only extended Upload FAB - iOS uses the top bar's `plus`
-        // instead (see AppTopBar).
-        floatingActionButton: canUpload && navStyle == NooNavStyle.android
-            ? NooFab(onTap: () => showCreateMenu(context))
+        // instead (see AppTopBar). Stays mounted across every tab (picking
+        // aside) and collapses to an icon-only circle off Files/Photos,
+        // rather than the Scaffold popping it fully in/out on every tab
+        // switch - see NooFab's [collapsed].
+        floatingActionButton:
+            pickRequest == null && navStyle == NooNavStyle.android
+            ? NooFab(
+                collapsed: !canUpload,
+                onTap: () => showCreateMenu(context),
+              )
             : null,
         body: tabStack,
         bottomNavigationBar: BottomNavBar(

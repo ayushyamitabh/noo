@@ -18,17 +18,39 @@ void main() {
   setUpNooTests();
 
   group('NooAvatar', () {
-    testNooWidgets('current user uses accent-soft/accent-text', (tester, theme, c) async {
-      await pumpNoo(tester, const NooAvatar(initials: 'AY', current: true), theme: theme);
+    testNooWidgets('current user uses accent-soft/accent-text', (
+      tester,
+      theme,
+      c,
+    ) async {
+      await pumpNoo(
+        tester,
+        const NooAvatar(initials: 'AY', current: true),
+        theme: theme,
+      );
       expect(find.text('AY'), findsOneWidget);
       expect(decorationOf(tester, find.text('AY')).color, c.accentSoft);
       expect(tester.widget<Text>(find.text('AY')).style!.color, c.accentText);
     });
 
-    testNooWidgets('palette avatar uses fixed dark text', (tester, theme, c) async {
-      await pumpNoo(tester, NooAvatar(initials: 'JD', color: NooColors.avatarPalette[3]), theme: theme);
-      expect(decorationOf(tester, find.text('JD')).color, NooColors.avatarPalette[3]);
-      expect(tester.widget<Text>(find.text('JD')).style!.color, NooColors.avatarTextColor);
+    testNooWidgets('palette avatar uses fixed dark text', (
+      tester,
+      theme,
+      c,
+    ) async {
+      await pumpNoo(
+        tester,
+        NooAvatar(initials: 'JD', color: NooColors.avatarPalette[3]),
+        theme: theme,
+      );
+      expect(
+        decorationOf(tester, find.text('JD')).color,
+        NooColors.avatarPalette[3],
+      );
+      expect(
+        tester.widget<Text>(find.text('JD')).style!.color,
+        NooColors.avatarTextColor,
+      );
     });
 
     testWidgets('icon avatar and size', (tester) async {
@@ -62,7 +84,11 @@ void main() {
       var taps = 0;
       await pumpNoo(
         tester,
-        NooButton(icon: LucideIcons.upload, onTap: () => taps++, child: const Text('Upload')),
+        NooButton(
+          icon: LucideIcons.upload,
+          onTap: () => taps++,
+          child: const Text('Upload'),
+        ),
         theme: theme,
       );
       expect(decorationOf(tester, find.text('Upload')).color, c.accent);
@@ -73,13 +99,18 @@ void main() {
 
     testWidgets('disabled ignores taps', (tester) async {
       var taps = 0;
-      await pumpNoo(tester, NooButton(disabled: true, onTap: () => taps++, child: const Text('No')));
+      await pumpNoo(
+        tester,
+        NooButton(disabled: true, onTap: () => taps++, child: const Text('No')),
+      );
       await tester.tap(find.text('No'), warnIfMissed: false);
       await tester.pumpAndSettle();
       expect(taps, 0);
     });
 
-    testWidgets('shrink-wraps unless fullWidth, heights follow size', (tester) async {
+    testWidgets('shrink-wraps unless fullWidth, heights follow size', (
+      tester,
+    ) async {
       await pumpNoo(
         tester,
         const Column(
@@ -118,14 +149,22 @@ void main() {
   });
 
   group('NooChip', () {
-    testNooWidgets('selected vs idle fill, onTap fires', (tester, theme, c) async {
+    testNooWidgets('selected vs idle fill, onTap fires', (
+      tester,
+      theme,
+      c,
+    ) async {
       var taps = 0;
       await pumpNoo(
         tester,
         Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            NooChip(selected: true, onTap: () => taps++, child: const Text('Name')),
+            NooChip(
+              selected: true,
+              onTap: () => taps++,
+              child: const Text('Name'),
+            ),
             const NooChip(trailing: NooChipTrailing.menu, child: Text('Type')),
           ],
         ),
@@ -138,9 +177,13 @@ void main() {
     });
 
     testWidgets('outline chip is 32px with a line border', (tester) async {
-      await pumpNoo(tester, const NooChip(outline: true, child: Text('Modified')));
+      await pumpNoo(
+        tester,
+        const NooChip(outline: true, child: Text('Modified')),
+      );
       expect(tester.getSize(find.byType(NooChip)).height, 32);
-      final border = decorationOf(tester, find.text('Modified')).border as Border;
+      final border =
+          decorationOf(tester, find.text('Modified')).border as Border;
       expect(border.top.color, NooColors.light.line);
     });
   });
@@ -155,12 +198,42 @@ void main() {
       await tester.tap(find.byType(NooFab));
       expect(taps, 1);
     });
+
+    testNooWidgets('collapsed hides the label and shrinks to a circle', (
+      tester,
+      theme,
+      c,
+    ) async {
+      var taps = 0;
+      await pumpNoo(
+        tester,
+        NooFab(collapsed: true, onTap: () => taps++),
+        theme: theme,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Upload'), findsNothing);
+      final size = tester.getSize(find.byType(NooFab));
+      expect(size.height, 56);
+      expect(size.width, 56);
+      await tester.tap(find.byType(NooFab));
+      expect(taps, 1);
+    });
   });
 
   group('NooProgressBar', () {
-    testNooWidgets('clamps value and uses track/fill tokens', (tester, theme, c) async {
-      await pumpNoo(tester, const SizedBox(width: 200, child: NooProgressBar(value: 1.7)), theme: theme);
-      final bar = tester.widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator));
+    testNooWidgets('clamps value and uses track/fill tokens', (
+      tester,
+      theme,
+      c,
+    ) async {
+      await pumpNoo(
+        tester,
+        const SizedBox(width: 200, child: NooProgressBar(value: 1.7)),
+        theme: theme,
+      );
+      final bar = tester.widget<LinearProgressIndicator>(
+        find.byType(LinearProgressIndicator),
+      );
       expect(bar.value, 1.0);
       expect(bar.backgroundColor, c.surface3);
       expect(bar.valueColor!.value, c.accent);
@@ -169,11 +242,18 @@ void main() {
   });
 
   group('NooSearchField', () {
-    testNooWidgets('placeholder, typing, surface fill', (tester, theme, c) async {
+    testNooWidgets('placeholder, typing, surface fill', (
+      tester,
+      theme,
+      c,
+    ) async {
       String? typed;
       await pumpNoo(
         tester,
-        SizedBox(width: 260, child: NooSearchField(onSurface: true, onChanged: (v) => typed = v)),
+        SizedBox(
+          width: 260,
+          child: NooSearchField(onSurface: true, onChanged: (v) => typed = v),
+        ),
         theme: theme,
       );
       expect(find.text('Search'), findsOneWidget);
@@ -198,7 +278,11 @@ void main() {
       );
     }
 
-    testNooWidgets('tapping a segment moves the active fill', (tester, theme, c) async {
+    testNooWidgets('tapping a segment moves the active fill', (
+      tester,
+      theme,
+      c,
+    ) async {
       await pumpNoo(tester, host(), theme: theme);
       expect(decorationOf(tester, find.text('List')).color, c.accentSoft);
       expect(tester.widget<Text>(find.text('Grid')).style!.color, c.fg2);
@@ -224,12 +308,19 @@ void main() {
       );
       expect(find.byType(Text), findsNothing);
       // 2 x 36 wide segments + 3px track padding each side.
-      expect(tester.getSize(find.byType(NooSegmentedControl<int>)), const Size(78, 34));
+      expect(
+        tester.getSize(find.byType(NooSegmentedControl<int>)),
+        const Size(78, 34),
+      );
     });
   });
 
   group('NooToggle', () {
-    testNooWidgets('tapping flips state and track colour', (tester, theme, c) async {
+    testNooWidgets('tapping flips state and track colour', (
+      tester,
+      theme,
+      c,
+    ) async {
       var on = false;
       await pumpNoo(
         tester,
@@ -240,9 +331,12 @@ void main() {
         theme: theme,
       );
       expect(tester.getSize(find.byType(NooToggle)), const Size(48, 28));
-      Color track() => (tester.widget<AnimatedContainer>(find.byType(AnimatedContainer)).decoration!
-              as BoxDecoration)
-          .color!;
+      Color track() =>
+          (tester
+                      .widget<AnimatedContainer>(find.byType(AnimatedContainer))
+                      .decoration!
+                  as BoxDecoration)
+              .color!;
       expect(track(), c.surface3);
 
       await tester.tap(find.byType(NooToggle));

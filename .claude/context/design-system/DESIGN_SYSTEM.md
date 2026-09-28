@@ -108,7 +108,11 @@ Use **Lucide** (pinned to `lucide-static@0.460.0`) at a 1.8 stroke. Sizes are 14
 **FAB** (Android only)
 - An extended pill: 56px tall, accent fill, labelled "Upload".
 - Sits 16px from the right and bottom edges of the content area.
-- Shows only on Files and Photos.
+- Stays mounted on every tab; it's only the extended label that's tied to
+  Files/Photos. Elsewhere it collapses to an icon-only 56px circle (still
+  tappable - it always targets the Files tab's current folder), animating
+  the width/label change rather than the button popping fully in/out as
+  the Scaffold's default FAB transition would on every tab switch.
 
 **Chip**
 - A pill, 32–34px tall, 12px horizontal padding, Label 13–14.
@@ -254,7 +258,7 @@ Mobile always has **5 pinned tabs in the bottom bar**. The rest go in the drawer
 |---|---|---|
 | Status bar | 54px, Dynamic Island | 40px |
 | Top bar | 44px row: `menu` on the left; `plus` and avatar on the right (all accent-text). Then a 34px large title, then the search field. | 64px: `menu`, 22px title, `search`, avatar |
-| Bottom bar | Surface fill, 1px top line. Icon 24 above a 10px label. Active: accent-text. Idle: fg-3. 34px home indicator below. | Surface fill, 80px. The active icon sits in a 56×32 accent-soft pill with a 12px label. 20px gesture bar below. |
+| Bottom bar | Surface fill, 1px top line. Icon 24 above a 10px label. Active: accent-text. Idle: fg-3. 34px home indicator below. | Surface fill, 80px. Icon 24 above a 12px label (label space is always reserved, just invisible when idle, so nothing shifts on selection). The active icon sits inside a 56×32 accent-soft pill that slides between tabs as one shared indicator, rather than popping in/out per tab. 20px gesture bar below. |
 | Upload | `plus` in the nav bar | Extended FAB |
 | Overflow icon | `ellipsis` | `ellipsis-vertical` |
 | Settings | Pushed screen with a "‹ Files" back button and a large title. No bottom bar. | Pushed screen with a back arrow and a title. No bottom bar. |

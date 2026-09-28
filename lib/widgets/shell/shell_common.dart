@@ -211,10 +211,10 @@ class _AccountSwitchRow extends StatelessWidget {
   }
 }
 
-/// The current user's avatar in the mobile top bar. Tap opens Settings;
-/// swiping up/down on it cycles to the next/previous saved account
-/// immediately, with no confirmation - a shortcut alongside the full
-/// switcher (drawer chevron, Settings' account list).
+/// The current user's avatar in the mobile top bar. Tap opens the accounts
+/// sheet ([showAccountSwitcher]); swiping up/down on it cycles to the
+/// next/previous saved account immediately, with no confirmation - a
+/// shortcut alongside the full switcher.
 class ShellAvatarButton extends StatelessWidget {
   final double hitBox;
 
@@ -246,17 +246,17 @@ class ShellAvatarButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final session = context.watch<SessionController>();
     return Tooltip(
-      message: 'Settings',
+      message: 'Accounts',
       child: Semantics(
         button: true,
-        label: 'Settings',
+        label: 'Accounts',
         child: GestureDetector(
           onVerticalDragEnd: (details) =>
               _handleVerticalSwipe(context, details),
           child: SizedBox.square(
             dimension: hitBox,
             child: InkResponse(
-              onTap: () => openSettings(context),
+              onTap: () => showAccountSwitcher(context),
               radius: hitBox / 2,
               child: Center(
                 child: NooAvatar(

@@ -4,6 +4,12 @@ import 'noo_nav_style.dart';
 
 export 'noo_nav_style.dart';
 
+/// Android indicator geometry, shared between the sliding pill and each
+/// item's own icon box so they line up exactly.
+const double _kAndroidPillTop = 14;
+const double _kAndroidPillWidth = 56;
+const double _kAndroidPillHeight = 32;
+
 /// The mobile bottom bar (DESIGN_SYSTEM.md 3, "Mobile"; `iNav`/`aNav` in
 /// `Mobile Screen.dc.html`). Shows the 5 pinned tabs - which ones, and in
 /// what order, is the caller's business; this only draws [destinations].
@@ -11,9 +17,11 @@ export 'noo_nav_style.dart';
 /// - [NooNavStyle.ios]: surface fill, 1px top `line`, a 50px row (8px top
 ///   padding) of icon 24 over a 10px label. Active: accent-text, 600.
 ///   Idle: fg-3, 500. No ripple.
-/// - [NooNavStyle.android]: surface fill, 80px. The active icon sits in a
-///   56x32 accent-soft pill (accent-text icon); label is 12px, fg-1/600
-///   active and fg-2/500 idle (idle icon fg-2).
+/// - [NooNavStyle.android]: surface fill, 80px. Every tab shows its 24px
+///   icon over a 12px label (label only visible - not removed from layout,
+///   so the row never resizes - once selected). The active icon sits in a
+///   56x32 accent-soft pill that slides between tabs as selection moves,
+///   rather than popping in/out on the destination item itself.
 ///
 /// The home indicator / gesture bar area below the row comes from the
 /// bottom safe-area inset rather than a fixed 34/20px spacer, so it's
@@ -37,25 +45,7 @@ class NooBottomBar extends StatelessWidget {
     final colors = context.nooColors;
     final ios = style == NooNavStyle.ios;
 
-    final row = Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (var i = 0; i < destinations.length; i++)
-          Expanded(
-            child: ios
-                ? _IosItem(
-                    destination: destinations[i],
-                    selected: i == selectedIndex,
-                    onTap: () => onSelected(i),
-                  )
-                : _AndroidItem(
-                    destination: destinations[i],
-                    selected: i == selectedIndex,
-                    onTap: () => onSelected(i),
-                  ),
-          ),
-      ],
-    );
+    final row = ios ? _buildIosRow() : _buildAndroidRow(colors);
 
     return Container(
       decoration: BoxDecoration(
@@ -66,6 +56,63 @@ class NooBottomBar extends StatelessWidget {
         top: false,
         child: SizedBox(height: ios ? 50 : 80, child: row),
       ),
+    );
+  }
+
+  Widget _buildIosRow() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < destinations.length; i++)
+          Expanded(
+            child: _IosItem(
+              destination: destinations[i],
+              selected: i == selectedIndex,
+              onTap: () => onSelected(i),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildAndroidRow(NooColors colors) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final itemWidth = constraints.maxWidth / destinations.length;
+        return Stack(
+          children: [
+            AnimatedPositioned(
+              duration: NooMotion.base,
+              curve: NooMotion.ease,
+              top: _kAndroidPillTop,
+              left:
+                  itemWidth * selectedIndex +
+                  (itemWidth - _kAndroidPillWidth) / 2,
+              width: _kAndroidPillWidth,
+              height: _kAndroidPillHeight,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: colors.accentSoft,
+                  borderRadius: BorderRadius.circular(NooRadii.pill),
+                ),
+              ),
+            ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < destinations.length; i++)
+                  Expanded(
+                    child: _AndroidItem(
+                      destination: destinations[i],
+                      selected: i == selectedIndex,
+                      onTap: () => onSelected(i),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -117,6 +164,11 @@ class _IosItem extends StatelessWidget {
   }
 }
 
+/// Icon (over the shared sliding pill, drawn separately by [NooBottomBar])
+/// with its label always below it - the label's space is reserved
+/// whether or not it's showing (only its opacity changes), so the icon
+/// never shifts vertically as selection changes, and stays aligned with
+/// the pill's fixed [_kAndroidPillTop]/[_kAndroidPillHeight].
 class _AndroidItem extends StatelessWidget {
   final NooNavDestination destination;
   final bool selected;
@@ -134,43 +186,42 @@ class _AndroidItem extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      // No ripple: the animated pill is the press/selection feedback.
+      label: destination.label,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            AnimatedContainer(
-              duration: NooMotion.fast,
-              curve: NooMotion.ease,
-              width: 56,
-              height: 32,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: selected
-                    ? colors.accentSoft
-                    : colors.accentSoft.withValues(alpha: 0),
-                borderRadius: BorderRadius.circular(NooRadii.pill),
-              ),
-              child: Icon(
-                destination.icon,
-                size: 24,
-                color: selected ? colors.accentText : colors.fg2,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              destination.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: (selected ? NooText.navLabelActive : NooText.navLabel)
-                  .copyWith(
-                    height: 1,
-                    color: selected ? colors.fg1 : colors.fg2,
+        child: Padding(
+          padding: const EdgeInsets.only(top: _kAndroidPillTop),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              SizedBox(
+                height: _kAndroidPillHeight,
+                child: Center(
+                  child: Icon(
+                    destination.icon,
+                    size: 24,
+                    color: selected ? colors.accentText : colors.fg2,
                   ),
-            ),
-          ],
+                ),
+              ),
+              const SizedBox(height: 4),
+              AnimatedOpacity(
+                duration: NooMotion.base,
+                curve: NooMotion.ease,
+                opacity: selected ? 1 : 0,
+                child: Text(
+                  destination.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: NooText.navLabelActive.copyWith(
+                    height: 1,
+                    color: colors.fg1,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

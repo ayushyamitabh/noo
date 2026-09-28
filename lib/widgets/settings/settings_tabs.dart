@@ -15,8 +15,13 @@ import 'settings_section.dart';
 class SettingsTabsSection extends StatelessWidget {
   const SettingsTabsSection({super.key});
 
-  void _openDefaultTabPicker(BuildContext context, SettingsController settings) {
-    final visible = settings.tabOrder.where((t) => !settings.hiddenTabs.contains(t)).toList();
+  void _openDefaultTabPicker(
+    BuildContext context,
+    SettingsController settings,
+  ) {
+    final visible = settings.tabOrder
+        .where((t) => !settings.hiddenTabs.contains(t))
+        .toList();
     showSettingsPicker(
       context,
       title: 'Default tab',
@@ -26,7 +31,11 @@ class SettingsTabsSection extends StatelessWidget {
             icon: tab.icon,
             label: Text(tab.label),
             trailing: tab == settings.defaultTab
-                ? Icon(LucideIcons.check, size: 18, color: context.nooColors.accentText)
+                ? Icon(
+                    LucideIcons.check,
+                    size: 18,
+                    color: context.nooColors.accentText,
+                  )
                 : null,
             onTap: () {
               settings.setDefaultTab(tab);
@@ -37,7 +46,12 @@ class SettingsTabsSection extends StatelessWidget {
     );
   }
 
-  void _handleTogglePin(BuildContext context, SettingsController settings, AppTab tab, bool pinned) {
+  void _handleTogglePin(
+    BuildContext context,
+    SettingsController settings,
+    AppTab tab,
+    bool pinned,
+  ) {
     // setTabHidden's `hidden` argument is the *new* hidden state, which is
     // just the tab's current pinned (= visible) state flipped.
     final error = settings.setTabHidden(tab, pinned);
@@ -66,7 +80,9 @@ class SettingsTabsSection extends StatelessWidget {
       NooSettingsRow(
         icon: LucideIcons.arrowUpDown,
         label: const Text('Tap tab to scroll to top'),
-        subtitle: const Text('Tapping the current bottom bar tab scrolls its list back to the top'),
+        subtitle: const Text(
+          'Tapping the current bottom bar tab scrolls its list back to the top',
+        ),
         trailing: NooToggle(
           checked: settings.tapTabToScrollTop,
           onChanged: settings.setTapTabToScrollTop,
@@ -83,15 +99,21 @@ class SettingsTabsSection extends StatelessWidget {
       tabs: settings.tabOrder,
       hiddenTabs: settings.hiddenTabs,
       flat: desktop,
-      onReorder: (oldIndex, newIndex) => _handleReorder(settings, oldIndex, newIndex),
-      onTogglePin: (tab, pinned) => _handleTogglePin(context, settings, tab, pinned),
+      onReorder: (oldIndex, newIndex) =>
+          _handleReorder(settings, oldIndex, newIndex),
+      onTogglePin: (tab, pinned) =>
+          _handleTogglePin(context, settings, tab, pinned),
     );
 
     if (!desktop) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SettingsSection(title: 'Tabs', subtitle: _subtitle, children: optionRows),
+          SettingsSection(
+            title: 'Tabs',
+            subtitle: _subtitle,
+            children: optionRows,
+          ),
           const SizedBox(height: NooSpace.md),
           orderList,
         ],
@@ -164,21 +186,24 @@ class _TabOrderList extends StatelessWidget {
         return Padding(
           key: ValueKey(tab),
           padding: EdgeInsets.only(top: index > 0 ? 1 : 0),
-          child: ReorderableDragStartListener(
-            index: index,
-            child: NooTabOrderRow(
-              icon: tab.icon,
-              label: tab.label,
-              pinned: pinned,
-              onTogglePin: () => onTogglePin(tab, pinned),
-            ),
+          child: NooTabOrderRow(
+            icon: tab.icon,
+            label: tab.label,
+            pinned: pinned,
+            onTogglePin: () => onTogglePin(tab, pinned),
+            dragIndex: index,
           ),
         );
       },
     );
     return ClipRRect(
-      borderRadius: BorderRadius.circular(flat ? NooRadii.input : NooRadii.card),
-      child: DecoratedBox(decoration: BoxDecoration(color: colors.line), child: list),
+      borderRadius: BorderRadius.circular(
+        flat ? NooRadii.input : NooRadii.card,
+      ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(color: colors.line),
+        child: list,
+      ),
     );
   }
 }

@@ -11,24 +11,36 @@ class NooTabOrderRow extends StatelessWidget {
   final bool pinned;
   final VoidCallback? onTogglePin;
 
+  /// This row's index inside its `ReorderableListView` - when set, only the
+  /// grip icon starts a drag (`ReorderableDragStartListener` wraps just the
+  /// icon, not the whole row), so a vertical drag/scroll starting anywhere
+  /// else on the row reaches the surrounding settings page's own scroll
+  /// view instead of being grabbed as a reorder. Null renders a plain,
+  /// non-interactive grip icon (e.g. a standalone preview/test).
+  final int? dragIndex;
+
   const NooTabOrderRow({
     super.key,
     required this.icon,
     required this.label,
     this.pinned = false,
     this.onTogglePin,
+    this.dragIndex,
   });
 
   @override
   Widget build(BuildContext context) {
     final colors = context.nooColors;
+    final grip = Icon(LucideIcons.gripVertical, size: 18, color: colors.fg3);
     return Container(
       height: 52,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       color: colors.surface,
       child: Row(
         children: [
-          Icon(LucideIcons.gripVertical, size: 18, color: colors.fg3),
+          dragIndex == null
+              ? grip
+              : ReorderableDragStartListener(index: dragIndex!, child: grip),
           const SizedBox(width: 12),
           Icon(icon, size: 20, color: colors.fg2),
           const SizedBox(width: 12),
