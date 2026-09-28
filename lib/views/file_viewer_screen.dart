@@ -376,14 +376,13 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
     final session = context.read<SessionController>();
     final ops = context.read<ItemOperations>();
     final colors = context.nooColors;
-    // The stage behind the media itself is pure black rather than `bg` -
-    // the near-universal "letterbox" convention of photo/video viewers
-    // (matting an image/video in the app's warm neutral background reads
-    // as unfinished, and black also hides any letterboxing from
-    // `BoxFit.contain`/`AspectRatio` at the screen edges). PDFs/text/
-    // unsupported-file previews aren't "viewed" the same way - they're
-    // read, so they stay on the normal `bg` like any other screen.
-    final stageColor = _isSwipeable ? Colors.black : colors.bg;
+    // The stage follows the app's own theme (`bg`) rather than being pinned
+    // to black - a black stage in light mode read as jarringly out of place
+    // next to the rest of the light-themed app. The floating top/action
+    // bars stay a fixed dark frosted panel regardless (see
+    // FrostedGlassContainer's doc comment) since they need to read over
+    // arbitrary photo/video brightness, not over this background.
+    final stageColor = colors.bg;
 
     return Scaffold(
       backgroundColor: stageColor,
@@ -437,9 +436,13 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
               offset: _controlsVisible ? Offset.zero : const Offset(0, -1.4),
               child: IgnorePointer(
                 ignoring: !_controlsVisible,
-                child: SafeArea(
-                  bottom: false,
-                  child: FrostedGlassContainer(
+                // The blurred/tinted background lives outside the SafeArea
+                // (not inside it) so it extends up behind the status bar
+                // instead of stopping short beneath it - see the matching
+                // fix/comment on MediaActionBar's own SafeArea.
+                child: FrostedGlassContainer(
+                  child: SafeArea(
+                    bottom: false,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 6,
@@ -447,10 +450,9 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                       ),
                       child: IconTheme.merge(
                         // Fixed white, not `colors.fg1`: this bar always
-                        // sits on the dark translucent panel over a black
-                        // media stage (see `FrostedGlassContainer`'s doc
-                        // comment), regardless of the app's light/dark
-                        // theme.
+                        // sits on the dark translucent panel over the media
+                        // stage (see `FrostedGlassContainer`'s doc comment),
+                        // regardless of the app's light/dark theme.
                         data: const IconThemeData(
                           color: Colors.white,
                           size: 24,

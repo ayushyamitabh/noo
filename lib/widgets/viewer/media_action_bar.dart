@@ -46,9 +46,14 @@ class MediaActionBar extends StatelessWidget {
     // favorite/delete stay legible even when the ambient theme is light.
     const dark = NooColors.dark;
 
-    return SafeArea(
-      top: false,
-      child: FrostedGlassContainer(
+    // The blurred/tinted background lives outside the SafeArea (not inside
+    // it) so it extends all the way to the physical bottom edge, behind the
+    // gesture bar/home indicator, instead of the panel itself stopping
+    // short and leaving that strip unstyled - only the actual row content
+    // needs padding up and away from the gesture area.
+    return FrostedGlassContainer(
+      child: SafeArea(
+        top: false,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

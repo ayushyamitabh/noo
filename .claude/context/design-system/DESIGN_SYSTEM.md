@@ -340,12 +340,16 @@ Sidebar items are 38px tall with radius 12, an 18px icon and a 14/500 label. The
   Location, Modified, Created, ...). Versions and Activity reuse their own
   row/feed treatment. Same on every platform - this sheet has no iOS/Android
   split.
-- **Media viewer** (the full-screen photo/video viewer): a black stage
-  regardless of theme, like a native photo/video viewer - not `bg`. A
-  translucent, blurred top bar (back, filename, meta) and bottom bar float
-  over the media; this is the one deliberate exception to "no blur" in
-  product UI, since it's chrome over photo/video content, not over the app's
-  own surfaces. Back is a plain arrow (`arrow-left`), not the iOS
+- **Media viewer** (the full-screen photo/video viewer): the stage is `bg`,
+  following the app's own theme rather than a fixed black - a black stage
+  in light mode read as jarringly out of place. A translucent, blurred top
+  bar (back, filename, meta) and bottom bar float over the media in a fixed
+  dark panel regardless of theme (it needs to read over arbitrary photo/
+  video brightness, not over `bg`); this is the one deliberate exception to
+  "no blur" in product UI, since it's chrome over photo/video content, not
+  over the app's own surfaces. Both bars' background extends edge-to-edge
+  behind the status bar/gesture area, with only their content padded clear
+  of it. Back is a plain arrow (`arrow-left`), not the iOS
   chevron+label pushed-screen pattern - platform split still to do. The
   bottom bar holds every action in one row (share, favorite, open
   externally, download, delete, details) on every platform; don't add a

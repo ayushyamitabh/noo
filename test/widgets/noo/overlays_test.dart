@@ -14,18 +14,26 @@ import 'noo_test_utils.dart';
 
 /// A button that opens an overlay from a context below MaterialApp.
 Widget _launcher(void Function(BuildContext) open) => Builder(
-  builder: (context) => TextButton(onPressed: () => open(context), child: const Text('open')),
+  builder: (context) =>
+      TextButton(onPressed: () => open(context), child: const Text('open')),
 );
 
 Finder _dialogCard() => find.byWidgetPredicate(
-  (w) => w is Container && w.decoration is BoxDecoration && (w.decoration as BoxDecoration).boxShadow != null,
+  (w) =>
+      w is Container &&
+      w.decoration is BoxDecoration &&
+      (w.decoration as BoxDecoration).boxShadow != null,
 );
 
 void main() {
   setUpNooTests();
 
   group('NooOverlayHeader', () {
-    testNooWidgets('title, subtitle, leading and close', (tester, theme, c) async {
+    testNooWidgets('title, subtitle, leading and close', (
+      tester,
+      theme,
+      c,
+    ) async {
       var closed = 0;
       await pumpNoo(
         tester,
@@ -41,23 +49,41 @@ void main() {
         theme: theme,
       );
       expect(find.text('Report.pdf'), findsOneWidget);
-      expect(tester.widget<Text>(find.text('2 MB · Documents')).style!.color, c.fg3);
-      expect(decorationOf(tester, find.byIcon(LucideIcons.x)).color, c.surface2);
+      expect(
+        tester.widget<Text>(find.text('2 MB · Documents')).style!.color,
+        c.fg3,
+      );
+      expect(
+        decorationOf(tester, find.byIcon(LucideIcons.x)).color,
+        c.surface2,
+      );
       await tester.tap(find.byIcon(LucideIcons.x));
       expect(closed, 1);
     });
 
     testWidgets('no close button without onClose', (tester) async {
-      await pumpNoo(tester, const SizedBox(width: 360, child: NooOverlayHeader(title: 'T')));
+      await pumpNoo(
+        tester,
+        const SizedBox(width: 360, child: NooOverlayHeader(title: 'T')),
+      );
       expect(find.byIcon(LucideIcons.x), findsNothing);
     });
   });
 
   group('showNooSheet', () {
-    testNooWidgets('shows children on a surface sheet and dismisses', (tester, theme, c) async {
+    testNooWidgets('shows children on a surface sheet and dismisses', (
+      tester,
+      theme,
+      c,
+    ) async {
       await pumpNoo(
         tester,
-        _launcher((ctx) => showNooSheet<void>(ctx, children: const [Text('Section A'), Text('Section B')])),
+        _launcher(
+          (ctx) => showNooSheet<void>(
+            ctx,
+            children: const [Text('Section A'), Text('Section B')],
+          ),
+        ),
         theme: theme,
       );
       await tester.tap(find.text('open'));
@@ -66,7 +92,8 @@ void main() {
       expect(find.text('Section B'), findsOneWidget);
       final sheet = tester.widget<BottomSheet>(find.byType(BottomSheet));
       expect(sheet.backgroundColor, c.surface);
-      final gap = tester.getTopLeft(find.text('Section B')).dy -
+      final gap =
+          tester.getTopLeft(find.text('Section B')).dy -
           tester.getBottomLeft(find.text('Section A')).dy;
       expect(gap, 22);
 
@@ -74,13 +101,56 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Section A'), findsNothing);
     });
+
+    testNooWidgets('long content opens as a draggable peek, not full height', (
+      tester,
+      theme,
+      c,
+    ) async {
+      await pumpNoo(
+        tester,
+        _launcher(
+          (ctx) => showNooSheet<void>(
+            ctx,
+            children: [
+              for (var i = 0; i < 30; i++)
+                SizedBox(height: 40, child: Text('Row $i')),
+            ],
+          ),
+        ),
+        theme: theme,
+        surfaceSize: const Size(400, 700),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      // Content (30 * (40 + 22) =~ 1860px) far exceeds the peek fraction of
+      // the 700px-tall surface, so it should switch to a draggable sheet
+      // instead of the plain content-sized scroll view, opened at a peek
+      // (well under half the content height) rather than snapping to
+      // (near) the full 700px available.
+      expect(find.text('Row 0'), findsOneWidget);
+      final sheetHeight = tester
+          .getSize(find.byType(DraggableScrollableSheet))
+          .height;
+      expect(sheetHeight, lessThan(500));
+      expect(sheetHeight, greaterThan(150));
+    });
   });
 
   group('NooDialog', () {
-    testNooWidgets('card is 540 wide, r24, single dialog shadow', (tester, theme, c) async {
+    testNooWidgets('card is 540 wide, r24, single dialog shadow', (
+      tester,
+      theme,
+      c,
+    ) async {
       await pumpNoo(
         tester,
-        NooDialog(title: 'Share "Report.pdf"', onClose: () {}, children: const [Text('body')]),
+        NooDialog(
+          title: 'Share "Report.pdf"',
+          onClose: () {},
+          children: const [Text('body')],
+        ),
         theme: theme,
         surfaceSize: const Size(1200, 900),
       );
@@ -92,7 +162,9 @@ void main() {
       expect(tester.getSize(card).width, 540);
     });
 
-    testWidgets('narrow screens shrink the card to fit with a 24px margin', (tester) async {
+    testWidgets('narrow screens shrink the card to fit with a 24px margin', (
+      tester,
+    ) async {
       await tester.binding.setSurfaceSize(const Size(400, 800));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
@@ -105,7 +177,11 @@ void main() {
       expect(tester.getSize(card).width, 400 - 48);
     });
 
-    testNooWidgets('header close is a 32px surface-2 circle', (tester, theme, c) async {
+    testNooWidgets('header close is a 32px surface-2 circle', (
+      tester,
+      theme,
+      c,
+    ) async {
       var closed = 0;
       await pumpNoo(
         tester,
@@ -118,12 +194,19 @@ void main() {
         theme: theme,
       );
       expect(tester.getSize(find.byType(NooCloseButton)), const Size(32, 32));
-      expect(decorationOf(tester, find.byIcon(LucideIcons.x)).color, c.surface2);
+      expect(
+        decorationOf(tester, find.byIcon(LucideIcons.x)).color,
+        c.surface2,
+      );
       await tester.tap(find.byType(NooCloseButton));
       expect(closed, 1);
     });
 
-    testNooWidgets('showNooDialog uses the scrim and closes via the button', (tester, theme, c) async {
+    testNooWidgets('showNooDialog uses the scrim and closes via the button', (
+      tester,
+      theme,
+      c,
+    ) async {
       Future<String?>? result;
       await pumpNoo(
         tester,
@@ -140,7 +223,9 @@ void main() {
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
       expect(find.text('dialog body'), findsOneWidget);
-      final barrier = tester.widgetList<ModalBarrier>(find.byType(ModalBarrier)).last;
+      final barrier = tester
+          .widgetList<ModalBarrier>(find.byType(ModalBarrier))
+          .last;
       expect(barrier.color, c.scrim);
 
       await tester.tap(find.byType(NooCloseButton));
@@ -176,7 +261,10 @@ void main() {
           (ctx) => showNooDialog<void>(
             ctx,
             title: 'T',
-            children: [for (var i = 0; i < 40; i++) SizedBox(height: 60, child: Text('row $i'))],
+            children: [
+              for (var i = 0; i < 40; i++)
+                SizedBox(height: 60, child: Text('row $i')),
+            ],
           ),
         ),
         surfaceSize: const Size(1200, 600),
@@ -189,13 +277,20 @@ void main() {
   });
 
   group('NooTextField', () {
-    testNooWidgets('surface-2, r14, fg-3 placeholder, typing', (tester, theme, c) async {
+    testNooWidgets('surface-2, r14, fg-3 placeholder, typing', (
+      tester,
+      theme,
+      c,
+    ) async {
       String? typed;
       await pumpNoo(
         tester,
         SizedBox(
           width: 400,
-          child: NooTextField(placeholder: 'Name, email or group', onChanged: (v) => typed = v),
+          child: NooTextField(
+            placeholder: 'Name, email or group',
+            onChanged: (v) => typed = v,
+          ),
         ),
         theme: theme,
       );
@@ -209,14 +304,20 @@ void main() {
       expect(typed, 'ali');
     });
 
-    testNooWidgets('mono URL field with inline Copy link button', (tester, theme, c) async {
+    testNooWidgets('mono URL field with inline Copy link button', (
+      tester,
+      theme,
+      c,
+    ) async {
       var copied = 0;
       await pumpNoo(
         tester,
         SizedBox(
           width: 480,
           child: NooTextField(
-            controller: TextEditingController(text: 'https://cloud.example/s/abc'),
+            controller: TextEditingController(
+              text: 'https://cloud.example/s/abc',
+            ),
             mono: true,
             readOnly: true,
             onSurface: false,
@@ -233,7 +334,10 @@ void main() {
       expect(field.style!.fontFamily, NooText.mono.fontFamily);
       expect(field.readOnly, isTrue);
       expect(decorationOf(tester, find.byType(TextField)).color, c.surface);
-      expect(tester.getSize(find.byType(NooButton)).height, NooSizes.buttonField);
+      expect(
+        tester.getSize(find.byType(NooButton)).height,
+        NooSizes.buttonField,
+      );
       await tester.tap(find.text('Copy link'));
       await tester.pumpAndSettle();
       expect(copied, 1);
@@ -241,7 +345,11 @@ void main() {
   });
 
   group('Share parts', () {
-    testNooWidgets('NooShareSection title, trailing and caption', (tester, theme, c) async {
+    testNooWidgets('NooShareSection title, trailing and caption', (
+      tester,
+      theme,
+      c,
+    ) async {
       await pumpNoo(
         tester,
         const SizedBox(
@@ -255,13 +363,26 @@ void main() {
         ),
         theme: theme,
       );
-      expect(tester.widget<Text>(find.text('Send file directly')).style!.color, c.fg1);
-      expect(tester.widget<Text>(find.text("Link settings don't apply")).style!.color, c.fg3);
+      expect(
+        tester.widget<Text>(find.text('Send file directly')).style!.color,
+        c.fg1,
+      );
+      expect(
+        tester
+            .widget<Text>(find.text("Link settings don't apply"))
+            .style!
+            .color,
+        c.fg3,
+      );
       expect(find.byIcon(LucideIcons.link), findsOneWidget);
       expect(find.text('content'), findsOneWidget);
     });
 
-    testNooWidgets('owner row is static, others get a tappable pill', (tester, theme, c) async {
+    testNooWidgets('owner row is static, others get a tappable pill', (
+      tester,
+      theme,
+      c,
+    ) async {
       var taps = 0;
       await pumpNoo(
         tester,
@@ -296,13 +417,19 @@ void main() {
       expect(taps, 1);
     });
 
-    testWidgets('same parts lay out inside the sheet and the dialog', (tester) async {
+    testWidgets('same parts lay out inside the sheet and the dialog', (
+      tester,
+    ) async {
       List<Widget> parts() => [
         NooShareSection(
           title: 'Share with people',
           child: const NooTextField(placeholder: 'Name, email or group'),
         ),
-        const NooPersonAccessRow(avatar: NooAvatar(initials: 'JD'), name: 'Jane', permission: 'Can view'),
+        const NooPersonAccessRow(
+          avatar: NooAvatar(initials: 'JD'),
+          name: 'Jane',
+          permission: 'Can view',
+        ),
       ];
       await pumpNoo(
         tester,
@@ -312,7 +439,8 @@ void main() {
             _launcher((ctx) => showNooSheet<void>(ctx, children: parts())),
             Builder(
               builder: (ctx) => TextButton(
-                onPressed: () => showNooDialog<void>(ctx, title: 'Share', children: parts()),
+                onPressed: () =>
+                    showNooDialog<void>(ctx, title: 'Share', children: parts()),
                 child: const Text('dialog'),
               ),
             ),
