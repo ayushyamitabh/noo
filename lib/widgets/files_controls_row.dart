@@ -109,6 +109,7 @@ class FilesControlsRow extends StatelessWidget {
             children: [
               NooSegmentedControl<bool>(
                 fill: true,
+                onSurface: true,
                 value: files.sortAscendingFor(folderPath),
                 onChanged: (asc) {
                   if (asc != files.sortAscendingFor(folderPath)) {
@@ -172,6 +173,7 @@ class FilesControlsRow extends StatelessWidget {
               // the two screens' filter sheets look and behave the same.
               NooSegmentedControl<FilesTypeFilter>(
                 fill: true,
+                onSurface: true,
                 labelOnlySelected: true,
                 value: files.filesTypeFilter,
                 onChanged: files.setFilesTypeFilter,

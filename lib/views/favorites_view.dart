@@ -654,6 +654,9 @@ class _FavoritesViewState extends State<FavoritesView> {
           onRefresh: favoritesController.fetchAll,
           child: CustomScrollView(
             controller: widget.scrollController,
+            // See files_view.dart's identical fix - without this, pull-to-
+            // refresh can't be triggered on an empty or single-item list.
+            physics: const AlwaysScrollableScrollPhysics(),
             slivers: contentSlivers,
           ),
         ),

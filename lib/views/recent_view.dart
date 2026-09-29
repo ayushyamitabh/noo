@@ -85,6 +85,9 @@ class _RecentViewState extends State<RecentView> {
         onRefresh: recent.fetchAll,
         child: CustomScrollView(
           controller: widget.scrollController,
+          // See files_view.dart's identical fix - without this, pull-to-
+          // refresh can't be triggered on an empty or single-item list.
+          physics: const AlwaysScrollableScrollPhysics(),
           slivers: contentSlivers,
         ),
       ),
@@ -101,7 +104,9 @@ class _RecentViewState extends State<RecentView> {
         delegate: SliverChildBuilderDelegate((context, index) {
           final group = groups[index];
           return Padding(
-            padding: EdgeInsets.only(bottom: index == groups.length - 1 ? 0 : 18),
+            padding: EdgeInsets.only(
+              bottom: index == groups.length - 1 ? 0 : 18,
+            ),
             child: NooGroupedList(
               label: group.label,
               children: [
@@ -132,7 +137,10 @@ class _RecentViewState extends State<RecentView> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 TabGroupLabel(group.label),
-                const NooFileTableHeader(col2Label: 'Modified', col3Label: 'Location'),
+                const NooFileTableHeader(
+                  col2Label: 'Modified',
+                  col3Label: 'Location',
+                ),
                 for (final item in group.items) _buildDesktopRow(context, item),
               ],
             ),

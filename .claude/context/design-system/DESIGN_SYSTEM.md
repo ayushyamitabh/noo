@@ -330,7 +330,14 @@ Sidebar items are 38px tall with radius 12, an 18px icon and a 14/500 label. The
   photo grid grouped by month.
 - **Favorites:** a file list with a star as the trailing icon.
 - **Offline:** a summary card (or 4 stat cards on desktop), then a list whose rows show sync status icons and status meta.
-- **Shares:** a segmented control (With you, By you, Links), then a list. The meta reads "Owner · Permission".
+- **Shares:** a segmented control (With you, By you, Links), then a list. The
+  meta reads "Owner · Permission". No per-row overflow menu on any of the
+  three scopes - tapping a row (file or folder) opens the full Share sheet
+  for that item (fetched fresh via `FilesController.fetchItemAtPath`, since
+  a share only carries enough metadata for its own row), the same sheet
+  Files/Photos open from their own Share action - that's already where
+  copying a link or removing access lives, so a second, row-local menu here
+  was redundant.
 - **Recent:** a list grouped into Today, Yesterday and This week. The meta is the action plus the location.
 - **Activity:** the feed grouped by day. Desktop limits it to 760px wide.
 - **Trash:** a retention banner, then a list. Mobile rows get a restore icon; desktop rows get a tonal "Restore" pill.

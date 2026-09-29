@@ -100,6 +100,9 @@ class _TrashViewState extends State<TrashView> {
         onRefresh: trashController.fetchAll,
         child: CustomScrollView(
           controller: widget.scrollController,
+          // See files_view.dart's identical fix - without this, pull-to-
+          // refresh can't be triggered on an empty or single-item list.
+          physics: const AlwaysScrollableScrollPhysics(),
           slivers: contentSlivers,
         ),
       ),

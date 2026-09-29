@@ -1,21 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import '../models/app_tab.dart';
 import '../models/nextcloud_share.dart';
 import '../providers/files_controller.dart';
-import '../providers/settings_controller.dart';
 import '../providers/shares_controller.dart';
 import '../theme/design_tokens.dart';
 import '../widgets/noo/core/noo_segmented_control.dart';
 import '../widgets/noo/files/noo_file_kind.dart';
 import '../widgets/noo/files/noo_file_row.dart';
 import '../widgets/noo/files/noo_file_table.dart';
-import '../widgets/noo/lists/noo_grouped_list.dart';
-import '../widgets/noo/lists/noo_settings_row.dart';
 import '../widgets/noo/noo_layout.dart';
-import '../widgets/noo/overlays/noo_sheet.dart';
+import '../widgets/share_sheet.dart';
 import '../widgets/tabs/tab_state_slivers.dart';
 
 /// Which slice of [SharesController.shares] is on screen - `With you` maps
@@ -136,6 +131,9 @@ class _SharesViewState extends State<SharesView> {
         onRefresh: sharesController.fetchAll,
         child: CustomScrollView(
           controller: widget.scrollController,
+          // See files_view.dart's identical fix - without this, pull-to-
+          // refresh can't be triggered on an empty or single-item list.
+          physics: const AlwaysScrollableScrollPhysics(),
           slivers: contentSlivers,
         ),
       ),
@@ -197,9 +195,8 @@ class _SharesViewState extends State<SharesView> {
             meta:
                 '${share.ownerDisplayName} · ${_permissionLabel(share.permissions)}',
             iosStyle: NooLayout.iosStyle(context),
-            onTap: share.isFolder ? () => _openFolder(context, share) : null,
+            onTap: () => _openShareSheet(context, share),
             trailing: Icon(_shareTypeIcon(share.shareType), size: 16),
-            onMore: () => _showShareActions(context, share),
           );
           final isFirst = index == 0;
           final isLast = index == shares.length - 1;
@@ -247,112 +244,41 @@ class _SharesViewState extends State<SharesView> {
             name: share.name,
             col2: share.ownerDisplayName,
             col3: _permissionLabel(share.permissions),
-            onTap: share.isFolder ? () => _openFolder(context, share) : null,
-            onMore: () => _showShareActions(context, share),
+            onTap: () => _openShareSheet(context, share),
           );
         }, childCount: shares.length + 1),
       ),
     );
   }
 
-  /// Only folders are safely tappable - unlike Recent/Favorites, a share
-  /// doesn't carry the size/mime-type `FileViewerScreen` needs, so opening
-  /// a file share here would have to synthesize that data instead of
-  /// reading it, same as the original screen (no tap action at all).
-  void _openFolder(BuildContext context, NextcloudShare share) {
-    context.read<FilesController>().navigateToAbsoluteFolder(share.path);
-    context.read<SettingsController>().requestTab(AppTab.files);
-  }
-
-  /// The row/table overflow menu - used to jump straight to the unshare
-  /// confirmation with no menu at all, so a link share had no way to copy
-  /// its own URL short of opening it and finding "Copy link" inside the
-  /// full Share sheet. A link share gets that shortcut here too now;
-  /// everything else just gets the one remove/unshare action.
-  void _showShareActions(BuildContext context, NextcloudShare share) {
-    final isLink = share.shareType == ShareType.publicLink && share.url != null;
-    showNooSheet(
-      context,
-      children: [
-        NooGroupedList(
-          children: [
-            if (isLink)
-              NooSettingsRow(
-                icon: LucideIcons.copy,
-                label: const Text('Copy link'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _copyShareLink(context, share);
-                },
-              ),
-            NooSettingsRow(
-              icon: LucideIcons.trash2,
-              label: Text(share.sharedWithMe ? 'Remove share' : 'Unshare'),
-              danger: true,
-              onTap: () {
-                Navigator.pop(context);
-                _confirmUnshare(context, share);
-              },
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  void _copyShareLink(BuildContext context, NextcloudShare share) {
-    Clipboard.setData(ClipboardData(text: share.url!));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Link copied'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
-  Future<void> _confirmUnshare(
+  /// Every row's whole-row tap - a share only carries enough metadata for
+  /// its own row, not the size/dates the Share sheet's header needs, so
+  /// this fetches the real item first (see `FilesController.fetchItemAtPath`)
+  /// rather than opening the sheet straight from [share]. Reused by every
+  /// scope (With you/By you/Links) - the Share sheet is the one place that
+  /// already knows how to copy a link or remove access, so there's no
+  /// separate overflow menu here any more.
+  Future<void> _openShareSheet(
     BuildContext context,
     NextcloudShare share,
   ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: Text(share.sharedWithMe ? 'Remove share' : 'Unshare'),
-          content: Text(
-            share.sharedWithMe
-                ? 'Remove "${share.name}" shared with you by ${share.ownerDisplayName}?'
-                : 'Stop sharing "${share.name}"?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(dialogContext).colorScheme.error,
-              ),
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Remove'),
-            ),
-          ],
-        );
-      },
-    );
-    if (confirmed != true || !context.mounted) return;
-
+    final files = context.read<FilesController>();
     final messenger = ScaffoldMessenger.of(context);
-    final success = await context.read<SharesController>().deleteShare(share);
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          success
-              ? 'Removed share for ${share.name}'
-              : 'Failed to remove share for ${share.name}',
+    final item = await files.fetchItemAtPath(share.path);
+    if (!context.mounted) return;
+    if (item == null) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Could not find this item - it may have moved'),
+          behavior: SnackBarBehavior.floating,
         ),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+      );
+      return;
+    }
+    await ShareSheet.show(context, item);
+    // The sheet manages shares through `ItemOperations`, not this tab's own
+    // `SharesController` (see its `deleteShare`'s doc comment) - refetch so
+    // a share added/removed from inside it doesn't leave this list stale.
+    if (context.mounted) context.read<SharesController>().fetchAll();
   }
 }

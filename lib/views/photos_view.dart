@@ -364,6 +364,9 @@ class _PhotosViewState extends State<PhotosView> {
           onRefresh: photosController.fetchAllMedia,
           child: CustomScrollView(
             controller: widget.scrollController,
+            // See files_view.dart's identical fix - without this, pull-to-
+            // refresh can't be triggered on an empty or single-item list.
+            physics: const AlwaysScrollableScrollPhysics(),
             slivers: contentSlivers,
           ),
         ),
@@ -432,6 +435,7 @@ class _PhotosViewState extends State<PhotosView> {
             children: [
               NooSegmentedControl<bool>(
                 fill: true,
+                onSurface: true,
                 value: photos.sortAscending,
                 onChanged: (asc) {
                   if (asc != photos.sortAscending) photos.toggleSortOrder();
@@ -501,6 +505,7 @@ class _PhotosViewState extends State<PhotosView> {
                 // the two screens' filter sheets look and behave the same.
                 NooSegmentedControl<_PhotoTypeFilter>(
                   fill: true,
+                  onSurface: true,
                   labelOnlySelected: true,
                   value: _typeFilter,
                   onChanged: (filter) => setState(() {

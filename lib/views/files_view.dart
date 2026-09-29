@@ -838,6 +838,11 @@ class _FilesViewState extends State<FilesView> {
           },
           child: CustomScrollView(
             controller: widget.scrollController,
+            // Pull-to-refresh needs a scroll physics that allows dragging
+            // past the edge even when content doesn't fill the viewport -
+            // an empty or single-item list otherwise can't be pulled at all
+            // under the platform default physics.
+            physics: const AlwaysScrollableScrollPhysics(),
             slivers: contentSlivers,
           ),
         ),

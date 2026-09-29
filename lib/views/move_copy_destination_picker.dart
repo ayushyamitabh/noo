@@ -359,6 +359,10 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
             onRefresh: () => _fetch(_currentPath),
             child: CustomScrollView(
               controller: _scrollController,
+              // See files_view.dart's identical fix - without this, pull-
+              // to-refresh can't be triggered on an empty or single-folder
+              // listing.
+              physics: const AlwaysScrollableScrollPhysics(),
               slivers: slivers,
             ),
           ),

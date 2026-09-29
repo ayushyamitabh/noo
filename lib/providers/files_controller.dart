@@ -266,7 +266,8 @@ class FilesController extends ChangeNotifier
   /// sort, cache policy) - hooked to `addAccountReadyListener` as well as
   /// activation so the Offline tab, which reads these same prefs, respects
   /// them even on a provisional/offline login where activation never fires.
-  Future<void> _restoreDisplayPrefs() => _prefsRestore ??= _doRestoreDisplayPrefs();
+  Future<void> _restoreDisplayPrefs() =>
+      _prefsRestore ??= _doRestoreDisplayPrefs();
 
   /// Completes once this account's cache policy/display prefs have been
   /// loaded from storage - lets `SyncStatusController` schedule background
@@ -334,7 +335,9 @@ class FilesController extends ChangeNotifier
             defaultCacheIntervalMinutes;
         notifyListeners();
       } catch (e) {
-        debugPrint('[FilesController] Account-activation prefs restore failed: $e');
+        debugPrint(
+          '[FilesController] Account-activation prefs restore failed: $e',
+        );
       }
     }
   }
@@ -401,7 +404,9 @@ class FilesController extends ChangeNotifier
       notifyListeners();
     }
 
-    debugPrint('[FilesController] Refreshing data for path: $_currentFolderPath');
+    debugPrint(
+      '[FilesController] Refreshing data for path: $_currentFolderPath',
+    );
 
     try {
       final items = await service.fetchDirectory(_currentFolderPath);
@@ -547,6 +552,20 @@ class FilesController extends ChangeNotifier
   /// listings for its own local navigation state through this instead.
   Future<List<NextcloudItem>> fetchFolderListing(String path) {
     return session.service?.fetchDirectory(path) ?? Future.value([]);
+  }
+
+  /// Finds the single item at [path] by listing its parent folder and
+  /// matching on the exact path - there's no WebDAV call here for stat'ing
+  /// one path directly outside a directory PROPFIND. Used by the Shares tab
+  /// to open the full Share sheet for a [NextcloudShare], which only carries
+  /// enough metadata for its own row, not the size/dates `ShareSheet`'s
+  /// header needs.
+  Future<NextcloudItem?> fetchItemAtPath(String path) async {
+    final normalized = path.startsWith('/') ? path : '/$path';
+    final lastSlash = normalized.lastIndexOf('/');
+    final parent = lastSlash <= 0 ? '/' : normalized.substring(0, lastSlash);
+    final items = await fetchFolderListing(parent);
+    return items.where((i) => i.path == normalized).firstOrNull;
   }
 
   void invalidateCache() => _directoryCache.clear();

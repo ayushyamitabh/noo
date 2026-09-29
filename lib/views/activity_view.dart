@@ -73,9 +73,12 @@ class ActivityView extends StatelessWidget {
                             ? act.subject
                             : null,
                         time: DateFormat.jm().format(act.timestamp),
-                        avatarColor: NooPhotoTile.paletteColor(act.author.hashCode),
+                        avatarColor: NooPhotoTile.paletteColor(
+                          act.author.hashCode,
+                        ),
                         currentUser:
-                            act.author.toLowerCase() == session.username.toLowerCase(),
+                            act.author.toLowerCase() ==
+                            session.username.toLowerCase(),
                       ),
                     ),
                 ],
@@ -94,6 +97,9 @@ class ActivityView extends StatelessWidget {
 
     final scrollView = CustomScrollView(
       controller: scrollController,
+      // See files_view.dart's identical fix - without this, pull-to-
+      // refresh can't be triggered on an empty or single-item feed.
+      physics: const AlwaysScrollableScrollPhysics(),
       slivers: contentSlivers,
     );
 

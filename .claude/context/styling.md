@@ -96,6 +96,24 @@ Gotchas:
   trigger it; a full swipe never deletes.
 - Window chrome (macOS traffic lights, the Windows 40px title bar) isn't
   built yet. `NooSidebar.windowControls` is the slot for it.
+- Always read colors through `context.nooColors`, never
+  `Theme.of(context).colorScheme` - the latter is Flutter's own Material 3
+  scheme, reseeded by the user's accent color choice (`AppTheme.light`/
+  `.dark`), so anything painted from it carries a faint hue of whatever
+  accent is picked instead of the app's neutral palette. `sticky_header_delegate.dart`
+  shipped with this bug once already (a pinned controls-row header tinted
+  by the accent instead of matching its screen's plain `colors.bg`).
+- `NooSegmentedControl` defaults to `onSurface: false` (`colors.surface`
+  fill) - right when it's sitting directly on `colors.bg` (List/Grid
+  toggle, Shares' scope switcher), but pass `onSurface: true` for one
+  placed inside a sheet or dialog (already `colors.surface`), or its pill
+  track blends invisibly into the sheet instead of reading as a grouped
+  control (Files'/Photos' sort and type-filter sheets do this).
+- Any `RefreshIndicator` needs `physics: const AlwaysScrollableScrollPhysics()`
+  on its scrollable child, or pull-to-refresh silently can't be triggered
+  once the list is short enough to fit the viewport (empty, or one item) -
+  every tab's `CustomScrollView` sets this explicitly for exactly that
+  reason.
 
 ## Reusable chrome
 
