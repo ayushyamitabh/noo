@@ -153,6 +153,42 @@ new provider instance):
   (shares/activity/versions/restore) — stateless, so they don't need a
   controller of their own.
 
+**Guardrail - the "empty list on first load" failure class.** This bug has
+recurred more than once, always the same shape: a tab's list is empty after
+login even though the account is fine, because the controller behind it
+never ran its initial fetch. The cause is a race, not a network bug:
+`addAccountActivatedListener`/`addAccountReadyListener` fire *once*, at the
+moment login is verified/ready, to whichever listeners are registered at
+that exact instant - and most per-domain controllers (`FilesController`,
+`PhotosController`, `FavoritesController`, `TrashController`,
+`SharesController`, `RecentController`) are lazy `ChangeNotifierProvider`s,
+only constructed (and so only registering their listener) whenever
+something first reads them. If that first read happens to land *after*
+the one-shot event already fired - e.g. `ConnectivityController`
+misreporting offline for its first couple of seconds after a cold Android
+start (see its own doc comment) collapses `main.dart`'s bottom nav to just
+the Offline tab, delaying construction of every other tab's controller
+until connectivity corrects itself and login has already finished
+verifying - that controller's listener registers too late and its initial
+fetch simply never happens. `SessionController.addAccountActivatedListener`/
+`addAccountReadyListener` now close this at the root: registering either
+one calls back **immediately** if the account is already in the state
+being subscribed to, not just on the next fresh event, so a late-registering
+controller always gets its initial fetch regardless of when its lazy
+`Provider` happens to be built. Some views (`FilesView`/`PhotosView`, not
+`FavoritesView` - see `FavoritesController`'s own doc comment) additionally
+carry a build-time fallback (`_requestedInitialLoad` et al.: reload if
+items are empty and not loading, once, after first build) predating this
+fix; they're now redundant but harmless, and not worth touching for
+cleanup alone. **Guardrail for new code:** any new network-fetching
+controller that needs a one-time fetch on login must register through
+`addAccountActivatedListener`/`addAccountReadyListener` in its constructor
+and rely on their catch-up behavior - don't reach for a per-view
+build-time "fetch if empty" fallback as the primary mechanism, since that
+pattern is exactly what let this bug keep recurring silently (three
+near-duplicate, slightly-diverging implementations, none of them fixing
+the actual race).
+
 `sessionGeneration` (on `SessionController`, read by every other
 controller) is incremented on every account switch so an in-flight fetch
 from the account just left can recognize it's stale and discard its result
