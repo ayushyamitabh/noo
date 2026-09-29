@@ -206,13 +206,26 @@ rather than needing a rewrite for multi-account support.
   Dio from a separate process lifecycle - `UploadService.startUpload` passes
   everything the Kotlin side needs (the pre-built `Authorization` header
   from `NextcloudService.authHeaders`, not the raw password) as Intent
-  extras, a one-way handoff with no channel back to Dart afterward. Keep
-  the two upload implementations in sync manually if upload semantics
-  change. Progress/cancellation is entirely notification-driven (one
-  ongoing, updatable notification for the whole batch; its Cancel action
-  re-delivers an Intent to the same running service instance, which an
-  `AtomicBoolean` the copy/upload loops poll) - there's no plumbing back to
-  the Dart UI, by design, since the app may not even be running.
+  extras, a one-way handoff for the start of the upload - the Kotlin side
+  never asks Dart anything mid-upload, since the app may not even be
+  running by then. Keep the two upload implementations in sync manually if
+  upload semantics change. Progress/cancellation is entirely notification-
+  driven (one ongoing, updatable notification for the whole batch; its
+  Cancel action re-delivers an Intent to the same running service instance,
+  which an `AtomicBoolean` the copy/upload loops poll) - the notification is
+  the only UI a closed app gets.
+  There is one thing that *does* come back, when the app is still running:
+  once a batch finishes with at least one success, `ShareUploadService.kt`
+  publishes into `UploadEventBus` (an in-process pub/sub, same shape as
+  `SyncStatusBus` below), which `MainActivity.kt` forwards to Dart over the
+  `dev.ayushya.noo/upload_service/status` `EventChannel` -
+  `UploadService.completions`. `FilesController` subscribes in its own
+  constructor and calls `refreshData()` when the event's folder matches
+  `currentFolderPath`, so a file uploaded into the folder currently on
+  screen shows up without a manual pull-to-refresh. Follows
+  `SyncService.statusStream`'s "one shared `static final` stream" rule (see
+  its own doc comment) - a second `receiveBroadcastStream()` subscriber
+  would silently steal the single native-side listener from the first.
 
 ## Being picked by other apps (photo/file picker)
 

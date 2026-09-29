@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/nextcloud_item.dart';
+import '../services/upload_service.dart';
 import 'folder_browser.dart';
 import 'session_controller.dart';
 
@@ -107,6 +108,22 @@ class FilesController extends ChangeNotifier
     session.addAccountClearedListener(_onAccountCleared);
     session.addAccountActivatedListener(_onAccountActivated);
     session.addAccountReadyListener(_restoreDisplayPrefs);
+    // Refreshes automatically once an upload finishes, so a file shared/
+    // uploaded into the folder currently on screen shows up without a
+    // manual pull-to-refresh - uploads run in an Android foreground
+    // service (see UploadService's doc comment) with no other way back to
+    // this controller.
+    _uploadSub = UploadService.completions.listen(_onUploadCompleted);
+  }
+
+  StreamSubscription<UploadCompletion>? _uploadSub;
+
+  void _onUploadCompleted(UploadCompletion completion) {
+    // refreshData() always hits the network regardless of cache freshness
+    // (see its own doc comment), so there's nothing to invalidate first -
+    // it overwrites this folder's cache entry once the fetch lands.
+    if (completion.remoteFolder != _currentFolderPath) return;
+    refreshData();
   }
 
   // Getters
@@ -711,6 +728,7 @@ class FilesController extends ChangeNotifier
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _cacheRefreshTimer?.cancel();
+    _uploadSub?.cancel();
     super.dispose();
   }
 }

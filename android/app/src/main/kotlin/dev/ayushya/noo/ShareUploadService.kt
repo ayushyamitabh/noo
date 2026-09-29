@@ -185,6 +185,13 @@ class ShareUploadService : Service() {
             else -> "Uploaded $succeeded of ${batch.files.size} files - $failed failed"
         }
         manager().notify(NOTIFICATION_ID, buildFinalNotification(finalText))
+        // batch.remoteFolder, not the locally-normalized cleanFolder - Dart's
+        // FilesController.currentFolderPath never carries the trailing
+        // slash cleanFolder adds, so publishing the original value lets the
+        // Dart side compare them directly with no reformatting of its own.
+        if (succeeded > 0) {
+            UploadEventBus.publishCompleted(batch.remoteFolder, succeeded, failed)
+        }
 
         if (queue.pendingCount == 0) {
             stopForeground(STOP_FOREGROUND_DETACH)
