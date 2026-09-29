@@ -9,6 +9,7 @@ import 'noo/nav/noo_bottom_bar.dart';
 /// drawer's "More" list that isn't one of the pinned [tabs].
 class BottomNavBar extends StatelessWidget {
   final NooNavStyle style;
+  final NooBottomBarStyle barStyle;
   final List<AppTab> tabs;
   final int selectedIndex;
   final ValueChanged<int> onDestinationSelected;
@@ -16,6 +17,7 @@ class BottomNavBar extends StatelessWidget {
   const BottomNavBar({
     super.key,
     required this.style,
+    this.barStyle = NooBottomBarStyle.attached,
     required this.tabs,
     required this.selectedIndex,
     required this.onDestinationSelected,
@@ -25,6 +27,7 @@ class BottomNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return NooBottomBar(
       style: style,
+      barStyle: barStyle,
       destinations: [
         for (final tab in tabs)
           NooNavDestination(icon: tab.icon, label: tab.label),

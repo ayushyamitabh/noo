@@ -137,5 +137,80 @@ void main() {
       final labelCenter = tester.getCenter(find.text('Photos'));
       expect(labelCenter.dy, greaterThan(iconCenter.dy));
     });
+
+    testNooWidgets('floating: inset, rounded, bordered - not edge to edge', (
+      tester,
+      theme,
+      c,
+    ) async {
+      await pumpNoo(
+        tester,
+        SizedBox(
+          width: 360,
+          height: 96,
+          child: NooBottomBar(
+            style: NooNavStyle.android,
+            barStyle: NooBottomBarStyle.floating,
+            destinations: _destinations,
+            selectedIndex: 0,
+            onSelected: (_) {},
+          ),
+        ),
+        theme: theme,
+      );
+      final pillFinder = find.descendant(
+        of: find.byType(NooBottomBar),
+        matching: find.byWidgetPredicate(
+          (w) => w is Container && w.decoration != null,
+        ),
+      );
+      final container = tester.widget<Container>(pillFinder);
+      final decoration = container.decoration as BoxDecoration;
+      expect(decoration.borderRadius, BorderRadius.circular(28));
+      expect(decoration.border, Border.all(color: c.line));
+      // Inset from both side edges of the bar's own host box, not flush
+      // against it - both rects are in the same (global) coordinate space,
+      // so comparing them directly still holds regardless of where
+      // `pumpNoo`'s own harness centers that host box on screen.
+      final hostRect = tester.getRect(find.byType(NooBottomBar));
+      final rect = tester.getRect(pillFinder);
+      expect(rect.left, greaterThan(hostRect.left));
+      expect(rect.right, lessThan(hostRect.right));
+    });
+
+    testNooWidgets(
+      'floating android: idle icon has no reserved label space and is '
+      'bigger than the active one',
+      (tester, theme, c) async {
+        await pumpNoo(
+          tester,
+          SizedBox(
+            width: 360,
+            height: 96,
+            child: NooBottomBar(
+              style: NooNavStyle.android,
+              barStyle: NooBottomBarStyle.floating,
+              destinations: _destinations,
+              selectedIndex: 0,
+              onSelected: (_) {},
+            ),
+          ),
+          theme: theme,
+        );
+        // Unlike attached, an idle floating tab has no label at all - not
+        // just an invisible one - so there's nothing to find here.
+        expect(find.text('Photos'), findsNothing);
+        expect(
+          find.ancestor(
+            of: find.byIcon(LucideIcons.images),
+            matching: find.byType(AnimatedOpacity),
+          ),
+          findsNothing,
+        );
+        final activeIcon = tester.widget<Icon>(find.byIcon(LucideIcons.folder));
+        final idleIcon = tester.widget<Icon>(find.byIcon(LucideIcons.images));
+        expect(idleIcon.size, greaterThan(activeIcon.size!));
+      },
+    );
   });
 }

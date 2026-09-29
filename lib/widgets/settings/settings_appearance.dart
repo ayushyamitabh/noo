@@ -7,6 +7,7 @@ import '../../theme/design_tokens.dart';
 import '../noo/core/noo_segmented_control.dart';
 import '../noo/core/noo_toggle.dart';
 import '../noo/lists/noo_settings_row.dart';
+import '../noo/nav/noo_nav_style.dart';
 import '../noo/noo_layout.dart';
 import '../noo/overlays/noo_dialog.dart';
 import '../noo/overlays/noo_sheet.dart';
@@ -47,7 +48,10 @@ class SettingsAppearanceSection extends StatelessWidget {
       children: [
         SettingsSection(
           title: 'Appearance',
-          children: [_ThemeRow(settings: settings)],
+          children: [
+            _ThemeRow(settings: settings),
+            _BottomBarStyleRow(settings: settings),
+          ],
         ),
         const SizedBox(height: NooSpace.xl),
         SettingsSection(
@@ -146,6 +150,64 @@ class _ThemeRow extends StatelessWidget {
                   value: ThemeMode.dark,
                   icon: LucideIcons.moon,
                   label: 'Dark',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The "Bottom bar" row: same "label, then a full-width segmented control
+/// below it" shape as [_ThemeRow] right above it. Attached is the original
+/// edge-to-edge bar; floating insets it from both side/bottom edges with
+/// rounded corners - see [NooBottomBarStyle]'s own doc comment for the
+/// full visual rationale.
+class _BottomBarStyleRow extends StatelessWidget {
+  final SettingsController settings;
+
+  const _BottomBarStyleRow({required this.settings});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.nooColors;
+    return Material(
+      color: colors.surface,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: NooSpace.md,
+          vertical: 12,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(LucideIcons.panelBottom, size: 20, color: colors.fg2),
+                const SizedBox(width: 14),
+                Text(
+                  'Bottom bar',
+                  style: NooText.bodyL.copyWith(color: colors.fg1),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            NooSegmentedControl<NooBottomBarStyle>(
+              fill: true,
+              value: settings.bottomBarStyle,
+              onChanged: settings.setBottomBarStyle,
+              options: const [
+                NooSegmentOption(
+                  value: NooBottomBarStyle.attached,
+                  icon: LucideIcons.panelBottom,
+                  label: 'Attached',
+                ),
+                NooSegmentOption(
+                  value: NooBottomBarStyle.floating,
+                  icon: LucideIcons.panelBottomOpen,
+                  label: 'Floating',
                 ),
               ],
             ),

@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/app_tab.dart';
 import '../models/selection_action.dart';
 import '../theme/app_theme.dart';
+import '../widgets/noo/nav/noo_nav_style.dart';
 
 /// What swiping a Files list-view item left/right does, user-configurable
 /// in Settings.
@@ -30,6 +31,7 @@ class SettingsController extends ChangeNotifier {
   static const _prefDefaultTab = 'ui_default_tab';
   static const _prefSwipeLeftAction = 'ui_swipe_left_action';
   static const _prefSwipeRightAction = 'ui_swipe_right_action';
+  static const _prefBottomBarStyle = 'ui_bottom_bar_style';
   static const _prefAmoledDark = 'ui_amoled_dark';
   static const _prefMediaProgressBarStyle = 'ui_media_progress_bar_style';
   static const _prefTapTabToScrollTop = 'ui_tap_tab_to_scroll_top';
@@ -39,6 +41,7 @@ class SettingsController extends ChangeNotifier {
 
   Color _seedColor = AppTheme.defaultAccent;
   ThemeMode _themeMode = ThemeMode.system;
+  NooBottomBarStyle _bottomBarStyle = NooBottomBarStyle.attached;
   bool _useDynamicColor = true;
   bool _amoledDark = false;
   MediaProgressBarStyle _mediaProgressBarStyle = MediaProgressBarStyle.wavy;
@@ -80,6 +83,7 @@ class SettingsController extends ChangeNotifier {
 
   Color get seedColor => _seedColor;
   ThemeMode get themeMode => _themeMode;
+  NooBottomBarStyle get bottomBarStyle => _bottomBarStyle;
   bool get useDynamicColor => _useDynamicColor;
   bool get amoledDark => _amoledDark;
   MediaProgressBarStyle get mediaProgressBarStyle => _mediaProgressBarStyle;
@@ -113,6 +117,13 @@ class SettingsController extends ChangeNotifier {
         _themeMode = ThemeMode.values.firstWhere(
           (m) => m.name == themeModeName,
           orElse: () => ThemeMode.system,
+        );
+      }
+      final bottomBarStyleName = prefs.getString(_prefBottomBarStyle);
+      if (bottomBarStyleName != null) {
+        _bottomBarStyle = NooBottomBarStyle.values.firstWhere(
+          (s) => s.name == bottomBarStyleName,
+          orElse: () => _bottomBarStyle,
         );
       }
       _useDynamicColor =
@@ -254,6 +265,13 @@ class SettingsController extends ChangeNotifier {
     _themeMode = mode;
     notifyListeners();
     _prefsFuture.then((p) => p.setString(_prefThemeMode, mode.name));
+  }
+
+  void setBottomBarStyle(NooBottomBarStyle style) {
+    if (_bottomBarStyle == style) return;
+    _bottomBarStyle = style;
+    notifyListeners();
+    _prefsFuture.then((p) => p.setString(_prefBottomBarStyle, style.name));
   }
 
   void setTabOrder(List<AppTab> order) {

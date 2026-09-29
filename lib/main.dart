@@ -472,6 +472,7 @@ class _MainShellViewState extends State<MainShellView> {
       );
     } else {
       final navStyle = NooLayout.navStyle(context);
+      final bottomBarStyle = settings.bottomBarStyle;
       scaffold = Scaffold(
         backgroundColor: colors.bg,
         drawerScrimColor: colors.scrim,
@@ -479,6 +480,10 @@ class _MainShellViewState extends State<MainShellView> {
             ? AppTopBar(style: navStyle, tab: selectedTab)
             : null,
         drawer: pickRequest == null ? const AppDrawer() : null,
+        // Floating needs the body to draw behind the bar's own transparent
+        // margin (see NooBottomBarStyle's doc comment) instead of stopping
+        // short of it like attached does.
+        extendBody: bottomBarStyle == NooBottomBarStyle.floating,
         // Android-only extended Upload FAB - iOS uses the top bar's `plus`
         // instead (see AppTopBar). Stays mounted across every tab (picking
         // aside) and collapses to an icon-only circle off Files/Photos,
@@ -494,6 +499,7 @@ class _MainShellViewState extends State<MainShellView> {
         body: tabStack,
         bottomNavigationBar: BottomNavBar(
           style: navStyle,
+          barStyle: bottomBarStyle,
           tabs: pinnedTabs,
           selectedIndex: pinnedIndex,
           onDestinationSelected: (index) {

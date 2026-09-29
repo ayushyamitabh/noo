@@ -191,7 +191,12 @@ blocks are noted where they matter:
   opacity/blur knob - flat surfaces per the design system), grid tiles are
   `NooGridCard`, swipe actions are `NooSwipeAction`, and per-item sync
   status is `NooFileRow`/`NooFileTableRow`'s built-in `NooStatusIcon` list
-  instead of a corner badge.
+  instead of a corner badge. `NooBottomBar` later gained its own, unrelated
+  `NooBottomBarStyle.floating` (Settings → Appearance → "Bottom bar") -
+  don't confuse the two: this one is still flat/non-blurred, just inset
+  with a `line` border instead of edge to edge (no opacity/blur knob
+  either). The host `Scaffold` needs `extendBody: true` while it's active
+  (`main.dart` already wires this off `SettingsController.bottomBarStyle`).
 - [`SyncedHeaderScaffold`](../../lib/widgets/synced_header_scaffold.dart) —
   the pull-to-sync `CustomScrollView` header with the persistent sync-status
   chip and pull-to-refresh gesture/spinner. Every screen (including
