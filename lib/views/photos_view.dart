@@ -484,65 +484,80 @@ class _PhotosViewState extends State<PhotosView> {
     showNooSheet(
       context,
       children: [
-        // See `_showSortSheet`'s comment - `Listenable.merge` since these
-        // toggles span two controllers.
-        ListenableBuilder(
-          listenable: Listenable.merge([photos, files]),
-          builder: (context, _) => Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Same segmented-control design as Settings' Theme row - a
-              // full-width pill track, not chips, and its own row rather
-              // than a settings row's trailing slot (matches the
-              // Ascending/Descending control above, in `_showSortSheet`).
-              NooSegmentedControl<_PhotoTypeFilter>(
-                fill: true,
-                value: _typeFilter,
-                onChanged: (filter) => setState(() => _typeFilter = filter),
-                options: const [
-                  NooSegmentOption(value: _PhotoTypeFilter.all, label: 'All'),
-                  NooSegmentOption(
-                    value: _PhotoTypeFilter.image,
-                    label: 'Photos',
-                  ),
-                  NooSegmentOption(
-                    value: _PhotoTypeFilter.video,
-                    label: 'Videos',
-                  ),
-                ],
-              ),
-              const SizedBox(height: 22),
-              NooGroupedList(
-                children: [
-                  NooSettingsRow(
-                    icon: LucideIcons.heart,
-                    label: const Text('Favorites only'),
-                    trailing: NooToggle(
-                      checked: photos.showFavoritesOnly,
-                      onChanged: (_) => photos.toggleFavoritesFilter(),
+        // `_typeFilter` lives on this State, not a ChangeNotifier, so
+        // `Listenable.merge([photos, files])` alone doesn't rebuild this
+        // sheet when it changes - it used to only visibly move once the
+        // sheet was closed and reopened. `StatefulBuilder` gives it a
+        // rebuild trigger of its own; see `_showSortSheet`'s comment for
+        // why the two controllers still need `ListenableBuilder`.
+        StatefulBuilder(
+          builder: (context, setSheetState) => ListenableBuilder(
+            listenable: Listenable.merge([photos, files]),
+            builder: (context, _) => Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Same "icon always, label only when selected" pill as
+                // Files' own type filter - not a fully-labelled track, so
+                // the two screens' filter sheets look and behave the same.
+                NooSegmentedControl<_PhotoTypeFilter>(
+                  fill: true,
+                  labelOnlySelected: true,
+                  value: _typeFilter,
+                  onChanged: (filter) => setState(() {
+                    _typeFilter = filter;
+                    setSheetState(() {});
+                  }),
+                  options: const [
+                    NooSegmentOption(
+                      value: _PhotoTypeFilter.all,
+                      icon: LucideIcons.layoutGrid,
+                      label: 'All',
                     ),
-                  ),
-                  NooSettingsRow(
-                    icon: LucideIcons.eye,
-                    label: const Text('Show hidden files'),
-                    trailing: NooToggle(
-                      checked: photos.showHidden,
-                      onChanged: (_) => photos.toggleShowHidden(),
+                    NooSegmentOption(
+                      value: _PhotoTypeFilter.image,
+                      icon: LucideIcons.image,
+                      label: 'Photos',
                     ),
-                  ),
-                  NooSettingsRow(
-                    icon: LucideIcons.hardDrive,
-                    label: const Text('External storage'),
-                    trailing: NooToggle(
-                      checked: files.storageScope == StorageScope.external,
-                      onChanged: (external) => files.setStorageScope(
-                        external ? StorageScope.external : StorageScope.cloud,
+                    NooSegmentOption(
+                      value: _PhotoTypeFilter.video,
+                      icon: LucideIcons.film,
+                      label: 'Videos',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 22),
+                NooGroupedList(
+                  children: [
+                    NooSettingsRow(
+                      icon: LucideIcons.heart,
+                      label: const Text('Favorites only'),
+                      trailing: NooToggle(
+                        checked: photos.showFavoritesOnly,
+                        onChanged: (_) => photos.toggleFavoritesFilter(),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                    NooSettingsRow(
+                      icon: LucideIcons.eye,
+                      label: const Text('Show hidden files'),
+                      trailing: NooToggle(
+                        checked: photos.showHidden,
+                        onChanged: (_) => photos.toggleShowHidden(),
+                      ),
+                    ),
+                    NooSettingsRow(
+                      icon: LucideIcons.hardDrive,
+                      label: const Text('External storage'),
+                      trailing: NooToggle(
+                        checked: files.storageScope == StorageScope.external,
+                        onChanged: (external) => files.setStorageScope(
+                          external ? StorageScope.external : StorageScope.cloud,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ],

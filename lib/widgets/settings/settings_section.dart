@@ -31,6 +31,11 @@ class SettingsSection extends StatelessWidget {
       return NooGroupedList(
         label: title,
         footer: subtitle != null ? Text(subtitle!) : null,
+        // Every mobile Settings section is individually collapsible,
+        // expanded by default - replaces the old trailing jump rail (see
+        // `account_view.dart`'s doc comment) as the way to navigate a long
+        // Settings screen quickly.
+        collapsible: true,
         children: children,
       );
     }
@@ -99,8 +104,15 @@ void showSettingsPicker(
   required List<Widget> options,
 }) {
   if (NooLayout.isDesktop(context)) {
-    showNooDialog(context, title: title, children: [Column(children: options)]);
+    showNooDialog(
+      context,
+      title: title,
+      children: [Column(children: options)],
+    );
   } else {
-    showNooSheet(context, children: [NooGroupedList(label: title, children: options)]);
+    showNooSheet(
+      context,
+      children: [NooGroupedList(label: title, children: options)],
+    );
   }
 }

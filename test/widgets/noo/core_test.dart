@@ -369,6 +369,46 @@ void main() {
         const Size(78, 34),
       );
     });
+
+    testNooWidgets(
+      'labelOnlySelected shows every icon but only the selected label',
+      (tester, theme, c) async {
+        var value = 'all';
+        await pumpNoo(
+          tester,
+          StatefulBuilder(
+            builder: (context, setState) => NooSegmentedControl<String>(
+              fill: true,
+              labelOnlySelected: true,
+              value: value,
+              onChanged: (v) => setState(() => value = v),
+              options: const [
+                NooSegmentOption(
+                  value: 'all',
+                  icon: LucideIcons.layoutGrid,
+                  label: 'All',
+                ),
+                NooSegmentOption(
+                  value: 'files',
+                  icon: LucideIcons.file,
+                  label: 'Files',
+                ),
+              ],
+            ),
+          ),
+          theme: theme,
+        );
+        expect(find.byIcon(LucideIcons.layoutGrid), findsOneWidget);
+        expect(find.byIcon(LucideIcons.file), findsOneWidget);
+        expect(find.text('All'), findsOneWidget);
+        expect(find.text('Files'), findsNothing);
+
+        await tester.tap(find.byIcon(LucideIcons.file));
+        await tester.pump();
+        expect(find.text('Files'), findsOneWidget);
+        expect(find.text('All'), findsNothing);
+      },
+    );
   });
 
   group('NooToggle', () {

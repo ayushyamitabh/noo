@@ -180,10 +180,7 @@ class _ShareUploadViewState extends State<ShareUploadView> {
             children: [
               SizedBox(
                 height: 44,
-                child: FilesControlsRow(
-                  folderPath: currentPath,
-                  showStorageScope: false,
-                ),
+                child: FilesControlsRow(folderPath: currentPath),
               ),
               if (hasBreadcrumbs) ...[
                 const SizedBox(height: 10),

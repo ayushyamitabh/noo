@@ -321,8 +321,13 @@ Sidebar items are 38px tall with radius 12, an 18px icon and a 14/500 label. The
   (All, Photos, Videos - Camera isn't backed by real data, see the view's
   doc comment) lives inside the filter sheet as a full-width segmented
   control, the same "label, then the control on its own row below" shape
-  Settings' Theme row uses, not its own row of chips. Then the photo grid
-  grouped by month.
+  Settings' Theme row uses, not its own row of chips. Every icon (All,
+  Photos, Videos in the filter sheet; All, Files, Folders in Files' own
+  filter sheet, same treatment) always shows; only the *selected* segment
+  also shows its label (`NooSegmentedControl`'s `labelOnlySelected`) - the
+  same List/Grid-toggle-style pill both screens' filter sheets use, not
+  Files' old checkmark list or Photos' own always-labelled track. Then the
+  photo grid grouped by month.
 - **Favorites:** a file list with a star as the trailing icon.
 - **Offline:** a summary card (or 4 stat cards on desktop), then a list whose rows show sync status icons and status meta.
 - **Shares:** a segmented control (With you, By you, Links), then a list. The meta reads "Owner · Permission".
@@ -344,12 +349,15 @@ Sidebar items are 38px tall with radius 12, an 18px icon and a 14/500 label. The
      slots, the rest sit behind "More". See §2 "Selection action bar".
   9. Swipe on a file
 
-  Mobile uses one column of grouped lists, with a trailing jump rail (one
-  small icon per section, pinned where the scrollbar would sit) since the
-  full list runs long enough that scrolling to a specific section by hand
-  is slow - tapping an icon scrolls straight to that section. Desktop uses
-  a 2-column grid of cards with a 1px line and radius 20, wide enough to
-  see most sections without scrolling, so it doesn't get the rail.
+  Mobile uses one column of grouped lists, each individually collapsible
+  (tap its label, expanded by default - `NooGroupedList`'s `collapsible`
+  param) so the full list can be collapsed down instead of needing a
+  separate way to navigate it; an earlier version had a trailing jump rail
+  (one small icon per section, pinned where the scrollbar would sit)
+  instead, dropped for adding a second, redundant navigation method without
+  shortening the page. Desktop uses a 2-column grid of cards with a 1px
+  line and radius 20, wide enough to see most sections without scrolling,
+  so it gets neither.
 - **Share sheet / dialog:** sections in this order:
   1. Header: file tile, name, size · folder, and close.
   2. **Share with people:** an input ("Name, email or group"), then the people with access. The owner comes first; the others each have a permission pill ("Can edit ▾").

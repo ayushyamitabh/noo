@@ -89,7 +89,9 @@ Gotchas:
   `drawerScrimColor: context.nooColors.scrim`.
 - `NooGroupedList` draws dividers by showing `line` through 1px gaps, so each
   child must paint its own surface (`NooSettingsRow` and `NooTabOrderRow`
-  do).
+  do). Its `collapsible`/`initiallyExpanded` params (off by default) make
+  `label` a tap target that shows/hides the card - `SettingsSection` is the
+  only caller that opts in, for Settings' mobile sections.
 - `NooSwipeAction` only reveals its action. The user has to tap the block to
   trigger it; a full swipe never deletes.
 - Window chrome (macOS traffic lights, the Windows 40px title bar) isn't

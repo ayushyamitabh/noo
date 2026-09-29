@@ -159,52 +159,37 @@ class FilesControlsRow extends StatelessWidget {
     showNooSheet(
       context,
       children: [
-        // See `_showSortSheet`'s comment: without this, none of the
-        // checkmarks/toggles below would move until the sheet is closed
-        // and reopened.
+        // See `_showSortSheet`'s comment: without this, neither the type
+        // filter's selected segment nor the toggles below would move until
+        // the sheet is closed and reopened.
         ListenableBuilder(
           listenable: files,
           builder: (context, _) => Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              NooGroupedList(
-                label: 'Show',
-                children: [
-                  NooSettingsRow(
-                    label: const Text('Files and folders'),
-                    trailing: files.filesTypeFilter == FilesTypeFilter.all
-                        ? Icon(
-                            LucideIcons.check,
-                            size: 18,
-                            color: context.nooColors.accentText,
-                          )
-                        : null,
-                    onTap: () => files.setFilesTypeFilter(FilesTypeFilter.all),
+              // Same "icon always, label only when selected" pill as
+              // Photos' own type filter below - not a checkmark list, so
+              // the two screens' filter sheets look and behave the same.
+              NooSegmentedControl<FilesTypeFilter>(
+                fill: true,
+                labelOnlySelected: true,
+                value: files.filesTypeFilter,
+                onChanged: files.setFilesTypeFilter,
+                options: const [
+                  NooSegmentOption(
+                    value: FilesTypeFilter.all,
+                    icon: LucideIcons.layoutGrid,
+                    label: 'All',
                   ),
-                  NooSettingsRow(
-                    label: const Text('Files only'),
-                    trailing: files.filesTypeFilter == FilesTypeFilter.filesOnly
-                        ? Icon(
-                            LucideIcons.check,
-                            size: 18,
-                            color: context.nooColors.accentText,
-                          )
-                        : null,
-                    onTap: () =>
-                        files.setFilesTypeFilter(FilesTypeFilter.filesOnly),
+                  NooSegmentOption(
+                    value: FilesTypeFilter.filesOnly,
+                    icon: LucideIcons.file,
+                    label: 'Files',
                   ),
-                  NooSettingsRow(
-                    label: const Text('Folders only'),
-                    trailing:
-                        files.filesTypeFilter == FilesTypeFilter.foldersOnly
-                        ? Icon(
-                            LucideIcons.check,
-                            size: 18,
-                            color: context.nooColors.accentText,
-                          )
-                        : null,
-                    onTap: () =>
-                        files.setFilesTypeFilter(FilesTypeFilter.foldersOnly),
+                  NooSegmentOption(
+                    value: FilesTypeFilter.foldersOnly,
+                    icon: LucideIcons.folder,
+                    label: 'Folders',
                   ),
                 ],
               ),

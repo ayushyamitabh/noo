@@ -255,10 +255,7 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
             children: [
               SizedBox(
                 height: 44,
-                child: FilesControlsRow(
-                  folderPath: _currentPath,
-                  showStorageScope: false,
-                ),
+                child: FilesControlsRow(folderPath: _currentPath),
               ),
               if (hasBreadcrumbs) ...[
                 const SizedBox(height: 10),

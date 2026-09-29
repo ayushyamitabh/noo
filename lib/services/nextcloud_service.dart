@@ -1471,28 +1471,17 @@ class NextcloudService {
     final rawList = data['ocs']?['data'];
     if (rawList is! List) return [];
 
-    return rawList.map<NextcloudShare>((raw) {
-      final path = (raw['path'] ?? '/').toString();
-      final segments = path.split('/').where((s) => s.isNotEmpty).toList();
-      final name = segments.isNotEmpty ? segments.last : path;
-      final isFolder = (raw['item_type'] ?? '').toString() == 'folder';
-      final mimeType = raw['mimetype'] as String?;
-
-      return NextcloudShare(
-        id: (raw['id'] ?? '').toString(),
-        path: path,
-        name: name,
-        itemType: NextcloudItem.deduceType(name, isFolder, mimeType),
-        shareType: _mapShareType((raw['share_type'] as num?)?.toInt() ?? -1),
-        ownerDisplayName: (raw['displayname_owner'] ?? raw['uid_owner'] ?? '')
-            .toString(),
-        sharedWithDisplayName: raw['share_with_displayname'] as String?,
-        sharedAt: DateTime.fromMillisecondsSinceEpoch(
-          ((raw['stime'] as num?)?.toInt() ?? 0) * 1000,
-        ),
-        sharedWithMe: sharedWithMe,
-      );
-    }).toList();
+    // Shares out to `_shareFromJson` (the same parser `fetchSharesForPath`/
+    // `fetchInheritedShares` use) rather than its own duplicated, thinner
+    // inline parsing - that copy never set `url`/`token`/`permissions`/
+    // `expireDate` at all, so a public-link share always came back with
+    // `url: null` here and the Shares tab's own "Copy link" action could
+    // never show up for it.
+    return rawList
+        .map<NextcloudShare>(
+          (raw) => _shareFromJson(raw, sharedWithMe: sharedWithMe),
+        )
+        .toList();
   }
 
   /// Creates a public link share for [path] and returns its share URL.

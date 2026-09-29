@@ -105,6 +105,69 @@ void main() {
       // Rows paint their own surface; the gaps show the list's line fill.
       expect(decorationOf(tester, find.byKey(const Key('r1'))).color, c.line);
     });
+
+    testNooWidgets('collapsible starts expanded, tapping the label hides '
+        'and re-shows the card', (tester, theme, c) async {
+      await pumpNoo(
+        tester,
+        SizedBox(
+          width: 360,
+          child: NooGroupedList(
+            label: 'Appearance',
+            collapsible: true,
+            children: [
+              Container(key: const Key('r1'), height: 52, color: c.surface),
+            ],
+          ),
+        ),
+        theme: theme,
+      );
+      expect(find.byIcon(LucideIcons.chevronDown), findsOneWidget);
+      expect(tester.getSize(find.byKey(const Key('r1'))).height, 52);
+      AnimatedCrossFade crossFade() =>
+          tester.widget<AnimatedCrossFade>(find.byType(AnimatedCrossFade));
+      expect(crossFade().crossFadeState, CrossFadeState.showFirst);
+
+      await tester.tap(find.text('Appearance'));
+      await tester.pump();
+      expect(crossFade().crossFadeState, CrossFadeState.showSecond);
+      expect(
+        tester.widget<AnimatedRotation>(find.byType(AnimatedRotation)).turns,
+        0,
+      );
+
+      await tester.tap(find.text('Appearance'));
+      await tester.pump();
+      expect(crossFade().crossFadeState, CrossFadeState.showFirst);
+      expect(
+        tester.widget<AnimatedRotation>(find.byType(AnimatedRotation)).turns,
+        0.5,
+      );
+    });
+
+    testNooWidgets('non-collapsible has no chevron and ignores label taps', (
+      tester,
+      theme,
+      c,
+    ) async {
+      await pumpNoo(
+        tester,
+        SizedBox(
+          width: 360,
+          child: NooGroupedList(
+            label: 'Accounts',
+            children: [
+              Container(key: const Key('r1'), height: 52, color: c.surface),
+            ],
+          ),
+        ),
+        theme: theme,
+      );
+      expect(find.byIcon(LucideIcons.chevronDown), findsNothing);
+      await tester.tap(find.text('Accounts'));
+      await tester.pumpAndSettle();
+      expect(tester.getSize(find.byKey(const Key('r1'))).height, 52);
+    });
   });
 
   group('NooSelectionBar', () {
