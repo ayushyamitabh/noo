@@ -26,29 +26,45 @@ class NooBanner extends StatelessWidget {
     final colors = context.nooColors;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(color: colors.surface, borderRadius: BorderRadius.circular(NooRadii.card)),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(NooRadii.card),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 20, color: colors.fg2),
-          const SizedBox(width: 12),
-          Expanded(
-            child: DefaultTextStyle(
-              style: NooText.body.copyWith(color: colors.fg2),
-              child: child,
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(icon, size: 20, color: colors.fg2),
+              const SizedBox(width: 12),
+              Expanded(
+                child: DefaultTextStyle(
+                  style: NooText.body.copyWith(color: colors.fg2),
+                  child: child,
+                ),
+              ),
+            ],
           ),
-          if (actionLabel != null)
-            GestureDetector(
-              onTap: onAction,
-              child: Text(
-                actionLabel!,
-                style: NooText.buttonSm.copyWith(
-                  fontSize: 14,
-                  color: actionIsDanger ? colors.danger : colors.accentText,
+          // Its own row below the description text, not squeezed onto the
+          // same line - a long retention message and "Empty trash" used to
+          // fight for the same row's width.
+          if (actionLabel != null) ...[
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerRight,
+              child: GestureDetector(
+                onTap: onAction,
+                child: Text(
+                  actionLabel!,
+                  style: NooText.buttonSm.copyWith(
+                    fontSize: 14,
+                    color: actionIsDanger ? colors.danger : colors.accentText,
+                  ),
                 ),
               ),
             ),
+          ],
         ],
       ),
     );

@@ -207,8 +207,13 @@ multi-select)
 
 **Banner / summary card**
 - A surface card with radius 20 (surface-2 on desktop) and padding of 14–18.
-- Trash: an info icon, the retention text, and "Empty trash" as a danger text button.
-- Offline: the stat, a 6px progress bar, the last-sync meta, and a "Sync now" tonal button.
+- The action sits on its own row below the description text, not squeezed
+  onto the same line - a long retention message/caption and the action
+  used to fight for the same row's width.
+- Trash: an info icon, the retention text, then "Empty trash" as a
+  right-aligned danger text button on the row below.
+- Offline: the stat and caption, then a "Sync now" tonal button on the row
+  below, then the 6px progress bar and the last-sync meta.
 
 **Progress bar**
 - 6px tall pill. Surface-3 track with an accent fill.
@@ -224,6 +229,13 @@ multi-select)
 - Left to right: an optional 20px icon in fg-2, then the label (16) with an optional subtitle (13, fg-3), then a trailing control.
 - Trailing control is one of: a toggle, a value in fg-3 with a chevron (desktop uses a 32px dropdown with radius 10), a segmented control, a pill button, or a status badge.
 - A destructive row uses danger text.
+- Exception: a segmented control with 3+ labelled segments (Theme's
+  System/Light/Dark) gets its own row below the label instead of a
+  trailing slot - three icon+label segments crammed in next to the label
+  left each one too cramped to read. Label row, then the full-width
+  segmented control on the row below, both on one continuous surface (no
+  divider between them) - same shape the sort sheet's Ascending/Descending
+  control and Photos' filter-sheet type control already use.
 
 **Tab order row**
 - A grip icon (`grip-vertical`, fg-3), the tab icon, the label, then a pin button: a 36px circle (30 on desktop) that is accent-soft with `pin` when pinned, or surface-2 with `pin-off` when not.
@@ -304,7 +316,13 @@ Sidebar items are 38px tall with radius 12, an 18px icon and a 14/500 label. The
   - Toolbar: sort chip (`Name ↑`), type filter chip, List/Grid segmented toggle.
   - Desktop adds Modified and Shared filter chips, an active-filter chip, and an item count.
   - Content: a list, or a grid when the toggle is set.
-- **Photos:** type chips (All, Photos, Videos, Camera), then the photo grid grouped by month. The grid view is the only view.
+- **Photos:** a sort chip and a filter chip (mirroring Files' own controls
+  row - no List/Grid toggle, the grid is the only view). The type filter
+  (All, Photos, Videos - Camera isn't backed by real data, see the view's
+  doc comment) lives inside the filter sheet as a full-width segmented
+  control, the same "label, then the control on its own row below" shape
+  Settings' Theme row uses, not its own row of chips. Then the photo grid
+  grouped by month.
 - **Favorites:** a file list with a star as the trailing icon.
 - **Offline:** a summary card (or 4 stat cards on desktop), then a list whose rows show sync status icons and status meta.
 - **Shares:** a segmented control (With you, By you, Links), then a list. The meta reads "Owner · Permission".
@@ -326,7 +344,12 @@ Sidebar items are 38px tall with radius 12, an 18px icon and a 14/500 label. The
      slots, the rest sit behind "More". See §2 "Selection action bar".
   9. Swipe on a file
 
-  Mobile uses one column of grouped lists. Desktop uses a 2-column grid of cards with a 1px line and radius 20.
+  Mobile uses one column of grouped lists, with a trailing jump rail (one
+  small icon per section, pinned where the scrollbar would sit) since the
+  full list runs long enough that scrolling to a specific section by hand
+  is slow - tapping an icon scrolls straight to that section. Desktop uses
+  a 2-column grid of cards with a 1px line and radius 20, wide enough to
+  see most sections without scrolling, so it doesn't get the rail.
 - **Share sheet / dialog:** sections in this order:
   1. Header: file tile, name, size · folder, and close.
   2. **Share with people:** an input ("Name, email or group"), then the people with access. The owner comes first; the others each have a permission pill ("Can edit ▾").
@@ -358,7 +381,13 @@ Sidebar items are 38px tall with radius 12, an 18px icon and a 14/500 label. The
   externally, download, delete, details) on every platform; don't add a
   top-bar overflow menu for the same actions. Video adds a transport row
   above the action row: time · seek bar · time, then play/pause and mute
-  centered below it.
+  centered below it. A photo can be pinch-zoomed; while zoomed in, the
+  gallery's own left/right swipe between items is disabled so panning
+  around the zoomed photo doesn't also swipe to the next one - it comes
+  back the moment the photo returns to its un-zoomed scale. A PDF preview
+  stays at its fit-width scale as its floor rather than letting the user
+  zoom out past it, since going below 1.0 scale removes any limit on how
+  far the page can be panned, including off-screen entirely.
 - **Search:** pushed from the shell's search entry point (`menu`/`search`
   icon in the top bar, or the inline field below an iOS large title -
   DESIGN_SYSTEM §2 "Search field" placement). The destination screen is one

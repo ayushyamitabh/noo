@@ -32,16 +32,21 @@ String _typeFilterLabel(FilesTypeFilter filter) {
 /// Hidden-files and storage-scope, which have no home in the mockup's
 /// simple two-chip row, live inside the filter chip's sheet instead of as
 /// their own row controls.
+///
+/// A plain `Row`, not a horizontally-scrolling one - it used to wrap in a
+/// `SingleChildScrollView`, which gives its child unbounded width, silently
+/// breaking the trailing `Spacer` (a flex child needs a bounded width to
+/// size against) and leaving the List/Grid toggle sitting right after the
+/// filter chip instead of pinned to the row's right edge. The two chips
+/// plus an icon-only toggle never come close to needing to scroll anyway.
 class FilesControlsRow extends StatelessWidget {
   final String folderPath;
   final bool showStorageScope;
-  final ScrollController? scrollController;
 
   const FilesControlsRow({
     super.key,
     required this.folderPath,
     this.showStorageScope = true,
-    this.scrollController,
   });
 
   @override
@@ -54,38 +59,34 @@ class FilesControlsRow extends StatelessWidget {
 
     return SizedBox(
       height: 44,
-      child: SingleChildScrollView(
-        controller: scrollController,
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            NooChip(
-              icon: files.sortAscendingFor(folderPath)
-                  ? LucideIcons.arrowUp
-                  : LucideIcons.arrowDown,
-              onTap: () => _showSortSheet(context, files),
-              child: Text(sortFieldLabel(files.sortFieldFor(folderPath))),
-            ),
-            const SizedBox(width: 8),
-            NooChip(
-              icon: LucideIcons.filter,
-              trailing: NooChipTrailing.menu,
-              selected: filtersActive,
-              onTap: () => _showFilterSheet(context, files),
-              child: Text(_typeFilterLabel(files.filesTypeFilter)),
-            ),
-            const Spacer(),
-            NooSegmentedControl<bool>(
-              iconOnly: true,
-              value: files.isGridView,
-              onChanged: files.setGridView,
-              options: const [
-                NooSegmentOption(value: false, icon: LucideIcons.list),
-                NooSegmentOption(value: true, icon: LucideIcons.grid),
-              ],
-            ),
-          ],
-        ),
+      child: Row(
+        children: [
+          NooChip(
+            icon: files.sortAscendingFor(folderPath)
+                ? LucideIcons.arrowUp
+                : LucideIcons.arrowDown,
+            onTap: () => _showSortSheet(context, files),
+            child: Text(sortFieldLabel(files.sortFieldFor(folderPath))),
+          ),
+          const SizedBox(width: 8),
+          NooChip(
+            icon: LucideIcons.filter,
+            trailing: NooChipTrailing.menu,
+            selected: filtersActive,
+            onTap: () => _showFilterSheet(context, files),
+            child: Text(_typeFilterLabel(files.filesTypeFilter)),
+          ),
+          const Spacer(),
+          NooSegmentedControl<bool>(
+            iconOnly: true,
+            value: files.isGridView,
+            onChanged: files.setGridView,
+            options: const [
+              NooSegmentOption(value: false, icon: LucideIcons.list),
+              NooSegmentOption(value: true, icon: LucideIcons.grid),
+            ],
+          ),
+        ],
       ),
     );
   }

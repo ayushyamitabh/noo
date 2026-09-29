@@ -57,9 +57,7 @@ class _MediaPdfPreviewState extends State<MediaPdfPreview> {
       }
       if (!mounted) return;
       setState(() {
-        _controller = PdfControllerPinch(
-          document: PdfDocument.openData(bytes),
-        );
+        _controller = PdfControllerPinch(document: PdfDocument.openData(bytes));
       });
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
@@ -86,13 +84,13 @@ class _MediaPdfPreviewState extends State<MediaPdfPreview> {
     if (_controller == null) {
       return Center(child: CircularProgressIndicator(color: colors.accent));
     }
-    // pdfx's own default minScale (1.0 = the page's true/100% size) is
-    // often *larger* than the fit-to-width size a wide page first renders
-    // at, since that initial render is just normal box layout, not the
-    // InteractiveViewer transform pinching engages on first touch - so the
-    // moment you touch the page it snaps up to 1.0 and, with the default
-    // floor, can never pinch back down past it. A low floor here lets you
-    // zoom back out past that to the fit-width view you started at.
-    return PdfViewPinch(controller: _controller!, minScale: 0.3);
+    // Keep minScale at (not below) 1.0: pdfx's PdfViewPinch hard-codes an
+    // *infinite* boundaryMargin whenever minScale < 1 (its own
+    // pdf_view_pinch.dart), meaning the page could be panned arbitrarily
+    // far off-screen with no way back short of reopening the viewer, even
+    // without ever pinching to zoom. There's no way to override that
+    // margin from here - it isn't an exposed parameter - so this avoids
+    // the branch that sets it instead of fighting it.
+    return PdfViewPinch(controller: _controller!);
   }
 }

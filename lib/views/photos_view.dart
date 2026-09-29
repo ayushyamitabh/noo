@@ -381,51 +381,36 @@ class _PhotosViewState extends State<PhotosView> {
     FilesController files,
   ) {
     final filtersActive =
+        _typeFilter != _PhotoTypeFilter.all ||
         photos.showFavoritesOnly ||
         photos.showHidden ||
         files.storageScope != StorageScope.cloud;
 
+    // A plain Row, not a horizontally-scrolling one - see
+    // `FilesControlsRow`'s identical fix/doc comment: a `SingleChildScrollView`
+    // gives its child unbounded width for no benefit here (two chips never
+    // need to scroll), and it's actively harmful for a row with a trailing
+    // `Spacer`/flex child.
     return SizedBox(
       height: 44,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            NooChip(
-              icon: photos.sortAscending
-                  ? LucideIcons.arrowUp
-                  : LucideIcons.arrowDown,
-              onTap: () => _showSortSheet(context, photos),
-              child: Text(sortFieldLabel(photos.sortField)),
-            ),
-            const SizedBox(width: 8),
-            NooChip(
-              selected: _typeFilter == _PhotoTypeFilter.all,
-              onTap: () => setState(() => _typeFilter = _PhotoTypeFilter.all),
-              child: const Text('All'),
-            ),
-            const SizedBox(width: 8),
-            NooChip(
-              selected: _typeFilter == _PhotoTypeFilter.image,
-              onTap: () => setState(() => _typeFilter = _PhotoTypeFilter.image),
-              child: const Text('Photos'),
-            ),
-            const SizedBox(width: 8),
-            NooChip(
-              selected: _typeFilter == _PhotoTypeFilter.video,
-              onTap: () => setState(() => _typeFilter = _PhotoTypeFilter.video),
-              child: const Text('Videos'),
-            ),
-            const SizedBox(width: 8),
-            NooChip(
-              icon: LucideIcons.filter,
-              trailing: NooChipTrailing.menu,
-              selected: filtersActive,
-              onTap: () => _showFilterSheet(context, photos, files),
-              child: const Text('Filter'),
-            ),
-          ],
-        ),
+      child: Row(
+        children: [
+          NooChip(
+            icon: photos.sortAscending
+                ? LucideIcons.arrowUp
+                : LucideIcons.arrowDown,
+            onTap: () => _showSortSheet(context, photos),
+            child: Text(sortFieldLabel(photos.sortField)),
+          ),
+          const SizedBox(width: 8),
+          NooChip(
+            icon: LucideIcons.filter,
+            trailing: NooChipTrailing.menu,
+            selected: filtersActive,
+            onTap: () => _showFilterSheet(context, photos, files),
+            child: const Text('Filters'),
+          ),
+        ],
       ),
     );
   }
@@ -503,33 +488,59 @@ class _PhotosViewState extends State<PhotosView> {
         // toggles span two controllers.
         ListenableBuilder(
           listenable: Listenable.merge([photos, files]),
-          builder: (context, _) => NooGroupedList(
+          builder: (context, _) => Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              NooSettingsRow(
-                icon: LucideIcons.heart,
-                label: const Text('Favorites only'),
-                trailing: NooToggle(
-                  checked: photos.showFavoritesOnly,
-                  onChanged: (_) => photos.toggleFavoritesFilter(),
-                ),
-              ),
-              NooSettingsRow(
-                icon: LucideIcons.eye,
-                label: const Text('Show hidden files'),
-                trailing: NooToggle(
-                  checked: photos.showHidden,
-                  onChanged: (_) => photos.toggleShowHidden(),
-                ),
-              ),
-              NooSettingsRow(
-                icon: LucideIcons.hardDrive,
-                label: const Text('External storage'),
-                trailing: NooToggle(
-                  checked: files.storageScope == StorageScope.external,
-                  onChanged: (external) => files.setStorageScope(
-                    external ? StorageScope.external : StorageScope.cloud,
+              // Same segmented-control design as Settings' Theme row - a
+              // full-width pill track, not chips, and its own row rather
+              // than a settings row's trailing slot (matches the
+              // Ascending/Descending control above, in `_showSortSheet`).
+              NooSegmentedControl<_PhotoTypeFilter>(
+                fill: true,
+                value: _typeFilter,
+                onChanged: (filter) => setState(() => _typeFilter = filter),
+                options: const [
+                  NooSegmentOption(value: _PhotoTypeFilter.all, label: 'All'),
+                  NooSegmentOption(
+                    value: _PhotoTypeFilter.image,
+                    label: 'Photos',
                   ),
-                ),
+                  NooSegmentOption(
+                    value: _PhotoTypeFilter.video,
+                    label: 'Videos',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 22),
+              NooGroupedList(
+                children: [
+                  NooSettingsRow(
+                    icon: LucideIcons.heart,
+                    label: const Text('Favorites only'),
+                    trailing: NooToggle(
+                      checked: photos.showFavoritesOnly,
+                      onChanged: (_) => photos.toggleFavoritesFilter(),
+                    ),
+                  ),
+                  NooSettingsRow(
+                    icon: LucideIcons.eye,
+                    label: const Text('Show hidden files'),
+                    trailing: NooToggle(
+                      checked: photos.showHidden,
+                      onChanged: (_) => photos.toggleShowHidden(),
+                    ),
+                  ),
+                  NooSettingsRow(
+                    icon: LucideIcons.hardDrive,
+                    label: const Text('External storage'),
+                    trailing: NooToggle(
+                      checked: files.storageScope == StorageScope.external,
+                      onChanged: (external) => files.setStorageScope(
+                        external ? StorageScope.external : StorageScope.cloud,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../models/app_tab.dart';
@@ -11,16 +12,21 @@ import '../widgets/noo/core/noo_segmented_control.dart';
 import '../widgets/noo/files/noo_file_kind.dart';
 import '../widgets/noo/files/noo_file_row.dart';
 import '../widgets/noo/files/noo_file_table.dart';
+import '../widgets/noo/lists/noo_grouped_list.dart';
+import '../widgets/noo/lists/noo_settings_row.dart';
 import '../widgets/noo/noo_layout.dart';
+import '../widgets/noo/overlays/noo_sheet.dart';
 import '../widgets/tabs/tab_state_slivers.dart';
 
 /// Which slice of [SharesController.shares] is on screen - `With you` maps
 /// straight onto the controller's own `sharedWithMe: true` fetch, but the
 /// controller only ever exposes one boolean scope, so `By you` and `Links`
 /// both use its `sharedWithMe: false` fetch and are told apart client-side
-/// by [NextcloudShare.shareType] (see `_visibleShares`) - `Links` and
-/// `By you` never trigger a re-fetch when switching between each other,
-/// only when crossing to/from `With you`.
+/// by [NextcloudShare.shareType] (see `_visibleShares`). `SharesController`
+/// caches each of its two scopes after its first fetch, so switching
+/// between any of the three - including back to `With you` after leaving
+/// it - only re-fetches a scope that's never been loaded yet, not on every
+/// single switch.
 enum _ShareScope { withYou, byYou, links }
 
 IconData _shareTypeIcon(ShareType type) {
@@ -110,7 +116,11 @@ class _SharesViewState extends State<SharesView> {
           onRetry: sharesController.fetchAll,
         )
       else if (shares.isEmpty)
-        tabEmptySliver(context, icon: LucideIcons.share2, message: _emptyMessage())
+        tabEmptySliver(
+          context,
+          icon: LucideIcons.share2,
+          message: _emptyMessage(),
+        )
       else if (isDesktop)
         _buildDesktopTable(context, shares)
       else
@@ -137,9 +147,13 @@ class _SharesViewState extends State<SharesView> {
       case _ShareScope.withYou:
         return c.shares;
       case _ShareScope.byYou:
-        return c.shares.where((s) => s.shareType != ShareType.publicLink).toList();
+        return c.shares
+            .where((s) => s.shareType != ShareType.publicLink)
+            .toList();
       case _ShareScope.links:
-        return c.shares.where((s) => s.shareType == ShareType.publicLink).toList();
+        return c.shares
+            .where((s) => s.shareType == ShareType.publicLink)
+            .toList();
     }
   }
 
@@ -175,13 +189,17 @@ class _SharesViewState extends State<SharesView> {
         delegate: SliverChildBuilderDelegate((context, index) {
           final share = shares[index];
           final row = NooFileRow(
-            kind: NooFileKind.from(name: share.name, isDirectory: share.isFolder),
+            kind: NooFileKind.from(
+              name: share.name,
+              isDirectory: share.isFolder,
+            ),
             name: share.name,
-            meta: '${share.ownerDisplayName} · ${_permissionLabel(share.permissions)}',
+            meta:
+                '${share.ownerDisplayName} · ${_permissionLabel(share.permissions)}',
             iosStyle: NooLayout.iosStyle(context),
             onTap: share.isFolder ? () => _openFolder(context, share) : null,
             trailing: Icon(_shareTypeIcon(share.shareType), size: 16),
-            onMore: () => _confirmUnshare(context, share),
+            onMore: () => _showShareActions(context, share),
           );
           final isFirst = index == 0;
           final isLast = index == shares.length - 1;
@@ -215,16 +233,22 @@ class _SharesViewState extends State<SharesView> {
       sliver: SliverList(
         delegate: SliverChildBuilderDelegate((context, index) {
           if (index == 0) {
-            return const NooFileTableHeader(col2Label: 'Owner', col3Label: 'Permission');
+            return const NooFileTableHeader(
+              col2Label: 'Owner',
+              col3Label: 'Permission',
+            );
           }
           final share = shares[index - 1];
           return NooFileTableRow(
-            kind: NooFileKind.from(name: share.name, isDirectory: share.isFolder),
+            kind: NooFileKind.from(
+              name: share.name,
+              isDirectory: share.isFolder,
+            ),
             name: share.name,
             col2: share.ownerDisplayName,
             col3: _permissionLabel(share.permissions),
             onTap: share.isFolder ? () => _openFolder(context, share) : null,
-            onMore: () => _confirmUnshare(context, share),
+            onMore: () => _showShareActions(context, share),
           );
         }, childCount: shares.length + 1),
       ),
@@ -238,6 +262,52 @@ class _SharesViewState extends State<SharesView> {
   void _openFolder(BuildContext context, NextcloudShare share) {
     context.read<FilesController>().navigateToAbsoluteFolder(share.path);
     context.read<SettingsController>().requestTab(AppTab.files);
+  }
+
+  /// The row/table overflow menu - used to jump straight to the unshare
+  /// confirmation with no menu at all, so a link share had no way to copy
+  /// its own URL short of opening it and finding "Copy link" inside the
+  /// full Share sheet. A link share gets that shortcut here too now;
+  /// everything else just gets the one remove/unshare action.
+  void _showShareActions(BuildContext context, NextcloudShare share) {
+    final isLink = share.shareType == ShareType.publicLink && share.url != null;
+    showNooSheet(
+      context,
+      children: [
+        NooGroupedList(
+          children: [
+            if (isLink)
+              NooSettingsRow(
+                icon: LucideIcons.copy,
+                label: const Text('Copy link'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _copyShareLink(context, share);
+                },
+              ),
+            NooSettingsRow(
+              icon: LucideIcons.trash2,
+              label: Text(share.sharedWithMe ? 'Remove share' : 'Unshare'),
+              danger: true,
+              onTap: () {
+                Navigator.pop(context);
+                _confirmUnshare(context, share);
+              },
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  void _copyShareLink(BuildContext context, NextcloudShare share) {
+    Clipboard.setData(ClipboardData(text: share.url!));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Link copied'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   Future<void> _confirmUnshare(

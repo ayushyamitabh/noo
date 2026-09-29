@@ -47,34 +47,7 @@ class SettingsAppearanceSection extends StatelessWidget {
       children: [
         SettingsSection(
           title: 'Appearance',
-          children: [
-            NooSettingsRow(
-              icon: LucideIcons.sunMoon,
-              label: const Text('Theme'),
-              trailing: NooSegmentedControl<ThemeMode>(
-                size: NooSegmentedSize.sm,
-                value: settings.themeMode,
-                onChanged: settings.setThemeMode,
-                options: const [
-                  NooSegmentOption(
-                    value: ThemeMode.system,
-                    icon: LucideIcons.monitor,
-                    label: 'System',
-                  ),
-                  NooSegmentOption(
-                    value: ThemeMode.light,
-                    icon: LucideIcons.sun,
-                    label: 'Light',
-                  ),
-                  NooSegmentOption(
-                    value: ThemeMode.dark,
-                    icon: LucideIcons.moon,
-                    label: 'Dark',
-                  ),
-                ],
-              ),
-            ),
-          ],
+          children: [_ThemeRow(settings: settings)],
         ),
         const SizedBox(height: NooSpace.xl),
         SettingsSection(
@@ -116,6 +89,69 @@ class SettingsAppearanceSection extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// The "Theme" row: label on its own line, then the System/Light/Dark
+/// segmented control full-width on the line below - not the usual
+/// label-plus-trailing-control `NooSettingsRow` layout, since three
+/// icon+label segments crammed into a trailing slot next to the row's own
+/// label left every segment too cramped to read comfortably. Matches the
+/// same "label, then a full-width segmented control below it" shape
+/// `_showSortSheet` (Ascending/Descending) and Photos' own filter sheet
+/// (All/Photos/Videos) already use.
+class _ThemeRow extends StatelessWidget {
+  final SettingsController settings;
+
+  const _ThemeRow({required this.settings});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.nooColors;
+    return Material(
+      color: colors.surface,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: NooSpace.md,
+          vertical: 12,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(LucideIcons.sunMoon, size: 20, color: colors.fg2),
+                const SizedBox(width: 14),
+                Text('Theme', style: NooText.bodyL.copyWith(color: colors.fg1)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            NooSegmentedControl<ThemeMode>(
+              fill: true,
+              value: settings.themeMode,
+              onChanged: settings.setThemeMode,
+              options: const [
+                NooSegmentOption(
+                  value: ThemeMode.system,
+                  icon: LucideIcons.monitor,
+                  label: 'System',
+                ),
+                NooSegmentOption(
+                  value: ThemeMode.light,
+                  icon: LucideIcons.sun,
+                  label: 'Light',
+                ),
+                NooSegmentOption(
+                  value: ThemeMode.dark,
+                  icon: LucideIcons.moon,
+                  label: 'Dark',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -148,6 +148,12 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
   /// `VideoTransportControls` inside the bottom `MediaActionBar` panel.
   VideoPlayerController? _videoController;
 
+  /// Whether the *current* page's `MediaImagePreview` is zoomed in - see
+  /// `_buildBody`'s `onZoomChanged`. Disables the `PageView`'s own
+  /// left/right swipe while true, so panning around a zoomed photo doesn't
+  /// also drag the gallery to the next item.
+  bool _isZoomed = false;
+
   NextcloudItem get _currentItem => _mediaItems[_currentIndex];
 
   bool get _isOffline => widget.localPathResolver != null;
@@ -552,6 +558,10 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
 
     return PageView.builder(
       controller: _pageController,
+      // Zoomed into the current photo: let InteractiveViewer's own pan
+      // claim horizontal drags instead of the PageView swiping to the next
+      // item out from under it.
+      physics: _isZoomed ? const NeverScrollableScrollPhysics() : null,
       itemCount: _mediaItems.length,
       onPageChanged: (index) => setState(() {
         _currentIndex = index;
@@ -560,6 +570,10 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
         // but that can lag a frame or two behind this rebuild - clear
         // eagerly so the transport row never briefly shows the old video.
         _videoController = null;
+        // The new page always starts unzoomed - and the old page's own
+        // listener is now scoped away from `_isZoomed` (see `isActive`
+        // below), so nothing else would reset this.
+        _isZoomed = false;
       }),
       itemBuilder: (context, index) {
         final mediaItem = _mediaItems[index];
@@ -570,6 +584,9 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
               key: ValueKey(mediaItem.id),
               url: session.service!.fileUrl(mediaItem.path),
               headers: session.service!.authHeaders,
+              onZoomChanged: isActive
+                  ? (zoomed) => setState(() => _isZoomed = zoomed)
+                  : null,
             );
           }
           return MediaVideoPreview(
@@ -613,6 +630,9 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                 url: null,
                 headers: const {},
                 localPath: localPath,
+                onZoomChanged: isActive
+                    ? (zoomed) => setState(() => _isZoomed = zoomed)
+                    : null,
               );
             }
             return MediaVideoPreview(

@@ -15,11 +15,18 @@ class MediaImagePreview extends StatefulWidget {
   /// `FileViewerScreen.localPathResolver`'s doc comment).
   final String? localPath;
 
+  /// Reports whenever this image crosses the zoomed-in/out threshold (not
+  /// on every micro-change in scale) - lets the parent `PageView` disable
+  /// its own left/right swipe while zoomed in, so panning around a zoomed
+  /// photo doesn't fight with swiping to the next one.
+  final ValueChanged<bool>? onZoomChanged;
+
   const MediaImagePreview({
     super.key,
     required this.url,
     required this.headers,
     this.localPath,
+    this.onZoomChanged,
   });
 
   @override
@@ -35,6 +42,7 @@ class _MediaImagePreviewState extends State<MediaImagePreview>
   late final AnimationController _animController;
   Animation<Matrix4>? _animation;
   Offset _doubleTapPosition = Offset.zero;
+  bool _isZoomed = false;
 
   @override
   void initState() {
@@ -48,10 +56,19 @@ class _MediaImagePreviewState extends State<MediaImagePreview>
             _transformController.value = _animation!.value;
           }
         });
+    _transformController.addListener(_handleTransformChanged);
+  }
+
+  void _handleTransformChanged() {
+    final isZoomed = _transformController.value.getMaxScaleOnAxis() > 1.01;
+    if (isZoomed == _isZoomed) return;
+    _isZoomed = isZoomed;
+    widget.onZoomChanged?.call(isZoomed);
   }
 
   @override
   void dispose() {
+    _transformController.removeListener(_handleTransformChanged);
     _animController.dispose();
     _transformController.dispose();
     super.dispose();

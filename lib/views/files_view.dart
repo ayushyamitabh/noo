@@ -227,12 +227,9 @@ class _GridThumbnail extends StatelessWidget {
   }
 }
 
-class _FilesViewState extends State<FilesView>
-    with SingleTickerProviderStateMixin {
+class _FilesViewState extends State<FilesView> {
   final Set<String> _selectedIds = {};
   int _lastPathDepth = 1;
-  final ScrollController _controlsScrollController = ScrollController();
-  final List<AnimationController> _scrollHintControllers = [];
 
   bool get _isSelecting => _selectedIds.isNotEmpty;
 
@@ -263,84 +260,6 @@ class _FilesViewState extends State<FilesView>
   // fallback so a folder that's genuinely empty is distinguishable from one
   // that just never got its initial fetch.
   bool _requestedInitialLoad = false;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _playScrollHint(_controlsScrollController),
-    );
-  }
-
-  /// A one-shot hint that a horizontally-scrollable row actually scrolls:
-  /// nudges it a little to the right and back, once - a motion cue instead
-  /// of a persistent widget (a chevron badge, an edge fade) sitting on top
-  /// of the actual controls the whole time. Shared by the controls row
-  /// (played once it first appears) and the selection actions row (played
-  /// the first time a selection starts, see `_toggleSelection`). No-ops if
-  /// there's nothing to scroll (row already fits).
-  Future<void> _playScrollHint(ScrollController scrollController) async {
-    // The delay lets the row's first frame (and its actual layout/max
-    // scroll extent) settle before nudging it, and reads more like a
-    // deliberate hint than something that happens to fire on load.
-    await Future.delayed(const Duration(milliseconds: 500));
-    // `hasClients` only means a position is attached, not that it's
-    // finished its first layout - reading maxScrollExtent before that
-    // throws (min/maxScrollExtent are still null internally).
-    if (!mounted ||
-        !scrollController.hasClients ||
-        !scrollController.position.hasContentDimensions) {
-      return;
-    }
-    final maxExtent = scrollController.position.maxScrollExtent;
-    if (maxExtent <= 0) return;
-    final double peak = maxExtent < 36 ? maxExtent : 36;
-    // Driven as a single controller (rather than two chained animateTo
-    // calls) with mirrored ease-in-out halves, so the motion decelerates
-    // smoothly into the peak and back out instead of visibly changing
-    // pace where the two legs meet.
-    final controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    );
-    _scrollHintControllers.add(controller);
-    final hint = TweenSequence<double>([
-      TweenSequenceItem(
-        tween: Tween(
-          begin: 0.0,
-          end: peak,
-        ).chain(CurveTween(curve: Curves.easeInOutSine)),
-        weight: 50,
-      ),
-      TweenSequenceItem(
-        tween: Tween(
-          begin: peak,
-          end: 0.0,
-        ).chain(CurveTween(curve: Curves.easeInOutSine)),
-        weight: 50,
-      ),
-    ]).animate(controller);
-    void onTick() {
-      if (scrollController.hasClients) {
-        scrollController.jumpTo(hint.value);
-      }
-    }
-
-    hint.addListener(onTick);
-    await controller.forward();
-    hint.removeListener(onTick);
-    _scrollHintControllers.remove(controller);
-    controller.dispose();
-  }
-
-  @override
-  void dispose() {
-    for (final controller in _scrollHintControllers) {
-      controller.dispose();
-    }
-    _controlsScrollController.dispose();
-    super.dispose();
-  }
 
   void _toggleSelection(NextcloudItem item) {
     HapticFeedback.selectionClick();
@@ -703,13 +622,10 @@ class _FilesViewState extends State<FilesView>
               children: [
                 Row(
                   children: [
-                    // The scroll-hint nudge (see _playScrollHint) plays on
-                    // this row once, right after it first appears.
                     Expanded(
                       child: FilesControlsRow(
                         folderPath: browser.currentFolderPath,
                         showStorageScope: !_offline,
-                        scrollController: _controlsScrollController,
                       ),
                     ),
                     if (_offline) ...[
