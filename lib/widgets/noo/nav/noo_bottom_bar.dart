@@ -38,12 +38,21 @@ const double _kAndroidPillHeight = 32;
 /// bottom safe-area inset rather than a fixed 34/20px spacer, so it's
 /// right on every device. Meant for `Scaffold.bottomNavigationBar` - the
 /// host `Scaffold` needs `extendBody: true` while floating.
+///
+/// [searchDestination]/[onSearchTap] (set together, from Settings'
+/// "Search in bottom bar" - see `DESIGN_SYSTEM.md`'s floating bottom bar
+/// entry) add a Search entry that's never highlighted (tapping it pushes
+/// `SearchView`, it doesn't select anything) - the row's last item when
+/// attached, or its own satellite circle beside the bar when floating,
+/// always fully round regardless of the bar's own corner radius.
 class NooBottomBar extends StatelessWidget {
   final NooNavStyle style;
   final NooBottomBarStyle barStyle;
   final List<NooNavDestination> destinations;
   final int selectedIndex;
   final ValueChanged<int> onSelected;
+  final NooNavDestination? searchDestination;
+  final VoidCallback? onSearchTap;
 
   const NooBottomBar({
     super.key,
@@ -52,6 +61,8 @@ class NooBottomBar extends StatelessWidget {
     required this.destinations,
     required this.selectedIndex,
     required this.onSelected,
+    this.searchDestination,
+    this.onSearchTap,
   });
 
   @override
@@ -59,27 +70,50 @@ class NooBottomBar extends StatelessWidget {
     final colors = context.nooColors;
     final ios = style == NooNavStyle.ios;
     final floating = barStyle == NooBottomBarStyle.floating;
+    final hasSearch = searchDestination != null && onSearchTap != null;
+    // Attached folds Search into the row itself (last item); floating
+    // gives it a separate satellite circle instead (built below), so the
+    // row builders only ever see it as a trailing item in the former case.
+    final rowSearch = hasSearch && !floating ? searchDestination : null;
 
     final row = ios
-        ? _buildIosRow()
-        : _buildAndroidRow(colors, floating: floating);
+        ? _buildIosRow(trailingSearch: rowSearch)
+        : _buildAndroidRow(
+            colors,
+            floating: floating,
+            trailingSearch: rowSearch,
+          );
     final barHeight = ios ? (floating ? 64.0 : 50.0) : (floating ? 72.0 : 80.0);
 
     if (floating) {
+      final pill = Container(
+        height: barHeight,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: colors.surface,
+          border: Border.all(color: colors.line),
+          borderRadius: BorderRadius.circular(28),
+        ),
+        child: row,
+      );
       return SafeArea(
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          child: Container(
-            height: barHeight,
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              color: colors.surface,
-              border: Border.all(color: colors.line),
-              borderRadius: BorderRadius.circular(28),
-            ),
-            child: row,
-          ),
+          child: hasSearch
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(child: pill),
+                    const SizedBox(width: 8),
+                    _SearchSatellite(
+                      destination: searchDestination!,
+                      onTap: onSearchTap!,
+                      size: barHeight,
+                    ),
+                  ],
+                )
+              : pill,
         ),
       );
     }
@@ -96,7 +130,7 @@ class NooBottomBar extends StatelessWidget {
     );
   }
 
-  Widget _buildIosRow() {
+  Widget _buildIosRow({NooNavDestination? trailingSearch}) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -108,15 +142,28 @@ class NooBottomBar extends StatelessWidget {
               onTap: () => onSelected(i),
             ),
           ),
+        if (trailingSearch != null)
+          Expanded(
+            child: _IosItem(
+              destination: trailingSearch,
+              selected: false,
+              onTap: onSearchTap!,
+            ),
+          ),
       ],
     );
   }
 
-  Widget _buildAndroidRow(NooColors colors, {required bool floating}) {
+  Widget _buildAndroidRow(
+    NooColors colors, {
+    required bool floating,
+    NooNavDestination? trailingSearch,
+  }) {
     final pillTop = floating ? _kFloatingPillTop : _kAttachedPillTop;
+    final itemCount = destinations.length + (trailingSearch != null ? 1 : 0);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final itemWidth = constraints.maxWidth / destinations.length;
+        final itemWidth = constraints.maxWidth / itemCount;
         return Stack(
           children: [
             AnimatedPositioned(
@@ -147,11 +194,59 @@ class NooBottomBar extends StatelessWidget {
                       onTap: () => onSelected(i),
                     ),
                   ),
+                if (trailingSearch != null)
+                  Expanded(
+                    child: _AndroidItem(
+                      destination: trailingSearch,
+                      selected: false,
+                      floating: floating,
+                      onTap: onSearchTap!,
+                    ),
+                  ),
               ],
             ),
           ],
         );
       },
+    );
+  }
+}
+
+/// The floating bar's own Search entry point, next to the pill rather than
+/// inside it - always fully round (see [NooBottomBar]'s doc comment),
+/// same fill/border as the pill so the two still read as one family.
+class _SearchSatellite extends StatelessWidget {
+  final NooNavDestination destination;
+  final VoidCallback onTap;
+  final double size;
+
+  const _SearchSatellite({
+    required this.destination,
+    required this.onTap,
+    required this.size,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.nooColors;
+    return Semantics(
+      button: true,
+      label: destination.label,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Container(
+          width: size,
+          height: size,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: colors.surface,
+            border: Border.all(color: colors.line),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(destination.icon, size: 24, color: colors.fg1),
+        ),
+      ),
     );
   }
 }

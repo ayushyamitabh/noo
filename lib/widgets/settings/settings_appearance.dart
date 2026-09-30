@@ -51,6 +51,18 @@ class SettingsAppearanceSection extends StatelessWidget {
           children: [
             _ThemeRow(settings: settings),
             _BottomBarStyleRow(settings: settings),
+            NooSettingsRow(
+              icon: LucideIcons.search,
+              label: const Text('Search in bottom bar'),
+              subtitle: const Text(
+                'Adds Search to the bottom bar and removes it from the top '
+                'bar - leaves room for one fewer regular tab',
+              ),
+              trailing: NooToggle(
+                checked: settings.searchInBottomBar,
+                onChanged: settings.setSearchInBottomBar,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: NooSpace.xl),

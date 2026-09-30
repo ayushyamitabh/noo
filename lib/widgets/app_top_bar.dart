@@ -19,13 +19,24 @@ import 'shell/shell_common.dart';
 /// [style] is resolved by the caller (`NooLayout.navStyle`) rather than
 /// read from context here, since [preferredSize] is a plain getter with no
 /// BuildContext - the same reason [NooTopBar] itself takes it as a field.
+/// [searchInBottomBar] is [SettingsController.searchInBottomBar], passed in
+/// for the same reason: it hides this bar's own search field/icon so
+/// there's only ever one search entry point on screen once the bottom bar
+/// has taken it over.
 class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
   final NooNavStyle style;
   final AppTab tab;
+  final bool searchInBottomBar;
 
-  const AppTopBar({super.key, required this.style, required this.tab});
+  const AppTopBar({
+    super.key,
+    required this.style,
+    required this.tab,
+    this.searchInBottomBar = false,
+  });
 
   bool get _ios => style == NooNavStyle.ios;
+  bool get _showSearch => !searchInBottomBar;
 
   @override
   Size get preferredSize => NooTopBar(
@@ -34,7 +45,7 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
     // A throwaway placeholder purely to make preferredSize's "is there a
     // search slot" check match what build() actually shows - never
     // inserted into the tree, so its content doesn't matter.
-    search: _ios ? const SizedBox.shrink() : null,
+    search: _ios && _showSearch ? const SizedBox.shrink() : null,
   ).preferredSize;
 
   @override
@@ -44,7 +55,7 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
       title: tab.label,
       onMenu: () => Scaffold.of(context).openDrawer(),
       actions: [
-        if (!_ios)
+        if (!_ios && _showSearch)
           NooTopBarButton(
             icon: LucideIcons.search,
             tooltip: 'Search',
@@ -58,7 +69,7 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
           ),
         ShellAvatarButton(hitBox: _ios ? 44 : 48),
       ],
-      search: _ios ? const ShellSearchLauncher(ios: true) : null,
+      search: _ios && _showSearch ? const ShellSearchLauncher(ios: true) : null,
     );
   }
 }

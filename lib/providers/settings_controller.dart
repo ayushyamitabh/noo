@@ -32,6 +32,7 @@ class SettingsController extends ChangeNotifier {
   static const _prefSwipeLeftAction = 'ui_swipe_left_action';
   static const _prefSwipeRightAction = 'ui_swipe_right_action';
   static const _prefBottomBarStyle = 'ui_bottom_bar_style';
+  static const _prefSearchInBottomBar = 'ui_search_in_bottom_bar';
   static const _prefAmoledDark = 'ui_amoled_dark';
   static const _prefMediaProgressBarStyle = 'ui_media_progress_bar_style';
   static const _prefTapTabToScrollTop = 'ui_tap_tab_to_scroll_top';
@@ -42,6 +43,7 @@ class SettingsController extends ChangeNotifier {
   Color _seedColor = AppTheme.defaultAccent;
   ThemeMode _themeMode = ThemeMode.system;
   NooBottomBarStyle _bottomBarStyle = NooBottomBarStyle.attached;
+  bool _searchInBottomBar = false;
   bool _useDynamicColor = true;
   bool _amoledDark = false;
   MediaProgressBarStyle _mediaProgressBarStyle = MediaProgressBarStyle.wavy;
@@ -84,10 +86,19 @@ class SettingsController extends ChangeNotifier {
   Color get seedColor => _seedColor;
   ThemeMode get themeMode => _themeMode;
   NooBottomBarStyle get bottomBarStyle => _bottomBarStyle;
+  bool get searchInBottomBar => _searchInBottomBar;
   bool get useDynamicColor => _useDynamicColor;
   bool get amoledDark => _amoledDark;
   MediaProgressBarStyle get mediaProgressBarStyle => _mediaProgressBarStyle;
   bool get tapTabToScrollTop => _tapTabToScrollTop;
+
+  /// The cap a screen should actually enforce for the *regular*, user-
+  /// reorderable tabs - one below [defaultMaxVisibleTabs] while
+  /// [searchInBottomBar] is on, since Search then takes that freed-up slot
+  /// itself (the row's last tab when attached, its own satellite circle
+  /// when floating - see `NooBottomBar`) rather than counting against it.
+  int get maxVisibleTabs =>
+      defaultMaxVisibleTabs - (_searchInBottomBar ? 1 : 0);
 
   /// Every tab in the user's configured order, including hidden ones — used
   /// by the reorder/visibility settings UI.
@@ -126,6 +137,8 @@ class SettingsController extends ChangeNotifier {
           orElse: () => _bottomBarStyle,
         );
       }
+      _searchInBottomBar =
+          prefs.getBool(_prefSearchInBottomBar) ?? _searchInBottomBar;
       _useDynamicColor =
           prefs.getBool(_prefUseDynamicColor) ?? _useDynamicColor;
       _amoledDark = prefs.getBool(_prefAmoledDark) ?? _amoledDark;
@@ -272,6 +285,18 @@ class SettingsController extends ChangeNotifier {
     _bottomBarStyle = style;
     notifyListeners();
     _prefsFuture.then((p) => p.setString(_prefBottomBarStyle, style.name));
+  }
+
+  /// Turning this on lowers [maxVisibleTabs] by one, so re-enforces the cap
+  /// immediately in case the user already has a full 5 regular tabs pinned
+  /// - same cleanup [_enforceMaxVisibleTabs] already does for a fresh
+  /// install/an app update adding a new tab.
+  void setSearchInBottomBar(bool value) {
+    if (_searchInBottomBar == value) return;
+    _searchInBottomBar = value;
+    if (value) _enforceMaxVisibleTabs();
+    notifyListeners();
+    _prefsFuture.then((p) => p.setBool(_prefSearchInBottomBar, value));
   }
 
   void setTabOrder(List<AppTab> order) {

@@ -212,5 +212,96 @@ void main() {
         expect(idleIcon.size, greaterThan(activeIcon.size!));
       },
     );
+
+    testNooWidgets(
+      'attached: search is the row\'s last item and never highlights',
+      (tester, theme, c) async {
+        var searchTaps = 0;
+        var selected = 0;
+        await pumpNoo(
+          tester,
+          StatefulBuilder(
+            builder: (context, setState) => SizedBox(
+              width: 360,
+              height: 80,
+              child: NooBottomBar(
+                style: NooNavStyle.android,
+                destinations: _destinations,
+                selectedIndex: selected,
+                onSelected: (i) => setState(() => selected = i),
+                searchDestination: const NooNavDestination(
+                  icon: LucideIcons.search,
+                  label: 'Search',
+                ),
+                onSearchTap: () => searchTaps++,
+              ),
+            ),
+          ),
+          theme: theme,
+        );
+        expect(find.byIcon(LucideIcons.search), findsOneWidget);
+        final iconCenters = [
+          tester.getCenter(find.byIcon(LucideIcons.folder)),
+          tester.getCenter(find.byIcon(LucideIcons.images)),
+          tester.getCenter(find.byIcon(LucideIcons.star)),
+          tester.getCenter(find.byIcon(LucideIcons.search)),
+        ];
+        // Evenly spaced, search landing after every real destination.
+        for (var i = 1; i < iconCenters.length; i++) {
+          expect(iconCenters[i].dx, greaterThan(iconCenters[i - 1].dx));
+        }
+
+        await tester.tap(find.byIcon(LucideIcons.search));
+        await tester.pump();
+        expect(searchTaps, 1);
+        // Tapping search never selects it or moves the indicator.
+        expect(selected, 0);
+        expect(_indicator(tester, c), findsOneWidget);
+        final indicatorLeft = tester.getTopLeft(_indicator(tester, c)).dx;
+        expect(indicatorLeft, lessThan(iconCenters[3].dx));
+      },
+    );
+
+    testNooWidgets('floating: search is a separate round satellite', (
+      tester,
+      theme,
+      c,
+    ) async {
+      var searchTaps = 0;
+      await pumpNoo(
+        tester,
+        SizedBox(
+          width: 360,
+          height: 96,
+          child: NooBottomBar(
+            style: NooNavStyle.ios,
+            barStyle: NooBottomBarStyle.floating,
+            destinations: _destinations,
+            selectedIndex: 0,
+            onSelected: (_) {},
+            searchDestination: const NooNavDestination(
+              icon: LucideIcons.search,
+              label: 'Search',
+            ),
+            onSearchTap: () => searchTaps++,
+          ),
+        ),
+        theme: theme,
+      );
+      // Not part of the main pill - its own separately-tappable icon.
+      expect(find.text('Search'), findsNothing);
+      final satellite = tester.widget<Container>(
+        find.ancestor(
+          of: find.byIcon(LucideIcons.search),
+          matching: find.byType(Container),
+        ),
+      );
+      final decoration = satellite.decoration as BoxDecoration;
+      expect(decoration.shape, BoxShape.circle);
+
+      await tester.tap(find.byIcon(LucideIcons.search));
+      await tester.pump();
+      expect(searchTaps, 1);
+    });
   });
 }

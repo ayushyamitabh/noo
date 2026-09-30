@@ -473,11 +473,20 @@ class _MainShellViewState extends State<MainShellView> {
     } else {
       final navStyle = NooLayout.navStyle(context);
       final bottomBarStyle = settings.bottomBarStyle;
+      // Picking/offline already override the tab set itself (see
+      // pinnedTabs above) - Search doesn't belong in either: there's
+      // nothing to search for a file-picking flow, and Search needs the
+      // network Offline mode doesn't have.
+      final showBottomBarSearch = !overrideActive && settings.searchInBottomBar;
       scaffold = Scaffold(
         backgroundColor: colors.bg,
         drawerScrimColor: colors.scrim,
         appBar: pickRequest == null
-            ? AppTopBar(style: navStyle, tab: selectedTab)
+            ? AppTopBar(
+                style: navStyle,
+                tab: selectedTab,
+                searchInBottomBar: showBottomBarSearch,
+              )
             : null,
         drawer: pickRequest == null ? const AppDrawer() : null,
         // Floating needs the body to draw behind the bar's own transparent
@@ -502,6 +511,7 @@ class _MainShellViewState extends State<MainShellView> {
           barStyle: bottomBarStyle,
           tabs: pinnedTabs,
           selectedIndex: pinnedIndex,
+          onSearchTap: showBottomBarSearch ? () => openSearch(context) : null,
           onDestinationSelected: (index) {
             final tappedTab = pinnedTabs[index];
             if (tappedTab == _currentTab) {

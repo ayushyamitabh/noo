@@ -16,8 +16,13 @@ enum AppTab {
 }
 
 /// At most this many tabs may be visible in the bottom nav bar at once —
-/// the rest are reachable through the "more" dropdown instead.
-const int maxVisibleTabs = 5;
+/// the rest are reachable through the "more" dropdown instead. The
+/// effective cap a screen should actually use is
+/// [SettingsController.maxVisibleTabs], not this directly - it's one
+/// lower than this while `searchInBottomBar` is on, since Search then
+/// takes the freed-up slot itself rather than competing with the user's
+/// own reorderable tabs for one of these.
+const int defaultMaxVisibleTabs = 5;
 
 extension AppTabInfo on AppTab {
   String get label {

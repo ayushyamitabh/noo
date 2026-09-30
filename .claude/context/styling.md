@@ -197,6 +197,12 @@ blocks are noted where they matter:
   with a `line` border instead of edge to edge (no opacity/blur knob
   either). The host `Scaffold` needs `extendBody: true` while it's active
   (`main.dart` already wires this off `SettingsController.bottomBarStyle`).
+  Settings' separate "Search in bottom bar" toggle
+  (`SettingsController.searchInBottomBar`) adds a never-highlighted Search
+  entry to either bar style (`NooBottomBar`'s `searchDestination`/
+  `onSearchTap`) and lowers `SettingsController.maxVisibleTabs` by one -
+  use that getter, not `defaultMaxVisibleTabs` from `models/app_tab.dart`,
+  anywhere that needs the *current* cap on regular tabs.
 - [`SyncedHeaderScaffold`](../../lib/widgets/synced_header_scaffold.dart) —
   the pull-to-sync `CustomScrollView` header with the persistent sync-status
   chip and pull-to-refresh gesture/spinner. Every screen (including

@@ -11,7 +11,8 @@ import '../noo/noo_layout.dart';
 import 'settings_section.dart';
 
 /// Settings section 7: bottom-nav tab order, visibility (pinned = shown, up
-/// to [maxVisibleTabs]) and default tab.
+/// to [SettingsController.maxVisibleTabs] - one fewer while Appearance's
+/// "Search in bottom bar" is on) and default tab.
 class SettingsTabsSection extends StatelessWidget {
   const SettingsTabsSection({super.key});
 
