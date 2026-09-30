@@ -143,6 +143,12 @@ blocks are noted where they matter:
   `lib/widgets/tabs/` (`tab_state_slivers.dart`, `tab_day_groups.dart`,
   `tab_location.dart`) — the loading/error/empty-state slivers and
   day/month grouping helpers shared by Recent/Activity/Trash/Shares.
+  `tab_state_slivers.dart` also has `topBarSliver`, which every regular
+  tab's view uses to plant its own `AppTopBar` instance as the first sliver
+  in its `CustomScrollView` (a thin wrapper around the framework's
+  `SliverFloatingHeader`) instead of the shell passing one shared instance
+  to `Scaffold.appBar` - see its doc comment and `architecture.md`'s
+  "Mobile" bullet for why.
   `lib/widgets/settings/` — Settings' 8 section widgets plus
   `settings_section.dart`'s `SettingsSection`/`showSettingsPicker` and
   `settings_dialogs.dart`'s `confirmRemoveAccount`.

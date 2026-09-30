@@ -53,7 +53,11 @@ String _permissionLabel(int permissions) {
 class SharesView extends StatefulWidget {
   final ScrollController scrollController;
 
-  const SharesView({super.key, required this.scrollController});
+  /// This tab's own shell top bar, planted as its first sliver - see
+  /// `buildAppTabView`'s doc comment. Null on desktop and while picking.
+  final PreferredSizeWidget? topBar;
+
+  const SharesView({super.key, required this.scrollController, this.topBar});
 
   @override
   State<SharesView> createState() => _SharesViewState();
@@ -81,6 +85,7 @@ class _SharesViewState extends State<SharesView> {
     final isDesktop = NooLayout.isDesktop(context);
 
     final List<Widget> contentSlivers = [
+      if (widget.topBar != null) topBarSliver(widget.topBar!),
       SliverPadding(
         padding: EdgeInsets.fromLTRB(
           NooLayout.gutter(context),

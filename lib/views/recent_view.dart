@@ -27,7 +27,11 @@ import 'file_viewer_screen.dart';
 class RecentView extends StatefulWidget {
   final ScrollController scrollController;
 
-  const RecentView({super.key, required this.scrollController});
+  /// This tab's own shell top bar, planted as its first sliver - see
+  /// `buildAppTabView`'s doc comment. Null on desktop and while picking.
+  final PreferredSizeWidget? topBar;
+
+  const RecentView({super.key, required this.scrollController, this.topBar});
 
   @override
   State<RecentView> createState() => _RecentViewState();
@@ -54,6 +58,7 @@ class _RecentViewState extends State<RecentView> {
     );
 
     final List<Widget> contentSlivers = [
+      if (widget.topBar != null) topBarSliver(widget.topBar!),
       const SliverToBoxAdapter(child: SizedBox(height: NooSpace.md)),
       if (recent.isLoading && items.isEmpty)
         tabLoadingSliver

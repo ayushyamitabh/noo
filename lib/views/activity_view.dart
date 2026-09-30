@@ -29,7 +29,11 @@ import '../widgets/tabs/tab_state_slivers.dart';
 class ActivityView extends StatelessWidget {
   final ScrollController scrollController;
 
-  const ActivityView({super.key, required this.scrollController});
+  /// This tab's own shell top bar, planted as its first sliver - see
+  /// `buildAppTabView`'s doc comment. Null on desktop and while picking.
+  final PreferredSizeWidget? topBar;
+
+  const ActivityView({super.key, required this.scrollController, this.topBar});
 
   @override
   Widget build(BuildContext context) {
@@ -90,6 +94,7 @@ class ActivityView extends StatelessWidget {
     }
 
     final List<Widget> contentSlivers = [
+      if (topBar != null) topBarSliver(topBar!),
       const SliverToBoxAdapter(child: SizedBox(height: NooSpace.md)),
       feed,
       ...tabBottomInsetSlivers(context),

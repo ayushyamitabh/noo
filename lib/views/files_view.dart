@@ -44,6 +44,7 @@ import '../widgets/noo/noo_layout.dart';
 import '../widgets/noo/overlays/noo_sheet.dart';
 import '../widgets/share_sheet.dart';
 import '../widgets/sticky_header_delegate.dart';
+import '../widgets/tabs/tab_state_slivers.dart';
 import '../widgets/synced_header_scaffold.dart' show formatBytes;
 import '../widgets/tabs/tab_state_slivers.dart';
 import 'file_viewer_screen.dart';
@@ -61,10 +62,15 @@ class FilesView extends StatefulWidget {
   final ScrollController scrollController;
   final bool offline;
 
+  /// This tab's own shell top bar, planted as its first sliver - see
+  /// `buildAppTabView`'s doc comment. Null on desktop and while picking.
+  final PreferredSizeWidget? topBar;
+
   const FilesView({
     super.key,
     required this.scrollController,
     this.offline = false,
+    this.topBar,
   });
 
   @override
@@ -655,6 +661,7 @@ class _FilesViewState extends State<FilesView> {
           );
 
     final List<Widget> contentSlivers = [
+      if (widget.topBar != null) topBarSliver(widget.topBar!),
       // Pinned in both states - while browsing this is the controls row
       // (+ breadcrumbs), while selecting it's the selection bar (see
       // `topRow` above): either way it's the one thing that always stays

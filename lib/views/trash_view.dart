@@ -25,7 +25,11 @@ import '../widgets/tabs/tab_state_slivers.dart';
 class TrashView extends StatefulWidget {
   final ScrollController scrollController;
 
-  const TrashView({super.key, required this.scrollController});
+  /// This tab's own shell top bar, planted as its first sliver - see
+  /// `buildAppTabView`'s doc comment. Null on desktop and while picking.
+  final PreferredSizeWidget? topBar;
+
+  const TrashView({super.key, required this.scrollController, this.topBar});
 
   @override
   State<TrashView> createState() => _TrashViewState();
@@ -50,6 +54,7 @@ class _TrashViewState extends State<TrashView> {
     final isDesktop = NooLayout.isDesktop(context);
 
     final List<Widget> contentSlivers = [
+      if (widget.topBar != null) topBarSliver(widget.topBar!),
       SliverPadding(
         padding: EdgeInsets.fromLTRB(
           NooLayout.gutter(context),

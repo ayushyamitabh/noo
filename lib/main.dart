@@ -381,15 +381,51 @@ class _MainShellViewState extends State<MainShellView> {
     String? trashBadge(AppTab tab) =>
         tab == AppTab.trash && trashCount > 0 ? '$trashCount' : null;
 
+    final isDesktop = NooLayout.isDesktop(context);
+    final navStyle = NooLayout.navStyle(context);
+    // Picking/offline already override the tab set itself (see pinnedTabs
+    // above) - Search doesn't belong in either: there's nothing to search
+    // for a file-picking flow, and Search needs the network Offline mode
+    // doesn't have.
+    final showBottomBarSearch = !overrideActive && settings.searchInBottomBar;
+
     // Each tab renders its own sticky selection toolbar inline (right under
     // its sort/filter row) instead of the shell swapping in a shared one,
     // so the nav chrome stays put and usable regardless of selection state.
+    //
+    // Each tab also builds its own [AppTopBar] (labelled for that tab, not
+    // just whichever is currently selected) and plants it as that tab's own
+    // first sliver - see `buildAppTabView`'s doc comment and `topBarSliver`
+    // in `tabs/tab_state_slivers.dart` - instead of one shared instance
+    // living in `Scaffold.appBar`. That's what gives each tab's top bar
+    // Material's native floating-away-on-scroll-down/reappear-on-scroll-up
+    // behavior, tied to that tab's own `ScrollController`: a fixed
+    // `Scaffold.appBar` can't do that (no per-tab scroll signal reaches
+    // it), and a shared single instance can't show 7 different tab labels
+    // at once now that every tab keeps its own independent scroll state.
+    // Null on desktop (which shows `NooToolbar` instead - embedding it here
+    // too, since `tabStack` is shared by both layouts below, would double
+    // up the top chrome there) and while picking (no top bar at all, same
+    // as this screen's old `Scaffold.appBar: pickRequest == null ? ... :
+    // null`).
     final tabStack = Stack(
       children: [
         IndexedStack(
           index: selectedIndex,
           children: displayTabs
-              .map((tab) => buildAppTabView(tab, _scrollControllers[tab]!))
+              .map(
+                (tab) => buildAppTabView(
+                  tab,
+                  _scrollControllers[tab]!,
+                  topBar: isDesktop || pickRequest != null
+                      ? null
+                      : AppTopBar(
+                          style: navStyle,
+                          tab: tab,
+                          searchInBottomBar: showBottomBarSearch,
+                        ),
+                ),
+              )
               .toList(),
         ),
         if (pick.isDownloadingForPick) const _PickingProgressOverlay(),
@@ -401,7 +437,7 @@ class _MainShellViewState extends State<MainShellView> {
         (selectedTab == AppTab.files || selectedTab == AppTab.photos);
 
     Widget scaffold;
-    if (NooLayout.isDesktop(context)) {
+    if (isDesktop) {
       scaffold = Scaffold(
         backgroundColor: colors.bg,
         body: Row(
@@ -471,23 +507,11 @@ class _MainShellViewState extends State<MainShellView> {
         ),
       );
     } else {
-      final navStyle = NooLayout.navStyle(context);
       final bottomBarStyle = settings.bottomBarStyle;
-      // Picking/offline already override the tab set itself (see
-      // pinnedTabs above) - Search doesn't belong in either: there's
-      // nothing to search for a file-picking flow, and Search needs the
-      // network Offline mode doesn't have.
-      final showBottomBarSearch = !overrideActive && settings.searchInBottomBar;
       scaffold = Scaffold(
         backgroundColor: colors.bg,
         drawerScrimColor: colors.scrim,
-        appBar: pickRequest == null
-            ? AppTopBar(
-                style: navStyle,
-                tab: selectedTab,
-                searchInBottomBar: showBottomBarSearch,
-              )
-            : null,
+        // The top bar itself no longer lives here - see `tabStack` above.
         drawer: pickRequest == null ? const AppDrawer() : null,
         // Floating needs the body to draw behind the bar's own transparent
         // margin (see NooBottomBarStyle's doc comment) instead of stopping
