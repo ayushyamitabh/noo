@@ -120,7 +120,7 @@ class _SharesViewState extends State<SharesView> {
         _buildDesktopTable(context, shares)
       else
         _buildMobileList(context, shares),
-      ...tabBottomInsetSlivers,
+      ...tabBottomInsetSlivers(context),
     ];
 
     return ColoredBox(

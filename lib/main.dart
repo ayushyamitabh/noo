@@ -502,6 +502,7 @@ class _MainShellViewState extends State<MainShellView> {
             pickRequest == null && navStyle == NooNavStyle.android
             ? NooFab(
                 collapsed: !canUpload,
+                barStyle: bottomBarStyle,
                 onTap: () => showCreateMenu(context),
               )
             : null,

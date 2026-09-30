@@ -30,6 +30,7 @@ import '../widgets/noo/overlays/noo_sheet.dart';
 import '../widgets/share_sheet.dart';
 import '../widgets/sort_menu_button.dart' show sortFieldLabel;
 import '../widgets/sticky_header_delegate.dart';
+import '../widgets/tabs/tab_state_slivers.dart';
 import 'file_viewer_screen.dart';
 import 'move_copy_destination_picker.dart';
 
@@ -346,9 +347,10 @@ class _PhotosViewState extends State<PhotosView> {
           ),
         ],
 
-      // Fixed clearance so the last row isn't hidden behind the floating
-      // nav bar, regardless of grid length.
-      const SliverToBoxAdapter(child: SizedBox(height: 100)),
+      // Clearance so the last row isn't hidden behind the nav bar,
+      // regardless of grid length - see `bottomBarClearance`'s own doc
+      // comment for why this has to be dynamic rather than a flat 100.
+      SliverToBoxAdapter(child: SizedBox(height: bottomBarClearance(context))),
     ];
 
     return PopScope(

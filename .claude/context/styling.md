@@ -92,8 +92,10 @@ Gotchas:
   do). Its `collapsible`/`initiallyExpanded` params (off by default) make
   `label` a tap target that shows/hides the card - `SettingsSection` is the
   only caller that opts in, for Settings' mobile sections.
-- `NooSwipeAction` only reveals its action. The user has to tap the block to
-  trigger it; a full swipe never deletes.
+- `NooSwipeAction` reveals its action on a normal swipe (tap the block to
+  trigger it) but also fires it directly if the drag goes far enough (past
+  1.8x the block's width) before release - a full swipe-through does delete
+  in one gesture, it's not tap-only anymore.
 - Window chrome (macOS traffic lights, the Windows 40px title bar) isn't
   built yet. `NooSidebar.windowControls` is the slot for it.
 - Always read colors through `context.nooColors`, never
@@ -193,10 +195,16 @@ blocks are noted where they matter:
   status is `NooFileRow`/`NooFileTableRow`'s built-in `NooStatusIcon` list
   instead of a corner badge. `NooBottomBar` later gained its own, unrelated
   `NooBottomBarStyle.floating` (Settings → Appearance → "Bottom bar") -
-  don't confuse the two: this one is still flat/non-blurred, just inset
-  with a `line` border instead of edge to edge (no opacity/blur knob
+  don't confuse the two: this one is still non-blurred, just inset with a
+  `line` border and `nooDialogShadow` (the app's one other shadow user - see
+  that constant's doc comment) instead of edge to edge (no opacity/blur knob
   either). The host `Scaffold` needs `extendBody: true` while it's active
-  (`main.dart` already wires this off `SettingsController.bottomBarStyle`).
+  (`main.dart` already wires this off `SettingsController.bottomBarStyle`),
+  which also means every tab's own scrollable list has to reserve enough
+  bottom padding to clear the bar - nothing does that automatically once the
+  body draws behind it. Use `bottomBarClearance(context)`
+  (`tab_state_slivers.dart`) for that rather than a flat `100`; it already
+  accounts for both bar styles.
   Settings' separate "Search in bottom bar" toggle
   (`SettingsController.searchInBottomBar`) adds a never-highlighted Search
   entry to either bar style (`NooBottomBar`'s `searchDestination`/

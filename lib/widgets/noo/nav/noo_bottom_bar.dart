@@ -6,10 +6,10 @@ export 'noo_nav_style.dart';
 
 /// Android indicator geometry, shared between the sliding pill and each
 /// item's own icon box so they line up exactly. Floating's own top offset
-/// is shorter than attached's - its row is 8px shorter overall (72 vs 80)
+/// is shorter than attached's - its row is 16px shorter overall (64 vs 80)
 /// and there's no edge-to-edge safe-area strip inside it eating into that.
 const double _kAttachedPillTop = 14;
-const double _kFloatingPillTop = 10;
+const double _kFloatingPillTop = 8;
 const double _kAndroidPillWidth = 56;
 const double _kAndroidPillHeight = 32;
 
@@ -29,15 +29,21 @@ const double _kAndroidPillHeight = 32;
 /// [barStyle] (user-configurable in Settings, Appearance) picks between
 /// that edge-to-edge [NooBottomBarStyle.attached] bar and
 /// [NooBottomBarStyle.floating] - inset 16px from both side edges, 28px
-/// corners, a 1px `line` border instead of a shadow (see that enum's own
-/// doc comment for why). Floating's Android row is 8px shorter (72 vs 80)
-/// and drops its idle tabs' reserved label space - with no label to leave
-/// room for, an idle icon just centers in the whole button and renders a
-/// touch bigger (27 vs 24px) instead of sitting high with a gap under it.
-/// The home indicator / gesture bar area below the row comes from the
-/// bottom safe-area inset rather than a fixed 34/20px spacer, so it's
-/// right on every device. Meant for `Scaffold.bottomNavigationBar` - the
-/// host `Scaffold` needs `extendBody: true` while floating.
+/// corners, a 1px `line` border plus [nooDialogShadow] (the one shadow the
+/// rest of the app allows itself, see that constant's own doc comment) so
+/// it actually reads as floating above the content scrolling behind it.
+/// Floating's Android row is both shorter (64 vs 80) and drops its idle
+/// tabs' reserved label space - with no label to leave room for, an idle
+/// icon just centers in the whole button, rather than sitting high with a
+/// gap under it. The home indicator / gesture bar area below the row comes
+/// from the bottom safe-area inset rather than a fixed 34/20px spacer, so
+/// it's right on every device. Meant for `Scaffold.bottomNavigationBar` -
+/// the host `Scaffold` needs `extendBody: true` while floating, and a
+/// scrollable body needs enough trailing padding to clear the bar's own
+/// footprint ([NooBottomBar.rowHeight] + [NooBottomBar.floatingBottomMargin]
+/// + the bottom safe area) since nothing does that automatically once the
+/// body draws behind it - see `tab_state_slivers.dart`'s
+/// `bottomBarClearance`.
 ///
 /// [searchDestination]/[onSearchTap] (set together, from Settings'
 /// "Search in bottom bar" - see `DESIGN_SYSTEM.md`'s floating bottom bar
@@ -65,6 +71,18 @@ class NooBottomBar extends StatelessWidget {
     this.onSearchTap,
   });
 
+  /// The row height [build] draws for [style]/[barStyle] - exposed so a
+  /// scrollable body sharing the same `Scaffold` can reserve exactly this
+  /// much clearance (see the class doc comment) instead of guessing.
+  static double rowHeight(NooNavStyle style, NooBottomBarStyle barStyle) {
+    if (style == NooNavStyle.ios) return 50;
+    return barStyle == NooBottomBarStyle.floating ? 64 : 80;
+  }
+
+  /// Gap between the floating bar's bottom edge and the safe area below it
+  /// (itself inside the [SafeArea] that consumes the actual device inset).
+  static const double floatingBottomMargin = 12;
+
   @override
   Widget build(BuildContext context) {
     final colors = context.nooColors;
@@ -83,7 +101,7 @@ class NooBottomBar extends StatelessWidget {
             floating: floating,
             trailingSearch: rowSearch,
           );
-    final barHeight = ios ? (floating ? 64.0 : 50.0) : (floating ? 72.0 : 80.0);
+    final barHeight = NooBottomBar.rowHeight(style, barStyle);
 
     if (floating) {
       final pill = Container(
@@ -93,13 +111,19 @@ class NooBottomBar extends StatelessWidget {
           color: colors.surface,
           border: Border.all(color: colors.line),
           borderRadius: BorderRadius.circular(28),
+          boxShadow: const [nooDialogShadow],
         ),
         child: row,
       );
       return SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          padding: EdgeInsets.fromLTRB(
+            16,
+            0,
+            16,
+            NooBottomBar.floatingBottomMargin,
+          ),
           child: hasSearch
               // A fixed-height SizedBox, not just a Row with
               // crossAxisAlignment.stretch - the bottomNavigationBar slot
@@ -255,6 +279,7 @@ class _SearchSatellite extends StatelessWidget {
             color: colors.surface,
             border: Border.all(color: colors.line),
             shape: BoxShape.circle,
+            boxShadow: const [nooDialogShadow],
           ),
           child: Icon(destination.icon, size: 24, color: colors.fg1),
         ),
@@ -338,7 +363,7 @@ class _AndroidItem extends StatelessWidget {
     final Widget content;
     if (floating && !selected) {
       content = Center(
-        child: Icon(destination.icon, size: 27, color: iconColor),
+        child: Icon(destination.icon, size: 25, color: iconColor),
       );
     } else {
       content = Padding(

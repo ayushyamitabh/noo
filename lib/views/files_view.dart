@@ -39,11 +39,13 @@ import '../widgets/noo/lists/noo_selection_bar.dart';
 import '../widgets/noo/lists/noo_settings_row.dart';
 import '../widgets/noo/lists/noo_summary_card.dart';
 import '../widgets/noo/media/noo_grid_card.dart';
+import '../widgets/noo/nav/noo_bottom_bar.dart';
 import '../widgets/noo/noo_layout.dart';
 import '../widgets/noo/overlays/noo_sheet.dart';
 import '../widgets/share_sheet.dart';
 import '../widgets/sticky_header_delegate.dart';
 import '../widgets/synced_header_scaffold.dart' show formatBytes;
+import '../widgets/tabs/tab_state_slivers.dart';
 import 'file_viewer_screen.dart';
 import 'move_copy_destination_picker.dart';
 
@@ -814,6 +816,15 @@ class _FilesViewState extends State<FilesView> {
               );
             }, childCount: browser.items.length),
           ),
+        ),
+      // List/grid/table above only pad NooSpace.lg at the bottom - plenty
+      // once Scaffold shrinks the body above an attached bar, but floating
+      // draws the body behind the bar instead, so it needs the bar's own
+      // footprint added on top or the last row ends up under it.
+      if (context.watch<SettingsController>().bottomBarStyle ==
+          NooBottomBarStyle.floating)
+        SliverToBoxAdapter(
+          child: SizedBox(height: bottomBarClearance(context)),
         ),
     ];
 

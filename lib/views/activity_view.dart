@@ -92,7 +92,7 @@ class ActivityView extends StatelessWidget {
     final List<Widget> contentSlivers = [
       const SliverToBoxAdapter(child: SizedBox(height: NooSpace.md)),
       feed,
-      ...tabBottomInsetSlivers,
+      ...tabBottomInsetSlivers(context),
     ];
 
     final scrollView = CustomScrollView(

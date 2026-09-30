@@ -109,10 +109,18 @@ Use **Lucide** (pinned to `lucide-static@0.460.0`) at a 1.8 stroke. Sizes are 14
 - An extended pill: 56px tall, accent fill, labelled "Upload".
 - Sits 16px from the right and bottom edges of the content area.
 - Stays mounted on every tab; it's only the extended label that's tied to
-  Files/Photos. Elsewhere it collapses to an icon-only 56px circle (still
-  tappable - it always targets the Files tab's current folder), animating
-  the width/label change rather than the button popping fully in/out as
-  the Scaffold's default FAB transition would on every tab switch.
+  Files/Photos. Elsewhere it collapses to an icon-only 56px circle or
+  rounded square (see below) - still tappable, it always targets the Files
+  tab's current folder - animating the width/label change rather than the
+  button popping fully in/out as the Scaffold's default FAB transition
+  would on every tab switch.
+- Corner radius follows the bottom bar style (Settings → Appearance):
+  fully round (`pill`, 999) when the bar is floating, matching that mode's
+  other already-rounder elements (the bar itself at 28px, its search
+  satellite a full circle); a rounded square (`card`, 20) when the bar is
+  attached, to suit that mode's flatter, edge-to-edge corners. Same radius
+  whether the FAB is collapsed to a circle/square or expanded to the full
+  pill shape.
 
 **Chip**
 - A pill, 32–34px tall, 12px horizontal padding, Label 13–14.
@@ -162,6 +170,7 @@ Use **Lucide** (pinned to `lucide-static@0.460.0`) at a 1.8 stroke. Sizes are 14
 **Swipe action**
 - The row slides and uncovers a 96px action block. Delete is white on danger-fill; Favorite is white on accent.
 - The block has a 20px icon above a 12/600 label.
+- Releasing past half the block snaps it open; dragging further still (past 1.8× the block's width, a haptic tick marks the crossing and the icon bumps up 15%) arms the action, and releasing while armed fires it immediately - one swipe-through gesture instead of open-then-tap. The block grows to fill however far it's dragged, so there's never a gap behind it.
 - Swipe actions are set in Settings → Swipe on a file.
 
 **Selection action bar** (Files, Photos, Favorites - anywhere with
@@ -273,9 +282,9 @@ Mobile always has **5 pinned tabs in the bottom bar**. The rest go in the drawer
 | Status bar | 54px, Dynamic Island | 40px |
 | Top bar | 44px row: `menu` on the left; `plus` and avatar on the right (all accent-text). Then a 34px large title, then the search field. | 64px: `menu`, 22px title, `search`, avatar |
 | Bottom bar | Surface fill, 1px top line. Icon 24 above a 10px label. Active: accent-text. Idle: fg-3. 34px home indicator below. | Surface fill, 80px. Icon 24 above a 12px label (label space is always reserved, just invisible when idle, so nothing shifts on selection). The active icon sits inside a 56×32 accent-soft pill that slides between tabs as one shared indicator, rather than popping in/out per tab. 20px gesture bar below. |
-| Bottom bar - floating (Settings → Appearance → "Bottom bar", both platforms) | Same content, inset 16px from both side edges and clear of the bottom safe area instead of edge to edge, radius 28 (the sheet-top/drawer-edge radius) rather than square corners. No shadow (product UI stays flat - see 1.4); a 1px `line` border stands in for elevation instead. Row height drops slightly (64/72 vs 50/80) to suit. Android's idle tabs drop their reserved label space in this mode - the icon just centers in the button and renders a touch bigger (27 vs 24px) - rather than sitting high with a gap held open under it. `Scaffold.extendBody: true` while floating, so the body scrolls behind the bar's transparent margin instead of stopping short of it. |
+| Bottom bar - floating (Settings → Appearance → "Bottom bar", both platforms) | Same content, inset 16px from both side edges and clear of the bottom safe area instead of edge to edge, radius 28 (the sheet-top/drawer-edge radius) rather than square corners. Product UI otherwise stays flat (see 1.4), but this is the one other place - besides desktop dialogs - that gets the app's one shadow: a 1px `line` border plus the dialog shadow, since a bar that's genuinely floating above scrolling content needs to read as elevated. Row height drops (iOS 50, same as attached; Android 64 vs 80) to suit. Android's idle tabs drop their reserved label space in this mode - the icon just centers in the button and renders a touch bigger (25 vs 24px) - rather than sitting high with a gap held open under it. `Scaffold.extendBody: true` while floating, so the body scrolls behind the bar's transparent margin instead of stopping short of it - which means every tab's scrollable list has to pad its own bottom enough to clear the bar's footprint, since nothing does that for it automatically once the body draws behind the bar. The Android FAB stays fully round in this mode (see "Upload" below), consistent with the bar's own rounder shape. |
 | Bottom bar - "Search in bottom bar" (Settings → Appearance, either bar style) | Adds a Search entry that's never highlighted (tapping it pushes Search, same as the top bar's own search action, which this replaces so there's only one entry point on screen) - the row's last item when attached (same styling as a real tab, just permanently idle), or its own separate, always fully round satellite circle beside the bar when floating. Costs one regular tab: `SettingsController.maxVisibleTabs` drops from 5 to 4 while this is on. |
-| Upload | `plus` in the nav bar | Extended FAB |
+| Upload | `plus` in the nav bar | Extended FAB - fully round (pill) when the bottom bar is floating, rounded square (`card` radius) when it's attached |
 | Overflow icon | `ellipsis` | `ellipsis-vertical` |
 | Settings | Pushed screen with a "‹ Files" back button and a large title. No bottom bar. | Pushed screen with a back arrow and a title. No bottom bar. |
 | Biometric label | "Lock with Face ID" | "Lock with fingerprint" |

@@ -74,7 +74,7 @@ class _RecentViewState extends State<RecentView> {
         _buildDesktopTable(context, groups)
       else
         _buildMobileGroups(context, groups),
-      ...tabBottomInsetSlivers,
+      ...tabBottomInsetSlivers(context),
     ];
 
     return ColoredBox(

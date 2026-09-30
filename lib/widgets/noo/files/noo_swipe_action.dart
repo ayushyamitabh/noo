@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../theme/design_tokens.dart';
 
@@ -34,6 +35,13 @@ class NooSwipeActionSpec {
 /// springs shut - both on [NooMotion.base] / [NooMotion.ease], no bounce.
 /// Tapping the block fires the action and closes it; tapping the row while
 /// open just closes it.
+///
+/// Dragging further still - past [_kTriggerExtent] of the block's own
+/// width, the block growing to fill the extra reveal so there's no gap -
+/// arms the action (a [HapticFeedback.mediumImpact] marks the crossing);
+/// releasing while armed fires it immediately instead of just leaving it
+/// open, so a single swipe-through gesture can do the whole thing without a
+/// second tap.
 class NooSwipeAction extends StatefulWidget {
   final Widget child;
 
@@ -59,12 +67,24 @@ class NooSwipeAction extends StatefulWidget {
 
 class _NooSwipeActionState extends State<NooSwipeAction>
     with SingleTickerProviderStateMixin {
+  /// How far past the fully-revealed block (1.0) a drag has to go before
+  /// releasing fires the action outright rather than just snapping open -
+  /// "swipe through" in one gesture instead of open-then-tap.
+  static const double _kTriggerExtent = 1.8;
+
+  /// Hard ceiling on the controller's value - past [_kTriggerExtent] there's
+  /// nothing more for further drag to *do*, but a little extra travel still
+  /// gives the gesture room to keep moving under the finger instead of
+  /// hitting a dead stop right at the trigger point.
+  static const double _kMaxDrag = 2.4;
+
   /// -1 = end action fully revealed, 0 = closed, 1 = start action revealed
-  /// (in visual left/right terms after [_dir] is applied).
+  /// (in visual left/right terms after [_dir] is applied) - and on past
+  /// either bound up to [_kMaxDrag] while armed for [_kTriggerExtent].
   late final AnimationController _ctrl = AnimationController(
     vsync: this,
-    lowerBound: -1,
-    upperBound: 1,
+    lowerBound: -_kMaxDrag,
+    upperBound: _kMaxDrag,
     value: 0,
   );
 
@@ -85,13 +105,21 @@ class _NooSwipeActionState extends State<NooSwipeAction>
   void _onDragUpdate(DragUpdateDetails d) {
     // Positive = revealing the start action.
     final delta = d.primaryDelta! * _dir / NooSwipeAction.actionWidth;
-    final min = widget.endAction != null ? -1.0 : 0.0;
-    final max = widget.startAction != null ? 1.0 : 0.0;
-    _ctrl.value = (_ctrl.value + delta).clamp(min, max);
+    final min = widget.endAction != null ? -_kMaxDrag : 0.0;
+    final max = widget.startAction != null ? _kMaxDrag : 0.0;
+    final next = (_ctrl.value + delta).clamp(min, max);
+    final wasArmed = _ctrl.value.abs() >= _kTriggerExtent;
+    final nowArmed = next.abs() >= _kTriggerExtent;
+    if (nowArmed && !wasArmed) HapticFeedback.mediumImpact();
+    _ctrl.value = next;
   }
 
   void _onDragEnd(DragEndDetails d) {
     final v = _ctrl.value;
+    if (v.abs() >= _kTriggerExtent) {
+      _trigger(v > 0 ? widget.startAction! : widget.endAction!);
+      return;
+    }
     final velocity = d.primaryVelocity! * _dir;
     double target;
     if (velocity.abs() > 700) {
@@ -141,6 +169,13 @@ class _NooSwipeActionState extends State<NooSwipeAction>
                       child: _ActionBlock(
                         spec: showing,
                         colors: colors,
+                        // Grows past its own min width to fill the extra
+                        // reveal once dragged further than a plain "open"
+                        // - otherwise the row's translated edge would pull
+                        // away from the block and expose bare space behind
+                        // it.
+                        width: v.abs() * NooSwipeAction.actionWidth,
+                        armed: v.abs() >= _kTriggerExtent,
                         onTap: () => _trigger(showing),
                       ),
                     ),
@@ -196,11 +231,24 @@ class _OpenAwareChild extends AnimatedWidget {
 class _ActionBlock extends StatelessWidget {
   final NooSwipeActionSpec spec;
   final NooColors colors;
+
+  /// The block's own width - grows past [NooSwipeAction.actionWidth] once
+  /// dragged further than a plain reveal, so it always fills exactly what's
+  /// exposed behind the row.
+  final double width;
+
+  /// True once the drag has gone far enough that releasing now fires the
+  /// action - bumps the icon up a touch as a "you're past the point of no
+  /// return" cue, on top of the haptic tick that fired at the same moment.
+  final bool armed;
+
   final VoidCallback onTap;
 
   const _ActionBlock({
     required this.spec,
     required this.colors,
+    required this.width,
+    required this.armed,
     required this.onTap,
   });
 
@@ -216,13 +264,18 @@ class _ActionBlock extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
-        width: NooSwipeAction.actionWidth,
+        width: width.clamp(NooSwipeAction.actionWidth, double.infinity),
         color: bg,
         alignment: Alignment.center,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 20, color: Colors.white),
+            AnimatedScale(
+              scale: armed ? 1.15 : 1,
+              duration: NooMotion.fast,
+              curve: NooMotion.ease,
+              child: Icon(icon, size: 20, color: Colors.white),
+            ),
             const SizedBox(height: 6),
             Text(
               label,

@@ -12,6 +12,7 @@ import 'package:noo/widgets/noo/core/noo_progress_bar.dart';
 import 'package:noo/widgets/noo/core/noo_search_field.dart';
 import 'package:noo/widgets/noo/core/noo_segmented_control.dart';
 import 'package:noo/widgets/noo/core/noo_toggle.dart';
+import 'package:noo/widgets/noo/nav/noo_nav_style.dart';
 
 import 'noo_test_utils.dart';
 
@@ -247,7 +248,11 @@ void main() {
   group('NooFab', () {
     testNooWidgets('shows label and fires onTap', (tester, theme, c) async {
       var taps = 0;
-      await pumpNoo(tester, NooFab(onTap: () => taps++), theme: theme);
+      await pumpNoo(
+        tester,
+        NooFab(barStyle: NooBottomBarStyle.floating, onTap: () => taps++),
+        theme: theme,
+      );
       expect(find.text('Upload'), findsOneWidget);
       expect(tester.getSize(find.byType(NooFab)).height, 56);
       expect(tester.getSize(find.byType(NooFab)).width, lessThan(200));
@@ -263,7 +268,11 @@ void main() {
       var taps = 0;
       await pumpNoo(
         tester,
-        NooFab(collapsed: true, onTap: () => taps++),
+        NooFab(
+          collapsed: true,
+          barStyle: NooBottomBarStyle.floating,
+          onTap: () => taps++,
+        ),
         theme: theme,
       );
       await tester.pumpAndSettle();
@@ -273,6 +282,44 @@ void main() {
       expect(size.width, 56);
       await tester.tap(find.byType(NooFab));
       expect(taps, 1);
+    });
+
+    testNooWidgets('floating bar style stays fully round', (
+      tester,
+      theme,
+      c,
+    ) async {
+      await pumpNoo(
+        tester,
+        const NooFab(barStyle: NooBottomBarStyle.floating),
+        theme: theme,
+      );
+      final material = tester.widget<Material>(
+        find.descendant(
+          of: find.byType(NooFab),
+          matching: find.byType(Material),
+        ),
+      );
+      expect((material.borderRadius as BorderRadius).topLeft.x, NooRadii.pill);
+    });
+
+    testNooWidgets('attached bar style squares off to a rounded square', (
+      tester,
+      theme,
+      c,
+    ) async {
+      await pumpNoo(
+        tester,
+        const NooFab(barStyle: NooBottomBarStyle.attached),
+        theme: theme,
+      );
+      final material = tester.widget<Material>(
+        find.descendant(
+          of: find.byType(NooFab),
+          matching: find.byType(Material),
+        ),
+      );
+      expect((material.borderRadius as BorderRadius).topLeft.x, NooRadii.card);
     });
   });
 

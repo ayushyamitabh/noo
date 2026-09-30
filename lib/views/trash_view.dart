@@ -89,7 +89,7 @@ class _TrashViewState extends State<TrashView> {
         _buildDesktopTable(context, trash)
       else
         _buildMobileList(context, trash),
-      ...tabBottomInsetSlivers,
+      ...tabBottomInsetSlivers(context),
     ];
 
     return ColoredBox(
