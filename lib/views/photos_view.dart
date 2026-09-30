@@ -30,6 +30,7 @@ import '../widgets/noo/overlays/noo_sheet.dart';
 import '../widgets/share_sheet.dart';
 import '../widgets/sort_menu_button.dart' show sortFieldLabel;
 import '../widgets/sticky_header_delegate.dart';
+import '../widgets/tabs/tab_state_slivers.dart';
 import 'file_viewer_screen.dart';
 import 'move_copy_destination_picker.dart';
 
@@ -53,7 +54,11 @@ class _MonthGroup {
 class PhotosView extends StatefulWidget {
   final ScrollController scrollController;
 
-  const PhotosView({super.key, required this.scrollController});
+  /// This tab's own shell top bar, planted as its first sliver - see
+  /// `buildAppTabView`'s doc comment. Null on desktop and while picking.
+  final PreferredSizeWidget? topBar;
+
+  const PhotosView({super.key, required this.scrollController, this.topBar});
 
   @override
   State<PhotosView> createState() => _PhotosViewState();
@@ -239,6 +244,7 @@ class _PhotosViewState extends State<PhotosView> {
     );
 
     final List<Widget> contentSlivers = [
+      if (widget.topBar != null) topBarSliver(widget.topBar!),
       // Sticky while browsing; once selecting, the selection bar takes over
       // the same slot instead.
       SliverPersistentHeader(

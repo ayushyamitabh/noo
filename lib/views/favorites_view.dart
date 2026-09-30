@@ -30,6 +30,7 @@ import '../widgets/noo/core/noo_button.dart';
 import '../widgets/share_sheet.dart';
 import '../widgets/sticky_header_delegate.dart';
 import '../widgets/synced_header_scaffold.dart' show formatBytes;
+import '../widgets/tabs/tab_state_slivers.dart';
 import 'file_viewer_screen.dart';
 import 'move_copy_destination_picker.dart';
 
@@ -50,7 +51,11 @@ import 'move_copy_destination_picker.dart';
 class FavoritesView extends StatefulWidget {
   final ScrollController scrollController;
 
-  const FavoritesView({super.key, required this.scrollController});
+  /// This tab's own shell top bar, planted as its first sliver - see
+  /// `buildAppTabView`'s doc comment. Null on desktop and while picking.
+  final PreferredSizeWidget? topBar;
+
+  const FavoritesView({super.key, required this.scrollController, this.topBar});
 
   @override
   State<FavoritesView> createState() => _FavoritesViewState();
@@ -507,6 +512,7 @@ class _FavoritesViewState extends State<FavoritesView> {
     );
 
     final contentSlivers = <Widget>[
+      if (widget.topBar != null) topBarSliver(widget.topBar!),
       SliverPersistentHeader(
         pinned: !_isSelecting,
         delegate: StickyHeaderDelegate(

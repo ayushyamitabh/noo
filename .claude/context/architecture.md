@@ -284,7 +284,21 @@ bare system prompt gives no context on its own.
   other tab has a create/upload flow), and the account avatar; Android
   gets a compact title row with `search`/avatar actions, relying on an
   extended `NooFab` ("Upload", Files/Photos only) instead of a top-bar
-  icon for upload. `BottomNavBar` (`widgets/bottom_nav_bar.dart`) adapts
+  icon for upload. Rather than one shared instance in `Scaffold.appBar`,
+  `MainShellView` builds a separate `AppTopBar` per tab (labelled for that
+  tab) and each tab plants its own as the first sliver in its own
+  `CustomScrollView` (`topBarSliver` in `widgets/tabs/tab_state_slivers.dart`,
+  wrapping it in the framework's `SliverFloatingHeader`) instead of passing
+  it to `Scaffold.appBar` - see that file's doc comment for why (Material's
+  native "floating" app bar behavior, tied to that tab's own
+  `ScrollController`: scrolls away as the list scrolls down and reappears
+  the moment the drag reverses, not only once scrolled back to the top).
+  `topBar` is null (no top bar rendered) on desktop and while picking,
+  matching `Scaffold.appBar`'s old `pickRequest == null` guard - see
+  `buildAppTabView`'s doc comment. It sits above each tab's own pinned
+  in-content header (the sort/filter controls row, or Files/Photos'
+  selection bar - see below); the two float/scroll independently.
+  `BottomNavBar` (`widgets/bottom_nav_bar.dart`) adapts
   the pinned `AppTab`s onto `NooBottomBar`. `AppDrawer`
   (`widgets/app_drawer.dart`) builds a `NooDrawer`: account block, storage
   meter, a "More" list of the hidden tabs, Settings, and an "Edit tabs"

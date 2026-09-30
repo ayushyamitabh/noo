@@ -94,3 +94,29 @@ const List<Widget> tabBottomInsetSlivers = [
   SliverToBoxAdapter(child: SizedBox(height: 100)),
   SliverFillRemaining(hasScrollBody: false, child: SizedBox()),
 ];
+
+/// Wraps a tab's shell top bar ([AppTopBar], passed in as the generic
+/// [PreferredSizeWidget] it implements - this file can't import
+/// `app_top_bar.dart` without a cycle) as that tab's own first sliver,
+/// living inside its `CustomScrollView` instead of `Scaffold.appBar`. Gives
+/// it Material's native "floating app bar" behavior, via the framework's own
+/// [SliverFloatingHeader]: it scrolls away as the list scrolls down, and -
+/// unlike a plain `SliverToBoxAdapter`, which only reappears once scrolled
+/// all the way back to the top - reappears immediately on any upward
+/// scroll, following the finger while dragging and settling fully open or
+/// fully closed once the gesture ends.
+///
+/// [SliverFloatingHeader] sizes itself from [topBar]'s own natural layout
+/// (like `SliverToBoxAdapter`) rather than a fixed extent declared up
+/// front - so [topBar]'s own internal `SafeArea` (see `NooTopBar`'s doc
+/// comment) already accounts for the status-bar inset correctly, with no
+/// extra height math needed here (unlike building this on the general-
+/// purpose `SliverPersistentHeader` would have required).
+///
+/// Sits above a tab's own pinned in-content header (built with
+/// [StickyHeaderDelegate] - the sort/filter controls row, or the selection
+/// bar that replaces it) - put this sliver first in `contentSlivers` so
+/// that header stays exactly where it already is, independent of whether
+/// [topBar] is currently shown or scrolled away.
+Widget topBarSliver(PreferredSizeWidget topBar) =>
+    SliverFloatingHeader(child: topBar);
