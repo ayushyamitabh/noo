@@ -101,17 +101,29 @@ class NooBottomBar extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
           child: hasSearch
-              ? Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(child: pill),
-                    const SizedBox(width: 8),
-                    _SearchSatellite(
-                      destination: searchDestination!,
-                      onTap: onSearchTap!,
-                      size: barHeight,
-                    ),
-                  ],
+              // A fixed-height SizedBox, not just a Row with
+              // crossAxisAlignment.stretch - the bottomNavigationBar slot
+              // gives this widget a *loose* (unbounded-max) height
+              // constraint, and stretch on an unbounded cross axis blows up
+              // to fill the screen in profile/release (the assertion that
+              // would catch it in debug is stripped there) - the same
+              // silent-oversizing bug files_controls_row.dart hit earlier
+              // from a different cause. Both children already size
+              // themselves explicitly (pill's own `height`, the
+              // satellite's `size`), so stretch was never actually needed.
+              ? SizedBox(
+                  height: barHeight,
+                  child: Row(
+                    children: [
+                      Expanded(child: pill),
+                      const SizedBox(width: 8),
+                      _SearchSatellite(
+                        destination: searchDestination!,
+                        onTap: onSearchTap!,
+                        size: barHeight,
+                      ),
+                    ],
+                  ),
                 )
               : pill,
         ),

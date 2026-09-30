@@ -303,5 +303,39 @@ void main() {
       await tester.pump();
       expect(searchTaps, 1);
     });
+
+    testWidgets('floating with search sizes correctly in a real Scaffold '
+        '(regression: unbounded stretch used to fill the whole screen)', (
+      tester,
+    ) async {
+      // A bare SizedBox host (as the other tests use) gives this widget a
+      // bounded height, masking this exact bug - Scaffold.bottomNavigationBar
+      // gives its child a *loose*, unbounded-max height instead, which is
+      // what a Row with crossAxisAlignment.stretch blows up against in
+      // profile/release (the debug assertion that would catch it is
+      // stripped there). Only a real Scaffold reproduces that.
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: nooTheme(Brightness.light),
+          home: Scaffold(
+            body: const SizedBox.expand(),
+            bottomNavigationBar: NooBottomBar(
+              style: NooNavStyle.android,
+              barStyle: NooBottomBarStyle.floating,
+              destinations: _destinations,
+              selectedIndex: 0,
+              onSelected: (_) {},
+              searchDestination: const NooNavDestination(
+                icon: LucideIcons.search,
+                label: 'Search',
+              ),
+              onSearchTap: () {},
+            ),
+          ),
+        ),
+      );
+      final size = tester.getSize(find.byType(NooBottomBar));
+      expect(size.height, lessThan(150));
+    });
   });
 }
