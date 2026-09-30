@@ -31,7 +31,6 @@ import '../widgets/share_sheet.dart';
 import '../widgets/sticky_header_delegate.dart';
 import '../widgets/tabs/tab_state_slivers.dart';
 import '../widgets/synced_header_scaffold.dart' show formatBytes;
-import '../widgets/tabs/tab_state_slivers.dart';
 import 'file_viewer_screen.dart';
 import 'move_copy_destination_picker.dart';
 
