@@ -90,8 +90,12 @@ Gotchas:
 - `NooGroupedList` draws dividers by showing `line` through 1px gaps, so each
   child must paint its own surface (`NooSettingsRow` and `NooTabOrderRow`
   do). Its `collapsible`/`initiallyExpanded` params (off by default) make
-  `label` a tap target that shows/hides the card - `SettingsSection` is the
-  only caller that opts in, for Settings' mobile sections.
+  `label` a tap target that shows/hides the card - no current caller opts
+  in (Settings' mobile sections used to, when every section rendered
+  inline in one long column; now each section is its own pushed screen -
+  see `account_view.dart`'s doc comment - so there's nothing left to
+  collapse). The params stay on the component itself since it's otherwise
+  generic.
 - `NooSwipeAction` reveals its action on a normal swipe (tap the block to
   trigger it) but also fires it directly if the drag goes far enough (past
   1.8x the block's width) before release - a full swipe-through does delete
