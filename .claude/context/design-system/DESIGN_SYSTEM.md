@@ -358,15 +358,23 @@ Sidebar items are 38px tall with radius 12, an 18px icon and a 14/500 label. The
      slots, the rest sit behind "More". See §2 "Selection action bar".
   9. Swipe on a file
 
-  Mobile uses one column of grouped lists, each individually collapsible
-  (tap its label, expanded by default - `NooGroupedList`'s `collapsible`
-  param) so the full list can be collapsed down instead of needing a
-  separate way to navigate it; an earlier version had a trailing jump rail
-  (one small icon per section, pinned where the scrollbar would sit)
-  instead, dropped for adding a second, redundant navigation method without
-  shortening the page. Desktop uses a 2-column grid of cards with a 1px
-  line and radius 20, wide enough to see most sections without scrolling,
-  so it gets neither.
+  Mobile is a two-level menu, the way native iOS/Android Settings apps
+  work: the account card stays pinned at the top of a single top-level
+  list, and every other section (2-9 above) becomes one tappable
+  `NooSettingsRow` - icon, title, chevron - in a `NooGroupedList` below it.
+  Tapping a row pushes a new screen (`NooTopBar`/`NooTopBarBack`) holding
+  just that section's own content full-screen, so no page is ever more
+  than one category deep and no section needs to be individually
+  collapsible any more. Two earlier designs were tried and dropped: a
+  trailing jump rail (one small icon per section, pinned where the
+  scrollbar would sit), and - after that - one long column of every
+  section inline, each individually collapsible (`NooGroupedList`'s
+  `collapsible` param) so the page could at least be collapsed down. Both
+  scrolled the *same* page to or past an anchor; a genuinely separate
+  pushed screen per category removes the scroll-depth problem outright
+  instead of just working around it. Desktop is unchanged: a 2-column grid
+  of cards with a 1px line and radius 20, wide enough to see most sections
+  without scrolling, so it gets neither a menu nor collapsing.
 - **Share sheet / dialog:** sections in this order:
   1. Header: file tile, name, size · folder, and close.
   2. **Share with people:** an input ("Name, email or group"), then the people with access. The owner comes first; the others each have a permission pill ("Can edit ▾").

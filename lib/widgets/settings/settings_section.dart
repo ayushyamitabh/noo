@@ -5,7 +5,7 @@ import '../noo/noo_layout.dart';
 import '../noo/overlays/noo_dialog.dart';
 import '../noo/overlays/noo_sheet.dart';
 
-/// One block of Settings (DESIGN_SYSTEM.md 4's 8-part order): a
+/// One block of Settings (DESIGN_SYSTEM.md 4's 9-part order): a
 /// [NooGroupedList] on mobile (label above a radius-20 card), or a titled,
 /// bordered radius-20 card holding a flat row group on desktop
 /// ("Mobile uses one column of grouped lists. Desktop uses a 2-column grid
@@ -31,11 +31,13 @@ class SettingsSection extends StatelessWidget {
       return NooGroupedList(
         label: title,
         footer: subtitle != null ? Text(subtitle!) : null,
-        // Every mobile Settings section is individually collapsible,
-        // expanded by default - replaces the old trailing jump rail (see
-        // `account_view.dart`'s doc comment) as the way to navigate a long
-        // Settings screen quickly.
-        collapsible: true,
+        // Not collapsible: each mobile Settings section now renders on its
+        // own pushed screen (see `account_view.dart`'s doc comment for the
+        // menu-then-pushed-screen pattern), so there's no long single-scroll
+        // page left to collapse sections *within* - an earlier design had
+        // every section inline in one column and made them individually
+        // collapsible for exactly that reason; that's gone now that each
+        // one is already isolated on its own screen.
         children: children,
       );
     }
