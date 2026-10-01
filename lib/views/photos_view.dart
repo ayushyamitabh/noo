@@ -342,7 +342,11 @@ class _PhotosViewState extends State<PhotosView> {
             itemCount: group.items.length,
             columns: isDesktop
                 ? NooPhotoGrid.desktopColumns
-                : NooPhotoGrid.mobileColumns,
+                : NooLayout.gridColumns(
+                    context,
+                    phone: NooPhotoGrid.mobileColumns,
+                    minTile: 130,
+                  ),
             gap: isDesktop ? NooPhotoGrid.desktopGap : NooPhotoGrid.mobileGap,
             padding: EdgeInsets.symmetric(
               horizontal: isDesktop ? NooLayout.gutter(context) : 0,

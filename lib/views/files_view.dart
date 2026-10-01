@@ -754,7 +754,9 @@ class _FilesViewState extends State<FilesView> {
           ),
           sliver: SliverGrid(
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: isDesktop ? 5 : 2,
+              crossAxisCount: isDesktop
+                  ? 5
+                  : NooLayout.gridColumns(context, phone: 2, minTile: 180),
               childAspectRatio: isDesktop ? 1.05 : 0.92,
               crossAxisSpacing: isDesktop ? 16 : 10,
               mainAxisSpacing: isDesktop ? 16 : 10,
@@ -1323,6 +1325,9 @@ class _FilesViewState extends State<FilesView> {
       selected: isSelected,
       thumbnail: _rowThumbnail(context, item, session, NooFileTileSize.desktop),
       onTap: () => _handleItemTap(context, item, picking: picking),
+      onLongPress: _offline || (picking && !pick.pickRequest!.allowMultiple)
+          ? null
+          : () => _toggleSelection(item),
       onMore: !_isSelecting && !picking
           ? () => _showItemActions(context, item)
           : null,

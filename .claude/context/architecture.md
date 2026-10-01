@@ -275,7 +275,9 @@ bare system prompt gives no context on its own.
 
 `MainShellView` builds its chrome from the Noo nav kit
 (`widgets/noo/nav/`) and switches between two layouts on
-`NooLayout.isDesktop`:
+`NooLayout.isDesktop` (width >= 900dp *and* shortest side >= 600dp, so a
+phone in landscape keeps the mobile layout and only tablet-class windows get
+the sidebar):
 
 - **Mobile:** `AppTopBar` (`widgets/app_top_bar.dart`) wraps `NooTopBar`
   for *every* tab (previously only Files had shell-level top chrome, with

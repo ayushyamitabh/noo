@@ -48,58 +48,68 @@ class NooToolbar extends StatelessWidget implements PreferredSizeWidget {
        );
 
   @override
-  Size get preferredSize => const Size.fromHeight(NooSizes.toolbar);
+  Size get preferredSize => const Size.fromHeight(outerHeight);
+
+  static const _margin = EdgeInsets.fromLTRB(12, 8, 12, 4);
+
+  /// Bar height plus the margin that makes it float.
+  static const double outerHeight = NooSizes.toolbar + 12;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.nooColors;
     final titleStyle = NooText.title.copyWith(height: 1, color: colors.fg1);
 
-    return Material(
-      color: backgroundColor ?? colors.surface,
-      child: Container(
-        height: NooSizes.toolbar,
-        padding: const EdgeInsetsDirectional.only(start: 24, end: 20),
-        decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: colors.line)),
+    return Padding(
+      padding: _margin,
+      child: Material(
+        color: backgroundColor ?? colors.surface,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(NooRadii.card),
+          side: BorderSide(color: colors.line),
         ),
-        child: Row(
-          spacing: 12,
-          children: [
-            if (showHistoryNav)
-              Padding(
-                padding: const EdgeInsetsDirectional.only(end: 4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  spacing: 4,
-                  children: [
-                    _HistoryButton(
-                      icon: LucideIcons.chevronLeft,
-                      tooltip: 'Back',
-                      onTap: onBack,
-                    ),
-                    _HistoryButton(
-                      icon: LucideIcons.chevronRight,
-                      tooltip: 'Forward',
-                      onTap: onForward,
-                    ),
-                  ],
+        child: Container(
+          height: NooSizes.toolbar,
+          padding: const EdgeInsetsDirectional.only(start: 24, end: 20),
+          child: Row(
+            spacing: 12,
+            children: [
+              if (showHistoryNav)
+                Padding(
+                  padding: const EdgeInsetsDirectional.only(end: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: 4,
+                    children: [
+                      _HistoryButton(
+                        icon: LucideIcons.chevronLeft,
+                        tooltip: 'Back',
+                        onTap: onBack,
+                      ),
+                      _HistoryButton(
+                        icon: LucideIcons.chevronRight,
+                        tooltip: 'Forward',
+                        onTap: onForward,
+                      ),
+                    ],
+                  ),
+                ),
+              Expanded(
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: DefaultTextStyle(
+                    style: titleStyle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    child: titleWidget ?? Text(title ?? ''),
+                  ),
                 ),
               ),
-            Expanded(
-              child: Align(
-                alignment: AlignmentDirectional.centerStart,
-                child: DefaultTextStyle(
-                  style: titleStyle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  child: titleWidget ?? Text(title ?? ''),
-                ),
-              ),
-            ),
-            if (search != null) SizedBox(width: 260, child: search),
-            ...actions,
-          ],
+              if (search != null) SizedBox(width: 260, child: search),
+              ...actions,
+            ],
+          ),
         ),
       ),
     );

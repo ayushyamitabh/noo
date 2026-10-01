@@ -48,6 +48,8 @@ class SettingsAppearanceSection extends StatelessWidget {
       children: [
         SettingsSection(
           title: 'Appearance',
+          notice:
+              'Bottom bar style, menu style and search in bottom bar have no effect on wide tablets, which use a sidebar.',
           children: [
             _ThemeRow(settings: settings),
             _BottomBarStyleRow(settings: settings),

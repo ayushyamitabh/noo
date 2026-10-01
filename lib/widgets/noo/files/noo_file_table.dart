@@ -154,6 +154,7 @@ class NooFileTableRow extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onDoubleTap;
   final VoidCallback? onSecondaryTap;
+  final VoidCallback? onLongPress;
 
   /// Overflow menu tap. The button is hidden when null.
   final VoidCallback? onMore;
@@ -171,6 +172,7 @@ class NooFileTableRow extends StatelessWidget {
     this.onTap,
     this.onDoubleTap,
     this.onSecondaryTap,
+    this.onLongPress,
     this.onMore,
   });
 
@@ -193,6 +195,7 @@ class NooFileTableRow extends StatelessWidget {
         onTap: onTap,
         onDoubleTap: onDoubleTap,
         onSecondaryTap: onSecondaryTap,
+        onLongPress: onLongPress,
         child: SizedBox(
           height: NooSizes.rowDesktop,
           child: _TableColumns(

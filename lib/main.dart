@@ -444,70 +444,73 @@ class _MainShellViewState extends State<MainShellView> {
     if (isDesktop) {
       scaffold = Scaffold(
         backgroundColor: colors.bg,
-        body: Row(
-          children: [
-            NooSidebar(
-              account: NooSidebarAccount(
-                avatar: NooAvatar(
-                  initials: accountInitial(session.username),
-                  current: true,
-                  size: 32,
+        // Tablets keep the system bars, so inset for them (desktop's
+        // insets are zero).
+        body: SafeArea(
+          child: Row(
+            children: [
+              NooSidebar(
+                account: NooSidebarAccount(
+                  avatar: NooAvatar(
+                    initials: accountInitial(session.username),
+                    current: true,
+                    size: 32,
+                  ),
+                  name: session.username,
+                  subtitle: serverHost(session.serverUrl),
+                  onTap: () => showAccountSwitcher(context),
                 ),
-                name: session.username,
-                subtitle: serverHost(session.serverUrl),
-                onTap: () => showAccountSwitcher(context),
-              ),
-              items: [
-                for (final tab in pinnedTabs)
-                  NooSidebarItem(
-                    icon: tab.icon,
-                    label: tab.label,
-                    count: trashBadge(tab),
-                    selected: tab == selectedTab,
-                    onTap: () => selectTab(tab),
-                  ),
-                if (hiddenTabs.isNotEmpty) const NooSidebarDivider(),
-                for (final tab in hiddenTabs)
-                  NooSidebarItem(
-                    icon: tab.icon,
-                    label: tab.label,
-                    count: trashBadge(tab),
-                    selected: tab == selectedTab,
-                    onTap: () => selectTab(tab),
-                  ),
-              ],
-              storage: NooSidebarStorage(
-                value: quotaFraction(quota),
-                detail: quotaDetail(quota),
-              ),
-              settings: NooSidebarItem(
-                icon: LucideIcons.settings,
-                label: 'Settings',
-                onTap: () => openSettings(context),
-              ),
-            ),
-            Expanded(
-              child: Column(
-                children: [
-                  NooToolbar(
-                    title: selectedTab.label,
-                    search: const ShellSearchLauncher(onSurface: true),
-                    actions: [
-                      if (canUpload)
-                        NooButton(
-                          icon: LucideIcons.upload,
-                          onTap: () => showCreateMenu(context),
-                          child: const Text('Upload'),
-                        ),
-                    ],
-                  ),
-                  Expanded(
-                    child: ColoredBox(color: colors.surface, child: tabStack),
-                  ),
+                items: [
+                  for (final tab in pinnedTabs)
+                    NooSidebarItem(
+                      icon: tab.icon,
+                      label: tab.label,
+                      count: trashBadge(tab),
+                      selected: tab == selectedTab,
+                      onTap: () => selectTab(tab),
+                    ),
+                  for (final tab in hiddenTabs)
+                    NooSidebarItem(
+                      icon: tab.icon,
+                      label: tab.label,
+                      count: trashBadge(tab),
+                      selected: tab == selectedTab,
+                      onTap: () => selectTab(tab),
+                    ),
                 ],
+                storage: NooSidebarStorage(
+                  value: quotaFraction(quota),
+                  detail: quotaDetail(quota),
+                ),
+                settings: NooSidebarItem(
+                  icon: LucideIcons.settings,
+                  label: 'Settings',
+                  onTap: () => openSettings(context),
+                ),
               ),
-            ),
-          ],
+              Expanded(
+                child: Column(
+                  children: [
+                    NooToolbar(
+                      title: selectedTab.label,
+                      search: const ShellSearchLauncher(onSurface: true),
+                      actions: [
+                        if (canUpload)
+                          NooButton(
+                            icon: LucideIcons.upload,
+                            onTap: () => showCreateMenu(context),
+                            child: const Text('Upload'),
+                          ),
+                      ],
+                    ),
+                    Expanded(
+                      child: ColoredBox(color: colors.surface, child: tabStack),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       );
     } else {

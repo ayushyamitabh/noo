@@ -80,10 +80,10 @@ Catalog:
 | Folder | Components |
 |---|---|
 | `core/` | `NooButton`, `NooFab`, `NooChip`, `NooSegmentedControl`, `NooToggle`, `NooSearchField`, `NooAvatar`, `NooBadge`, `NooProgressBar` |
-| `lists/` | `NooGroupedList`, `NooSettingsRow`, `NooTabOrderRow`, `NooBanner`, `NooSummaryCard`, `NooSelectionBar` |
+| `lists/` | `NooGroupedList`, `NooSettingsRow`, `NooTabOrderRow`, `NooBanner`, `NooInfoNote` (tinted info callout; `SettingsSection(notice:)`), `NooSummaryCard`, `NooSelectionBar` |
 | `files/` | `NooFileKind` (spec §1.2 tiles; `NooFileKind.from(name:, mimeType:, isDirectory:)`), `NooFileTile`, `NooStatusIcon`/`NooSyncStatus`, `NooFileRow` (mobile 64px), `NooFileTableHeader`/`NooFileTableRow` (desktop), `NooSwipeAction` |
 | `media/` | `NooGridCard`, `NooPhotoTile` (video badge, selection), `NooPhotoGroupHeader`/`NooPhotoGrid` (sliver, or `.box`), `NooActivityItem`, `NooStatCard` |
-| `nav/` | `NooBottomBar`, `NooTopBar` (a `PreferredSizeWidget`) with `NooTopBarButton`/`NooTopBarBack`, `NooDrawer` with its `Account`/`Storage`/`Item`/`Link` parts, `NooSidebar` with `NooSidebarItem`/`Divider`/`Account`/`Storage`, `NooToolbar` |
+| `nav/` | `NooBottomBar`, `NooTopBar` (a `PreferredSizeWidget`) with `NooTopBarButton`/`NooTopBarBack`, `NooDrawer` with its `Account`/`Storage`/`Item`/`Link` parts, `NooSidebar` with `NooSidebarItem`/`Divider`/`Account`/`Storage`, `NooToolbar` (floating rounded card with margin; `NooToolbar.outerHeight` for `appBar` sizing) |
 | `overlays/` | `showNooSheet`, `showNooDialog`/`NooDialog`, `NooOverlayHeader`, `NooTextField`, and the share parts `NooShareSection`, `NooPersonAccessRow`, `NooPermissionPill` |
 
 Gotchas:
@@ -336,3 +336,17 @@ blocks are noted where they matter:
 Markdown files (`.md`/`.markdown`) in `MediaTextPreview` open rendered via `flutter_markdown_plus` (`Markdown`, styled from Noo tokens in `_markdownStyle`), with a top-right Edit/Preview toggle (hidden for read-only offline copies). Other text files go straight to the editor.
 
 `ShareSheet`: focusing the people search field does not scroll; once the user types, `_revealPeopleSection` animates the "Share with people" section (keyed by `_peopleKey` on the `NooShareSection`, not the inner column) to just below the sheet's top edge with a small gap.
+
+## Desktop/tablet layout notes
+
+- The desktop branch in `main.dart` is wrapped in `SafeArea` so tablets keep
+  system bars clear of the sidebar; the sidebar has no divider between pinned
+  and hidden tabs.
+- Desktop Settings is the same two-level menu as mobile (centered 640px column, back button in the floating toolbar); the
+  pushed category screens render the desktop card layout.
+- Settings that don't apply in wide-tablet (Appearance nav options,
+  Swipe on a file) show a `NooInfoNote` via `SettingsSection.notice`.
+- Mobile-layout grids (Files, Favorites, move/copy picker, share upload,
+  Photos) take their column count from `NooLayout.gridColumns` (min tile
+  width, never below the phone count), so a tablet in portrait gets more
+  columns rather than a few huge tiles.

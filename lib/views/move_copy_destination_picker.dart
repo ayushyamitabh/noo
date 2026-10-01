@@ -284,7 +284,9 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
           padding: EdgeInsets.symmetric(horizontal: gutter),
           sliver: SliverGrid(
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: desktop ? 5 : 2,
+              crossAxisCount: desktop
+                  ? 5
+                  : NooLayout.gridColumns(context, phone: 2, minTile: 180),
               childAspectRatio: desktop ? 1.05 : 0.92,
               crossAxisSpacing: desktop ? 16 : 10,
               mainAxisSpacing: desktop ? 16 : 10,

@@ -20,11 +20,8 @@ import '../widgets/settings/settings_tabs.dart';
 /// order: account card, accounts, security, file sync, files cache,
 /// appearance, tabs, action bar, swipe on a file).
 ///
-/// Desktop is unchanged: a 2-column grid of cards ([_DesktopGrid]) wide
-/// enough to see every section at once, so it has no scroll-depth problem
-/// and needs no menu.
-///
-/// Mobile is a two-level menu, the way native iOS/Android Settings apps
+/// Every layout (including wide tablet, in a centered 640px column) is
+/// a two-level menu, the way native iOS/Android Settings apps
 /// work: [SettingsAccountCard] (the account summary, not a settings picker)
 /// stays pinned at the top of a single top-level list ([_MobileMenu]), and
 /// every other section becomes one tappable [NooSettingsRow] - icon, title,
@@ -46,18 +43,6 @@ import '../widgets/settings/settings_tabs.dart';
 /// "Advanced appearance".
 class AccountView extends StatelessWidget {
   const AccountView({super.key});
-
-  static const _sections = <Widget>[
-    SettingsAccountCard(),
-    SettingsAccountsSection(),
-    SettingsSecuritySection(),
-    SettingsFileSyncSection(),
-    SettingsFilesCacheSection(),
-    SettingsAppearanceSection(),
-    SettingsTabsSection(),
-    SettingsActionBarSection(),
-    SettingsSwipeSection(),
-  ];
 
   static final _categories = <_SettingsCategory>[
     _SettingsCategory(
@@ -110,7 +95,7 @@ class AccountView extends StatelessWidget {
     return Scaffold(
       backgroundColor: colors.bg,
       appBar: desktop
-          ? const NooToolbar(title: 'Settings')
+          ? _desktopBar(context, 'Settings')
           : NooTopBar(
               style: NooLayout.navStyle(context),
               title: 'Settings',
@@ -119,7 +104,12 @@ class AccountView extends StatelessWidget {
       body: SafeArea(
         top: false,
         child: desktop
-            ? _DesktopGrid(sections: _sections)
+            ? Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 640),
+                  child: _MobileMenu(categories: _categories),
+                ),
+              )
             : _MobileMenu(categories: _categories),
       ),
     );
@@ -207,78 +197,61 @@ class _SettingsCategoryScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.nooColors;
+    final desktop = NooLayout.isDesktop(context);
 
     return Scaffold(
       backgroundColor: colors.bg,
-      appBar: NooTopBar(
-        style: NooLayout.navStyle(context),
-        title: category.title,
-        leading: const NooTopBarBack(),
-      ),
+      appBar: desktop
+          ? _desktopBar(context, category.title)
+          : NooTopBar(
+              style: NooLayout.navStyle(context),
+              title: category.title,
+              leading: const NooTopBarBack(),
+            ),
       body: SafeArea(
         top: false,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(
-            NooSpace.sm,
-            NooSpace.sm,
-            NooSpace.sm,
-            NooSpace.xxl,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: desktop ? 640 : double.infinity,
+            ),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(
+                NooSpace.sm,
+                NooSpace.sm,
+                NooSpace.sm,
+                NooSpace.xxl,
+              ),
+              physics: const BouncingScrollPhysics(),
+              children: [category.builder(context)],
+            ),
           ),
-          physics: const BouncingScrollPhysics(),
-          children: [category.builder(context)],
         ),
       ),
     );
   }
 }
 
-/// Splits the sections between two columns rather than a strict grid, since
-/// each card's content height varies a lot (the tab reorder list and the
-/// accounts list can both run much taller than, say, Security) - a fixed
-/// grid would either clip content or leave large gaps.
-class _DesktopGrid extends StatelessWidget {
-  final List<Widget> sections;
-  const _DesktopGrid({required this.sections});
-
-  @override
-  Widget build(BuildContext context) {
-    final left = <Widget>[];
-    final right = <Widget>[];
-    for (var i = 0; i < sections.length; i++) {
-      (i.isEven ? left : right).add(sections[i]);
-    }
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(NooSpace.xl),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 1040),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+PreferredSizeWidget _desktopBar(BuildContext context, String title) {
+  final top = MediaQuery.paddingOf(context).top;
+  return PreferredSize(
+    preferredSize: Size.fromHeight(NooToolbar.outerHeight + top),
+    child: Padding(
+      padding: EdgeInsets.only(top: top),
+      child: NooToolbar(
+        titleWidget: Row(
+          mainAxisSize: MainAxisSize.min,
+          spacing: NooSpace.sm,
           children: [
-            Expanded(child: _Column(children: left)),
-            const SizedBox(width: NooSpace.xl),
-            Expanded(child: _Column(children: right)),
+            IconButton(
+              icon: const Icon(LucideIcons.arrowLeft),
+              tooltip: 'Back',
+              onPressed: () => Navigator.maybePop(context),
+            ),
+            Text(title),
           ],
         ),
       ),
-    );
-  }
-}
-
-class _Column extends StatelessWidget {
-  final List<Widget> children;
-  const _Column({required this.children});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final child in children) ...[
-          child,
-          const SizedBox(height: NooSpace.xl),
-        ],
-      ],
-    );
-  }
+    ),
+  );
 }

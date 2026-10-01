@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../theme/design_tokens.dart';
 import '../noo/lists/noo_grouped_list.dart';
+import '../noo/lists/noo_info_note.dart';
 import '../noo/noo_layout.dart';
 import '../noo/overlays/noo_dialog.dart';
 import '../noo/overlays/noo_sheet.dart';
@@ -17,10 +18,14 @@ class SettingsSection extends StatelessWidget {
   final String? subtitle;
   final List<Widget> children;
 
+  /// Shown as a prominent [NooInfoNote] above the rows.
+  final String? notice;
+
   const SettingsSection({
     super.key,
     required this.title,
     this.subtitle,
+    this.notice,
     required this.children,
   });
 
@@ -28,7 +33,7 @@ class SettingsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.nooColors;
     if (!NooLayout.isDesktop(context)) {
-      return NooGroupedList(
+      final list = NooGroupedList(
         label: title,
         footer: subtitle != null ? Text(subtitle!) : null,
         // Not collapsible: each mobile Settings section now renders on its
@@ -39,6 +44,15 @@ class SettingsSection extends StatelessWidget {
         // collapsible for exactly that reason; that's gone now that each
         // one is already isolated on its own screen.
         children: children,
+      );
+      if (notice == null) return list;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          NooInfoNote(message: notice!),
+          const SizedBox(height: NooSpace.md),
+          list,
+        ],
       );
     }
     return Container(
@@ -57,6 +71,10 @@ class SettingsSection extends StatelessWidget {
             Text(subtitle!, style: NooText.meta.copyWith(color: colors.fg3)),
           ],
           const SizedBox(height: NooSpace.md),
+          if (notice != null) ...[
+            NooInfoNote(message: notice!),
+            const SizedBox(height: NooSpace.md),
+          ],
           FlatRowGroup(children: children),
         ],
       ),

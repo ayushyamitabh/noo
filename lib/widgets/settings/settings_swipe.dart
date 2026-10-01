@@ -37,7 +37,11 @@ class SettingsSwipeSection extends StatelessWidget {
           NooSettingsRow(
             label: Text(_swipeActionLabel(action)),
             trailing: action == current
-                ? Icon(LucideIcons.check, size: 18, color: context.nooColors.accentText)
+                ? Icon(
+                    LucideIcons.check,
+                    size: 18,
+                    color: context.nooColors.accentText,
+                  )
                 : null,
             onTap: () {
               onChanged(action);
@@ -55,6 +59,7 @@ class SettingsSwipeSection extends StatelessWidget {
     return SettingsSection(
       title: 'Swipe on a file',
       subtitle: 'Choose what swiping a file left or right does in list view',
+      notice: 'Swipe actions have no effect on wide tablets.',
       children: [
         NooSettingsRow(
           icon: LucideIcons.chevronsRight,

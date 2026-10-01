@@ -586,7 +586,9 @@ class _FavoritesViewState extends State<FavoritesView> {
           ),
           sliver: SliverGrid(
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: isDesktop ? 5 : 2,
+              crossAxisCount: isDesktop
+                  ? 5
+                  : NooLayout.gridColumns(context, phone: 2, minTile: 180),
               crossAxisSpacing: isDesktop ? 16 : 10,
               mainAxisSpacing: isDesktop ? 16 : 10,
               childAspectRatio: isDesktop ? 0.92 : 0.85,
