@@ -1,0 +1,17 @@
+# <Summary: imperative, sentence case, no trailing period, <= 72 chars>
+#
+# Why is this change needed? What does it do? Wrap lines at 72 chars.
+# Explain the "why"; the diff already shows the "what".
+#
+# Examples of good summaries:
+#   Fix PDF zoom not returning to fit-width
+#   Add Upload button size setting
+#   Bump to 1.0.2+5
+#
+# Closes #<issue>
+#
+# Trailers (keep the ones that apply):
+# Co-Authored-By: Name <email>
+# ----------------------------------------------------------------------
+# Lines starting with '#' are ignored. Enable this template once with:
+#   git config commit.template .gitmessage

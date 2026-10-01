@@ -1,26 +1,39 @@
 # Noo
 
 A fast, native [Nextcloud](https://nextcloud.com) client built with Flutter
-and Material You.
+and Material 3.
 
-Noo gives you a clean, modern way to browse and manage the files on your own
-Nextcloud server — files, photos, shares, activity, and trash, all in one
-app, themed to match your device.
+Noo is a clean, modern way to browse and manage the files on your own
+Nextcloud server: files, photos, shares, activity, and trash in one app,
+themed to match your device and laid out for both phones and tablets.
+
+Website: <https://noo.ayushya.dev>
+
+> Noo is an independent, unofficial client. It is not affiliated with or
+> endorsed by Nextcloud GmbH.
 
 ## Features
 
-- **Files** — browse, upload, move, rename, delete, and favorite files and
-  folders; sort and filter per folder
-- **Photos** — a dedicated media gallery with a full-screen viewer for images
-  and video
-- **Activity** — a feed of what's changed on your server
-- **Shares** — see and manage what you've shared and what's shared with you
-- **Trash** — restore or permanently delete recently removed items
-- **Material You theming** — dynamic color on supported devices, five
-  built-in accent colors, light/dark/AMOLED
-- **Secure sign-in** — authenticates via Nextcloud's Login Flow v2: you sign
-  in through your browser, and Noo never sees or stores your password,
-  only a scoped app token
+- **Files**: browse, upload, move, copy, rename, delete, and favorite files
+  and folders; sort and filter per folder; list or grid view
+- **Photos**: a media gallery with a full-screen viewer for images and video
+- **Viewer**: images, video, PDF (pinch to zoom), Markdown and text, with a
+  pull-up details panel (info, activity, sharing)
+- **Shares, Recent, Favorites, Activity, Trash**: see and manage what you
+  have shared, what changed, and what you deleted
+- **Search** across your server
+- **Offline and sync**: keep files available offline and sync chosen folders
+  in the background
+- **Multiple accounts**: switch between saved accounts from the avatar menu
+- **App lock**: optionally require device authentication to open the app,
+  switch accounts, or reveal hidden files
+- **Share to Noo**: upload from any app's share sheet
+- **Make it yours**: Material You dynamic color, five accent colors,
+  light/dark/AMOLED, attached or floating bottom bar, hamburger or avatar
+  navigation, adjustable upload button, and a tablet layout with a sidebar
+- **Secure sign-in**: authenticates through Nextcloud's Login Flow v2. You
+  sign in through your browser, and Noo never sees or stores your password,
+  only a scoped app password
 
 ## Screenshots
 
@@ -31,6 +44,7 @@ _Coming soon._
 Prerequisites:
 
 - [Flutter](https://docs.flutter.dev/get-started/install) (SDK `^3.12.2`)
+- An Android device or emulator, an iOS device, or Windows
 - A Nextcloud server with Login Flow v2 enabled (on by default since
   Nextcloud 15)
 
@@ -39,38 +53,63 @@ flutter pub get
 flutter run
 ```
 
-On first launch, enter your server's address — Noo opens your browser to
+On first launch, enter your server's address. Noo opens your browser to
 finish signing in.
-
-## Supported platforms
-
-Android, iOS, and Windows.
 
 ## Building
 
 ```bash
-flutter build apk       # Android
+flutter build apk       # Android (debug-signed unless you configure a key)
 flutter build ios       # iOS
 flutter build windows   # Windows
 ```
 
+Release builds read signing details from `android/key.properties` or from
+`RELEASE_KEYSTORE_*` environment variables (see `android/app/build.gradle.kts`).
+Neither the keystore nor `key.properties` is, or should ever be, committed.
+Without them, release builds fall back to debug signing.
+
 ## Tech stack
 
 Flutter with Material 3, [`provider`](https://pub.dev/packages/provider) for
-state management, and `http`/`dio` talking directly to Nextcloud's WebDAV
-and OCS APIs — no bundled Nextcloud SDK.
+state management, and `http`/`dio` talking directly to Nextcloud's WebDAV and
+OCS APIs, with no bundled Nextcloud SDK. Android has native workers for
+transfers and background sync.
 
 ## Contributing
 
-Project context for contributors (human or AI) lives in
-[`CLAUDE.md`](CLAUDE.md) and `.claude/context/` — architecture, the server
-integration, styling conventions, and code standards.
+Contributions are welcome. Please read [`CONTRIBUTING.md`](CONTRIBUTING.md)
+first. In short:
 
 ```bash
 flutter test      # run tests
 flutter analyze   # static analysis / lints
 ```
 
+Architecture, server integration, styling conventions, and code standards are
+documented in [`CLAUDE.md`](CLAUDE.md) and `.claude/context/`, written for
+both human and AI contributors.
+
+## Privacy
+
+Noo talks only to the Nextcloud server you point it at. It has no analytics
+and no third-party tracking. Read the full [privacy policy](https://noo.ayushya.dev/privacy).
+
+## Acknowledgements
+
+Typefaces [Instrument Sans](https://fonts.google.com/specimen/Instrument+Sans)
+and [Schibsted Grotesk](https://fonts.google.com/specimen/Schibsted+Grotesk)
+are bundled under the SIL Open Font License, and icons are from
+[Lucide](https://lucide.dev). Those keep their own licenses; the license
+below covers Noo's own code and assets.
+
 ## License
 
-Not yet licensed for redistribution — license TBD.
+Noo is source-available under the
+[PolyForm Shield License 1.0.0](LICENSE). In plain terms: you may read, build,
+run, and modify the code, and contribute changes back, but you may not use it
+to make a product or service that competes with Noo. Please do not republish
+it as your own app.
+
+Contributions are welcome under the terms in
+[`CONTRIBUTING.md`](CONTRIBUTING.md).
