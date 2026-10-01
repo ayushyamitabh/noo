@@ -1538,6 +1538,22 @@ class NextcloudService {
     return response.statusCode == 200;
   }
 
+  /// Changes a share's permission bitmask (1 read, 2 update, 4 create,
+  /// 8 delete, 16 reshare).
+  Future<bool> updateSharePermissions(String shareId, int permissions) async {
+    final url =
+        '$_cleanServerUrl/ocs/v2.php/apps/files_sharing/api/v1/shares/$shareId?format=json';
+    debugPrint('[Nextcloud OCS] Updating share $shareId permissions');
+
+    final response = await http.put(
+      Uri.parse(url),
+      headers: _headers,
+      body: {'permissions': '$permissions'},
+    );
+    debugPrint('[Nextcloud OCS] Update share status: ${response.statusCode}');
+    return response.statusCode == 200;
+  }
+
   NextcloudShare _shareFromJson(Map raw, {required bool sharedWithMe}) {
     final path = (raw['path'] ?? '/').toString();
     final segments = path.split('/').where((s) => s.isNotEmpty).toList();

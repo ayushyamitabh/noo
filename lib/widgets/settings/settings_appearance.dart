@@ -70,6 +70,13 @@ class SettingsAppearanceSection extends StatelessWidget {
         ),
         const SizedBox(height: NooSpace.xl),
         SettingsSection(
+          title: 'Upload button',
+          notice:
+              'Auto shows the label on Files and Photos and shrinks to an icon on other tabs. Mini and Expanded stay the same on every tab. Has no effect on wide tablets.',
+          children: [_FabStyleRow(settings: settings)],
+        ),
+        const SizedBox(height: NooSpace.xl),
+        SettingsSection(
           title: 'Advanced appearance',
           children: [
             NooSettingsRow(
@@ -283,6 +290,64 @@ class _NavMenuStyleRow extends StatelessWidget {
                   value: NooNavMenuStyle.avatarMenu,
                   icon: LucideIcons.userRound,
                   label: 'Avatar',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FabStyleRow extends StatelessWidget {
+  final SettingsController settings;
+
+  const _FabStyleRow({required this.settings});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.nooColors;
+    return Material(
+      color: colors.surface,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: NooSpace.md,
+          vertical: 12,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(LucideIcons.circlePlus, size: 20, color: colors.fg2),
+                const SizedBox(width: 14),
+                Text(
+                  'Upload button size',
+                  style: NooText.bodyL.copyWith(color: colors.fg1),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            NooSegmentedControl<FabStyle>(
+              fill: true,
+              value: settings.fabStyle,
+              onChanged: settings.setFabStyle,
+              options: const [
+                NooSegmentOption(
+                  value: FabStyle.auto,
+                  icon: LucideIcons.wandSparkles,
+                  label: 'Auto',
+                ),
+                NooSegmentOption(
+                  value: FabStyle.mini,
+                  icon: LucideIcons.minimize2,
+                  label: 'Mini',
+                ),
+                NooSegmentOption(
+                  value: FabStyle.expanded,
+                  icon: LucideIcons.maximize2,
+                  label: 'Expanded',
                 ),
               ],
             ),

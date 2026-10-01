@@ -19,6 +19,7 @@ import 'noo/core/noo_avatar.dart';
 import 'noo/core/noo_button.dart';
 import 'noo/core/noo_chip.dart';
 import 'noo/core/noo_toggle.dart';
+import 'noo/lists/noo_grouped_list.dart';
 import 'noo/lists/noo_settings_row.dart';
 import 'noo/media/noo_photo_tile.dart';
 import 'noo/noo_layout.dart';
@@ -98,6 +99,8 @@ class _ShareSheetState extends State<ShareSheet> {
   bool _isSearching = false;
   bool _isAddingPerson = false;
   bool _isTogglingLink = false;
+  String? _pendingShareeKey;
+  final Set<String> _updatingShareIds = {};
   bool _isSharingFile = false;
   bool _showInherited = false;
   final _peopleController = TextEditingController();
@@ -183,15 +186,20 @@ class _ShareSheetState extends State<ShareSheet> {
     }
   }
 
+  String _shareeKey(NextcloudSharee s) => '${s.shareTypeValue}:${s.shareWith}';
+
   Future<void> _addSharee(NextcloudSharee sharee) async {
+    if (_pendingShareeKey != null) return;
     final ops = context.read<ItemOperations>();
     final messenger = ScaffoldMessenger.of(context);
+    setState(() => _pendingShareeKey = _shareeKey(sharee));
     final share = await ops.createShare(
       path: widget.item.path,
       shareType: sharee.shareTypeValue,
       shareWith: sharee.shareWith,
     );
     if (!mounted) return;
+    setState(() => _pendingShareeKey = null);
     if (share == null) {
       messenger.showSnackBar(
         const SnackBar(
@@ -353,32 +361,89 @@ class _ShareSheetState extends State<ShareSheet> {
     }
   }
 
-  /// A small popup with the one action the compact [NooPersonAccessRow]
-  /// permission pill has no room for - removing that person's access. There's
-  /// no permission-update endpoint on [ItemOperations] yet, so the pill
-  /// itself is read-only (see the rebuild report).
+  /// Permission menu for a person row: Can view / Can edit, then removing
+  /// access. Keeps the reshare bit (16) as it was.
   void _openPersonMenu(NextcloudShare share) {
     final label = share.sharedWithDisplayName ?? 'Shared';
+    final canEdit = (share.permissions & 2) != 0;
+
     void remove() {
       Navigator.pop(context);
       _removeShare(share);
     }
 
-    final row = NooSettingsRow(
-      icon: LucideIcons.userMinus,
-      label: const Text('Remove access'),
-      danger: true,
-      onTap: remove,
+    void choose(bool edit) {
+      Navigator.pop(context);
+      _setPermission(share, edit);
+    }
+
+    Widget check(bool on) => Icon(
+      LucideIcons.check,
+      size: 18,
+      color: on ? context.nooColors.accentText : Colors.transparent,
     );
+
+    final rows = <Widget>[
+      NooSettingsRow(
+        icon: LucideIcons.eye,
+        label: const Text('Can view'),
+        trailing: check(!canEdit),
+        onTap: () => choose(false),
+      ),
+      NooSettingsRow(
+        icon: LucideIcons.pencil,
+        label: const Text('Can edit'),
+        trailing: check(canEdit),
+        onTap: () => choose(true),
+      ),
+      NooSettingsRow(
+        icon: LucideIcons.userMinus,
+        label: const Text('Remove access'),
+        danger: true,
+        onTap: remove,
+      ),
+    ];
     if (NooLayout.isDesktop(context)) {
-      showNooDialog(context, title: label, children: [row]);
+      showNooDialog(
+        context,
+        title: label,
+        children: [Column(children: rows)],
+      );
     } else {
       showNooSheet(
         context,
         children: [
           NooOverlayHeader(title: label, onClose: () => Navigator.pop(context)),
-          row,
+          NooGroupedList(children: rows),
         ],
+      );
+    }
+  }
+
+  Future<void> _setPermission(NextcloudShare share, bool edit) async {
+    if (((share.permissions & 2) != 0) == edit) return;
+    final ops = context.read<ItemOperations>();
+    final messenger = ScaffoldMessenger.of(context);
+    final reshare = share.permissions & 16;
+    final base = edit ? (share.isFolder ? 15 : 3) : 1;
+    final permissions = base | reshare;
+    setState(() => _updatingShareIds.add(share.id));
+    final ok = await ops.updateSharePermissions(share, permissions);
+    if (!mounted) return;
+    setState(() => _updatingShareIds.remove(share.id));
+    if (ok) {
+      setState(() {
+        _shares = [
+          for (final s in _shares)
+            s.id == share.id ? s.withPermissions(permissions) : s,
+        ];
+      });
+    } else {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Could not change permission'),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     }
   }
@@ -416,7 +481,7 @@ class _ShareSheetState extends State<ShareSheet> {
         for (final sharee in _searchResults)
           InkWell(
             borderRadius: BorderRadius.circular(NooRadii.input),
-            onTap: () => _addSharee(sharee),
+            onTap: _pendingShareeKey == null ? () => _addSharee(sharee) : null,
             child: NooPersonAccessRow(
               avatar: NooAvatar(
                 initials: _initial(sharee.label),
@@ -427,7 +492,13 @@ class _ShareSheetState extends State<ShareSheet> {
               ),
               name: sharee.label,
               subtitle: sharee.subtitle,
-              trailing: const SizedBox.shrink(),
+              trailing: _pendingShareeKey == _shareeKey(sharee)
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const SizedBox.shrink(),
             ),
           ),
         if (_searchResults.isNotEmpty)
@@ -463,7 +534,10 @@ class _ShareSheetState extends State<ShareSheet> {
                       ? 'Invited by email'
                       : null),
             permission: (share.permissions & 2) != 0 ? 'Can edit' : 'Can view',
-            onPermissionTap: () => _openPersonMenu(share),
+            permissionLoading: _updatingShareIds.contains(share.id),
+            onPermissionTap: _updatingShareIds.contains(share.id)
+                ? null
+                : () => _openPersonMenu(share),
           ),
         if (_inherited.isNotEmpty) ...[
           const SizedBox(height: NooSpace.xs),
@@ -625,9 +699,22 @@ class _ShareSheetState extends State<ShareSheet> {
         const SizedBox(height: 22),
         NooShareSection(
           title: 'Share link',
-          trailing: NooToggle(
-            checked: hasLink,
-            onChanged: _isTogglingLink ? null : _toggleLink,
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_isTogglingLink) ...[
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: NooSpace.sm),
+              ],
+              NooToggle(
+                checked: hasLink,
+                onChanged: _isTogglingLink ? null : _toggleLink,
+              ),
+            ],
           ),
           caption: hasLink
               ? null

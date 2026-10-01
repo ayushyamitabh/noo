@@ -7,6 +7,7 @@ import '../providers/settings_controller.dart';
 import '../providers/trash_controller.dart';
 import '../theme/design_tokens.dart';
 import 'noo/core/noo_avatar.dart';
+import '../views/login_view.dart';
 import 'noo/core/noo_badge.dart';
 import 'noo/lists/noo_settings_row.dart';
 import 'shell/shell_common.dart';
@@ -43,8 +44,15 @@ Future<void> showAvatarMenu(BuildContext context) {
   );
 }
 
-class _AvatarMenuContent extends StatelessWidget {
+class _AvatarMenuContent extends StatefulWidget {
   const _AvatarMenuContent();
+
+  @override
+  State<_AvatarMenuContent> createState() => _AvatarMenuContentState();
+}
+
+class _AvatarMenuContentState extends State<_AvatarMenuContent> {
+  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
@@ -124,7 +132,7 @@ class _AvatarMenuContent extends StatelessWidget {
                         // header reads as a continuation of the button that
                         // opened it rather than a disconnected card.
                         InkWell(
-                          onTap: closeAndOpenSettings,
+                          onTap: () => setState(() => _expanded = !_expanded),
                           child: Padding(
                             padding: const EdgeInsets.all(NooSpace.md),
                             child: Row(
@@ -161,9 +169,86 @@ class _AvatarMenuContent extends StatelessWidget {
                                   current: true,
                                   size: 40,
                                 ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: colors.fg1.withValues(alpha: 0.08),
+                                  ),
+                                  child: Icon(
+                                    _expanded
+                                        ? LucideIcons.chevronUp
+                                        : LucideIcons.chevronDown,
+                                    size: 20,
+                                    color: colors.fg2,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
+                        ),
+                        AnimatedSize(
+                          duration: NooMotion.fast,
+                          curve: NooMotion.ease,
+                          alignment: Alignment.topCenter,
+                          child: _expanded
+                              ? Column(
+                                  children: [
+                                    for (final account in session.accounts)
+                                      if (account.id != session.activeAccountId)
+                                        _OtherAccountRow(
+                                          name: account.username,
+                                          host: serverHost(account.serverUrl),
+                                          onTap: () {
+                                            Navigator.pop(context);
+                                            session.switchAccount(account.id);
+                                          },
+                                        ),
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                        NooSpace.md,
+                                        0,
+                                        NooSpace.md,
+                                        NooSpace.md,
+                                      ),
+                                      child: Row(
+                                        spacing: 8,
+                                        children: [
+                                          Expanded(
+                                            child: _AccountButton(
+                                              icon: LucideIcons.userPlus,
+                                              label: 'Add Account',
+                                              onTap: () {
+                                                final nav = Navigator.of(
+                                                  context,
+                                                );
+                                                nav.pop();
+                                                nav.push(
+                                                  MaterialPageRoute(
+                                                    builder: (_) =>
+                                                        const LoginView(
+                                                          isAddingAccount: true,
+                                                        ),
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                          ),
+                                          Expanded(
+                                            child: _AccountButton(
+                                              icon: LucideIcons.users,
+                                              label: 'Manage Accounts',
+                                              onTap: closeAndOpenSettings,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : const SizedBox(width: double.infinity),
                         ),
                         if (hiddenTabs.isNotEmpty) ...[
                           Divider(height: 1, color: colors.line),
@@ -195,6 +280,103 @@ class _AvatarMenuContent extends StatelessWidget {
                 ),
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OtherAccountRow extends StatelessWidget {
+  final String name;
+  final String host;
+  final VoidCallback onTap;
+
+  const _OtherAccountRow({
+    required this.name,
+    required this.host,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.nooColors;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(NooSpace.md),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: NooText.bodyL.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: colors.fg1,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    host,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: NooText.meta.copyWith(color: colors.fg3),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            NooAvatar(initials: accountInitial(name), current: false, size: 40),
+            const SizedBox(width: 44),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AccountButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _AccountButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.nooColors;
+    final radius = BorderRadius.circular(NooRadii.input);
+    return Material(
+      color: colors.bg,
+      borderRadius: radius,
+      child: InkWell(
+        borderRadius: radius,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            spacing: 6,
+            children: [
+              Icon(icon, size: 18, color: colors.fg2),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: NooText.body.copyWith(color: colors.fg1),
+                ),
+              ),
+            ],
           ),
         ),
       ),

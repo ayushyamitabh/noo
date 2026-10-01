@@ -64,6 +64,10 @@ class _NooSheetBody extends StatefulWidget {
 class _NooSheetBodyState extends State<_NooSheetBody> {
   bool _needsPeek = false;
 
+  // Keeps the sheet's content (and its State) alive when the body swaps
+  // between the plain and draggable layouts, instead of rebuilding it.
+  final _contentKey = GlobalKey();
+
   void _handleOverflow(ScrollMetrics metrics) {
     if (_needsPeek || metrics.maxScrollExtent <= 0) return;
     // `ScrollMetricsNotification` is dispatched mid-layout; deferring avoids
@@ -84,6 +88,7 @@ class _NooSheetBodyState extends State<_NooSheetBody> {
         controller: scrollController,
         padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
         child: Column(
+          key: _contentKey,
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(

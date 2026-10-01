@@ -803,3 +803,11 @@ Flutter's own default to already be high enough.
 rather than relying on this async path throwing naturally.
 
 - `putBytes(path, bytes)` does a WebDAV `PUT` to overwrite a file; used by the text/markdown editor (`MediaTextPreview`).
+
+## Changing a share's permissions
+
+`NextcloudService.updateSharePermissions` does `PUT
+/ocs/v2.php/apps/files_sharing/api/v1/shares/{id}` with a `permissions`
+bitmask (1 read, 2 update, 4 create, 8 delete, 16 reshare). The share
+sheet's per-person pill opens a menu with Can view (1) / Can edit (3 for
+files, 15 for folders), keeping the existing reshare bit, plus Remove access.

@@ -520,6 +520,10 @@ class _MainShellViewState extends State<MainShellView> {
         drawerScrimColor: colors.scrim,
         // The top bar itself no longer lives here - see `tabStack` above.
         drawer: pickRequest == null ? const AppDrawer() : null,
+        // The avatar menu replaces the drawer, so the edge swipe must not
+        // open it either.
+        drawerEnableOpenDragGesture:
+            settings.navMenuStyle == NooNavMenuStyle.drawer,
         // Floating needs the body to draw behind the bar's own transparent
         // margin (see NooBottomBarStyle's doc comment) instead of stopping
         // short of it like attached does.
@@ -532,7 +536,11 @@ class _MainShellViewState extends State<MainShellView> {
         floatingActionButton:
             pickRequest == null && navStyle == NooNavStyle.android
             ? NooFab(
-                collapsed: !canUpload,
+                collapsed: switch (settings.fabStyle) {
+                  FabStyle.auto => !canUpload,
+                  FabStyle.mini => true,
+                  FabStyle.expanded => false,
+                },
                 barStyle: bottomBarStyle,
                 onTap: () => showCreateMenu(context),
               )

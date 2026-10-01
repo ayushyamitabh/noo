@@ -101,6 +101,7 @@ class FilesController extends ChangeNotifier
   NextcloudUserQuota? _quota;
   List<NextcloudActivity> _activities = [];
   bool _isLoading = false;
+  bool _activating = false;
   String? _errorMessage;
 
   FilesController(this.session) {
@@ -147,7 +148,10 @@ class FilesController extends ChangeNotifier
   CachePolicy get cachePolicy => _cachePolicy;
   int get cacheIntervalMinutes => _cacheIntervalMinutes;
   @override
-  bool get isLoading => _isLoading;
+  // Also true while a freshly activated account is still restoring prefs
+  // and while the session verifies it, so a switch shows a spinner instead
+  // of briefly flashing the empty-folder message.
+  bool get isLoading => _isLoading || _activating || session.isLoading;
   @override
   String? get errorMessage => _errorMessage;
   NextcloudUserQuota? get quota => _quota;
@@ -360,9 +364,16 @@ class FilesController extends ChangeNotifier
   }
 
   Future<void> _onAccountActivated() async {
-    await _restoreDisplayPrefs();
-    _startCacheRefreshTimerIfNeeded();
-    await refreshData();
+    _activating = true;
+    notifyListeners();
+    try {
+      await _restoreDisplayPrefs();
+      _startCacheRefreshTimerIfNeeded();
+      await refreshData();
+    } finally {
+      _activating = false;
+      notifyListeners();
+    }
   }
 
   @override

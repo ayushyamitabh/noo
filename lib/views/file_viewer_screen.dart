@@ -21,6 +21,7 @@ import '../widgets/noo/overlays/noo_overlay_header.dart';
 import '../widgets/noo/overlays/noo_sheet.dart';
 import '../widgets/share_sheet.dart';
 import '../widgets/viewer/media_action_bar.dart';
+import '../widgets/viewer/media_details_panel.dart';
 import '../widgets/viewer/media_image_preview.dart';
 import '../widgets/viewer/media_pdf_preview.dart';
 import '../widgets/viewer/media_text_preview.dart';
@@ -153,6 +154,43 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
   /// left/right swipe while true, so panning around a zoomed photo doesn't
   /// also drag the gallery to the next item.
   bool _isZoomed = false;
+
+  final Map<int, Offset> _pointerStart = {};
+  bool _multiTouch = false;
+
+  void _onPointerDown(PointerDownEvent e) {
+    if (_pointerStart.isNotEmpty) _multiTouch = true;
+    _pointerStart[e.pointer] = e.position;
+  }
+
+  // Raw pointer events rather than a drag recognizer, so this never competes
+  // with the PageView / InteractiveViewer gestures in the arena.
+  void _onPointerUp(PointerUpEvent e) {
+    final start = _pointerStart.remove(e.pointer);
+    final wasMulti = _multiTouch;
+    if (_pointerStart.isEmpty) _multiTouch = false;
+    if (start == null || wasMulti || _isZoomed || !_isSwipeable) return;
+    final delta = e.position - start;
+    if (delta.dy < -80 && delta.dy.abs() > delta.dx.abs() * 1.5) {
+      _openDetails();
+    }
+  }
+
+  final _panelKey = GlobalKey<MediaDetailsPanelState>();
+
+  void _openDetails() {
+    if (NooLayout.isDesktop(context)) {
+      DetailsSheet.show(context, _currentItem);
+      return;
+    }
+    setState(() => _controlsVisible = true);
+    _panelKey.currentState?.expand();
+  }
+
+  void _onPointerCancel(PointerCancelEvent e) {
+    _pointerStart.remove(e.pointer);
+    if (_pointerStart.isEmpty) _multiTouch = false;
+  }
 
   NextcloudItem get _currentItem => _mediaItems[_currentIndex];
 
@@ -394,13 +432,25 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
       backgroundColor: stageColor,
       body: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () => setState(() => _controlsVisible = !_controlsVisible),
+        onTap: () {
+          final panel = _panelKey.currentState;
+          if (panel != null && panel.isExpanded) {
+            panel.collapse();
+            return;
+          }
+          setState(() => _controlsVisible = !_controlsVisible);
+        },
         child: Stack(
           children: [
             Positioned.fill(
-              child: Container(
-                color: stageColor,
-                child: _buildBody(context, session),
+              child: Listener(
+                onPointerDown: _onPointerDown,
+                onPointerUp: _onPointerUp,
+                onPointerCancel: _onPointerCancel,
+                child: Container(
+                  color: stageColor,
+                  child: _buildBody(context, session),
+                ),
               ),
             ),
             if (_downloadProgress != null)
@@ -522,25 +572,35 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                 offset: _controlsVisible ? Offset.zero : const Offset(0, 1.4),
                 child: IgnorePointer(
                   ignoring: !_controlsVisible,
-                  child: MediaActionBar(
-                    isFavorite: _currentItem.isFavorite,
-                    isBusy: _isBusy,
-                    // Favorite/delete/download-to-device all need a live
-                    // server - hidden rather than shown-and-failing while
-                    // browsing an already-local file from the Offline tab.
-                    showServerActions: !_isOffline,
-                    transportControls:
-                        _isSwipeable &&
-                            _currentItem.type == NextcloudItemType.video &&
-                            _videoController != null
-                        ? VideoTransportControls(controller: _videoController!)
-                        : null,
-                    onShare: () => ShareSheet.show(context, _currentItem),
-                    onFavorite: () => _toggleFavorite(ops),
-                    onDelete: () => _deleteCurrentItem(ops),
-                    onOpenExternally: () => _openExternally(session),
-                    onDownload: () => _downloadToDevice(session),
-                    onDetails: () => DetailsSheet.show(context, _currentItem),
+                  child: MediaDetailsPanel(
+                    key: _panelKey,
+                    item: _currentItem,
+                    builder: (context, handle, below) => MediaActionBar(
+                      onDetails: NooLayout.isDesktop(context)
+                          ? _openDetails
+                          : null,
+                      handle: NooLayout.isDesktop(context) ? null : handle,
+                      below: NooLayout.isDesktop(context) ? null : below,
+                      isFavorite: _currentItem.isFavorite,
+                      isBusy: _isBusy,
+                      // Favorite/delete/download-to-device all need a live
+                      // server - hidden rather than shown-and-failing while
+                      // browsing an already-local file from the Offline tab.
+                      showServerActions: !_isOffline,
+                      transportControls:
+                          _isSwipeable &&
+                              _currentItem.type == NextcloudItemType.video &&
+                              _videoController != null
+                          ? VideoTransportControls(
+                              controller: _videoController!,
+                            )
+                          : null,
+                      onShare: () => ShareSheet.show(context, _currentItem),
+                      onFavorite: () => _toggleFavorite(ops),
+                      onDelete: () => _deleteCurrentItem(ops),
+                      onOpenExternally: () => _openExternally(session),
+                      onDownload: () => _downloadToDevice(session),
+                    ),
                   ),
                 ),
               ),
@@ -659,6 +719,9 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
       default:
         if (_isPdf) {
           return MediaPdfPreview(
+            topInset: _controlsVisible
+                ? MediaQuery.paddingOf(context).top + 60
+                : 0,
             item: widget.item,
             session: session,
             localPathResolver: widget.localPathResolver,

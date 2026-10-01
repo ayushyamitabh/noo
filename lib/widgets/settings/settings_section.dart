@@ -33,26 +33,11 @@ class SettingsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.nooColors;
     if (!NooLayout.isDesktop(context)) {
-      final list = NooGroupedList(
+      return NooGroupedList(
         label: title,
+        notice: notice != null ? NooInfoNote(message: notice!) : null,
         footer: subtitle != null ? Text(subtitle!) : null,
-        // Not collapsible: each mobile Settings section now renders on its
-        // own pushed screen (see `account_view.dart`'s doc comment for the
-        // menu-then-pushed-screen pattern), so there's no long single-scroll
-        // page left to collapse sections *within* - an earlier design had
-        // every section inline in one column and made them individually
-        // collapsible for exactly that reason; that's gone now that each
-        // one is already isolated on its own screen.
         children: children,
-      );
-      if (notice == null) return list;
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          NooInfoNote(message: notice!),
-          const SizedBox(height: NooSpace.md),
-          list,
-        ],
       );
     }
     return Container(

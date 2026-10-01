@@ -17,8 +17,12 @@ class MediaPdfPreview extends StatefulWidget {
   /// `FileViewerScreen.localPathResolver`'s doc comment.
   final Future<String?> Function(NextcloudItem item)? localPathResolver;
 
+  /// Space reserved above the page for an overlaid top bar (0 when hidden).
+  final double topInset;
+
   const MediaPdfPreview({
     super.key,
+    this.topInset = 0,
     required this.item,
     required this.session,
     this.localPathResolver,
@@ -29,8 +33,14 @@ class MediaPdfPreview extends StatefulWidget {
 }
 
 class _MediaPdfPreviewState extends State<MediaPdfPreview> {
+  // Only the first few pages are measured; longer documents are assumed
+  // taller than any screen.
+  static const _sizedPages = 3;
+
   PdfControllerPinch? _controller;
   String? _error;
+  List<Size> _pageSizes = const [];
+  int _pageCount = 0;
 
   @override
   void initState() {
@@ -55,9 +65,21 @@ class _MediaPdfPreviewState extends State<MediaPdfPreview> {
           await widget.session.service!.fetchBytes(widget.item.path),
         );
       }
-      if (!mounted) return;
+      final document = await PdfDocument.openData(bytes);
+      final sizes = <Size>[];
+      for (var i = 1; i <= document.pagesCount && i <= _sizedPages; i++) {
+        // autoCloseAndroid closes the previous page itself; closing here too throws.
+        final page = await document.getPage(i, autoCloseAndroid: true);
+        sizes.add(Size(page.width, page.height));
+      }
+      if (!mounted) {
+        await document.close();
+        return;
+      }
       setState(() {
-        _controller = PdfControllerPinch(document: PdfDocument.openData(bytes));
+        _pageSizes = sizes;
+        _pageCount = document.pagesCount;
+        _controller = PdfControllerPinch(document: Future.value(document));
       });
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
@@ -91,6 +113,44 @@ class _MediaPdfPreviewState extends State<MediaPdfPreview> {
     // without ever pinching to zoom. There's no way to override that
     // margin from here - it isn't an exposed parameter - so this avoids
     // the branch that sets it instead of fighting it.
-    return PdfViewPinch(controller: _controller!);
+    //
+    // pdfx's InteractiveViewer also refuses to zoom out past
+    // `viewport.height / document.height`. When the whole document is
+    // shorter than the screen (e.g. a one-page PDF) that ratio is above 1, so
+    // after pinching in, fit-width (scale 1) becomes unreachable. PdfViewPinch
+    // wraps its content in a SafeArea, which counts MediaQuery padding toward
+    // that document height, so padding the bottom up to the viewport height
+    // keeps the ratio at or below 1 without shrinking the gesture area.
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeInOutCubic,
+      padding: EdgeInsets.only(top: widget.topInset),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final media = MediaQuery.of(context);
+          var padding = media.padding.copyWith(top: 0);
+          if (_pageSizes.isNotEmpty && _pageSizes.length == _pageCount) {
+            const pagePadding = 10.0; // PdfViewPinch's default `padding`
+            final maxWidth = _pageSizes.fold<double>(
+              0,
+              (m, s) => s.width > m ? s.width : m,
+            );
+            final ratio = (constraints.maxWidth - pagePadding * 2) / maxWidth;
+            final docHeight = _pageSizes.fold<double>(
+              pagePadding,
+              (h, s) => h + s.height * ratio + pagePadding,
+            );
+            final needed = constraints.maxHeight - docHeight;
+            if (needed > padding.bottom) {
+              padding = padding.copyWith(bottom: needed);
+            }
+          }
+          return MediaQuery(
+            data: media.copyWith(padding: padding),
+            child: PdfViewPinch(controller: _controller!),
+          );
+        },
+      ),
+    );
   }
 }

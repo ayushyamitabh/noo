@@ -17,6 +17,9 @@ class FrostedGlassContainer extends StatelessWidget {
   final Widget child;
   final double borderRadius;
 
+  /// Overrides [borderRadius] for non-uniform corners (e.g. top-only).
+  final BorderRadius? radius;
+
   /// Blur sigma for the backdrop filter. Defaults to a fixed value; pass an
   /// explicit value (e.g. from user settings) to make it adjustable.
   final double blurSigma;
@@ -35,6 +38,7 @@ class FrostedGlassContainer extends StatelessWidget {
     super.key,
     required this.child,
     this.borderRadius = 0,
+    this.radius,
     this.blurSigma = 20,
     this.opacity = 0.8,
     this.color,
@@ -42,15 +46,16 @@ class FrostedGlassContainer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final shape = radius ?? BorderRadius.circular(borderRadius);
     final tint = color ?? context.nooColors.surface;
     return ClipRRect(
-      borderRadius: BorderRadius.circular(borderRadius),
+      borderRadius: shape,
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
         child: Container(
           decoration: BoxDecoration(
             color: tint.withValues(alpha: opacity),
-            borderRadius: BorderRadius.circular(borderRadius),
+            borderRadius: shape,
           ),
           child: child,
         ),

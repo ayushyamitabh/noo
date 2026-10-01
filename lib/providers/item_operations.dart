@@ -168,9 +168,9 @@ class ItemOperations {
       (c) => choices[c.item.id] == ConflictChoice.keepBoth,
     );
     final existingNames = needsKeepBoth
-        ? (await files.fetchFolderListing(destFolderPath))
-              .map((i) => i.name)
-              .toSet()
+        ? (await files.fetchFolderListing(
+            destFolderPath,
+          )).map((i) => i.name).toSet()
         : <String>{};
 
     var succeeded = 0;
@@ -300,6 +300,20 @@ class ItemOperations {
     } catch (e) {
       debugPrint('[ItemOperations] createShare failed: $e');
       return null;
+    }
+  }
+
+  Future<bool> updateSharePermissions(
+    NextcloudShare share,
+    int permissions,
+  ) async {
+    final service = session.service;
+    if (service == null) return false;
+    try {
+      return await service.updateSharePermissions(share.id, permissions);
+    } catch (e) {
+      debugPrint('[ItemOperations] updateSharePermissions failed: $e');
+      return false;
     }
   }
 

@@ -39,4 +39,20 @@ class NextcloudShare {
   });
 
   bool get isFolder => itemType == NextcloudItemType.folder;
+
+  NextcloudShare withPermissions(int permissions) => NextcloudShare(
+    id: id,
+    path: path,
+    name: name,
+    itemType: itemType,
+    shareType: shareType,
+    ownerDisplayName: ownerDisplayName,
+    sharedWithDisplayName: sharedWithDisplayName,
+    sharedAt: sharedAt,
+    sharedWithMe: sharedWithMe,
+    url: url,
+    permissions: permissions,
+    token: token,
+    expireDate: expireDate,
+  );
 }

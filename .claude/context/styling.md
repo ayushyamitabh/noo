@@ -198,6 +198,27 @@ blocks are noted where they matter:
   bars and video transport controls (its other former user, the floating
   bottom nav bar, is gone - see below). Reuse this for any new floating
   overlay instead of building a new blur/shadow combo.
+- Upload FAB size: `SettingsController.fabStyle` (`FabStyle.auto/mini/expanded`,
+  Settings > Appearance > "Upload button") drives `NooFab.collapsed` in
+  `main.dart` - auto collapses off Files/Photos, mini always icon-only,
+  expanded always labelled. Phone/Android layout only.
+- PDF viewer (`media_pdf_preview.dart`): pdfx's InteractiveViewer won't zoom
+  out past `viewport.height / doc.height`, so for short documents (<= 3
+  pages, measured up front) the full-size `PdfViewPinch` is wrapped in a
+  `MediaQuery` with extra bottom padding (pdfx's child is a `SafeArea`) so
+  the boundary height reaches the viewport and fit-width stays reachable
+  after pinch-zooming, without shrinking the canvas. `topInset` (status bar
+  + top bar height, 0 when the controls are hidden) animates the viewport
+  below the overlaid top bar.
+- `NooGroupedList.notice`: optional widget (e.g. `NooInfoNote`) rendered
+  under the label, above the card; `SettingsSection` uses it for its
+  `notice` on phones.
+- [`MediaDetailsPanel`](../../lib/widgets/viewer/media_details_panel.dart) —
+  the media viewer's bottom bar as a draggable panel (mobile/phone only;
+  tablet-class still uses the `DetailsSheet` dialog). Dragging the bar, the
+  Details button, or swiping up on swipeable media (raw `Listener` in
+  `file_viewer_screen.dart`) grows it upward so the action row rides on top
+  of the details; tapping the media collapses it.
 - `SettingsController.bottomBarOpacity`/`bottomBarBlur` and
   `lib/widgets/floating_bottom_bar.dart`/`media_grid_tile.dart`/
   `swipeable_item.dart`/`sync_status_badge.dart`/`selectable_thumbnail.dart`
@@ -232,7 +253,11 @@ blocks are noted where they matter:
   `ShellAvatarButton`'s new `onTap`/`label` overrides (`shell_common.dart`) -
   a caller passing a custom `onTap` *must* also pass a matching `label`, or
   the tooltip/semantics still say "Accounts" for a button that no longer
-  opens the account switcher. `showAvatarMenu` is this app's first use of
+  opens the account switcher. In `avatarMenu` mode `main.dart` also sets
+  `Scaffold.drawerEnableOpenDragGesture: false` so the edge swipe can't open
+  the drawer. The menu header has a chevron that expands an account section
+  (other saved accounts to switch to, "Add Account", "Manage Accounts")
+  above the hidden tabs/Settings. `showAvatarMenu` is this app's first use of
   `showGeneralDialog` directly (`barrierColor: Colors.transparent` +
   `barrierDismissible: true` for a non-dimming click-outside-to-close menu,
   not a modal flow) - there's no existing anchored-popup primitive here

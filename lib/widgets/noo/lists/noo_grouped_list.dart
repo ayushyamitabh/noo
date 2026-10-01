@@ -22,6 +22,9 @@ class NooGroupedList extends StatefulWidget {
   final String? aside;
   final List<Widget> children;
   final Widget? footer;
+
+  /// Shown between [label] and the card (e.g. a `NooInfoNote`).
+  final Widget? notice;
   final bool collapsible;
   final bool initiallyExpanded;
 
@@ -31,6 +34,7 @@ class NooGroupedList extends StatefulWidget {
     this.aside,
     required this.children,
     this.footer,
+    this.notice,
     this.collapsible = false,
     this.initiallyExpanded = true,
   });
@@ -57,6 +61,10 @@ class _NooGroupedListState extends State<NooGroupedList> {
             child: _buildLabelRow(label, colors, expanded),
           ),
           const SizedBox(height: 8),
+        ],
+        if (widget.notice != null) ...[
+          widget.notice!,
+          const SizedBox(height: NooSpace.md),
         ],
         AnimatedCrossFade(
           duration: NooMotion.fast,

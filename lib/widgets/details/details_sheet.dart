@@ -54,7 +54,7 @@ enum _DetailsTab { info, versions, activity }
 /// and the "open externally" flow for unsupported file types.
 ///
 /// Only used directly on mobile (bundles its own [NooOverlayHeader]); the
-/// desktop path in [show] passes [_DetailsBody] straight to [showNooDialog],
+/// desktop path in [show] passes [DetailsBody] straight to [showNooDialog],
 /// which renders the header itself via `leading`/`title`/`subtitle`.
 class DetailsSheet extends StatelessWidget {
   final NextcloudItem item;
@@ -68,7 +68,7 @@ class DetailsSheet extends StatelessWidget {
         leading: detailsFileTile(item),
         title: item.name,
         subtitle: detailsMetaLine(item),
-        children: [_DetailsBody(item: item)],
+        children: [DetailsBody(item: item)],
       );
     }
     return showNooSheet(context, children: [DetailsSheet(item: item)]);
@@ -86,7 +86,7 @@ class DetailsSheet extends StatelessWidget {
           onClose: () => Navigator.pop(context),
         ),
         const SizedBox(height: NooSpace.lg),
-        _DetailsBody(item: item),
+        DetailsBody(item: item),
       ],
     );
   }
@@ -102,16 +102,16 @@ class DetailsSheet extends StatelessWidget {
 /// guard), so switching tabs via a bare `switch` on the selected type would
 /// tear down and rebuild whichever tab isn't showing, discarding its
 /// fetched data and re-requesting it every time the user switched back.
-class _DetailsBody extends StatefulWidget {
+class DetailsBody extends StatefulWidget {
   final NextcloudItem item;
 
-  const _DetailsBody({required this.item});
+  const DetailsBody({super.key, required this.item});
 
   @override
-  State<_DetailsBody> createState() => _DetailsBodyState();
+  State<DetailsBody> createState() => _DetailsBodyState();
 }
 
-class _DetailsBodyState extends State<_DetailsBody> {
+class _DetailsBodyState extends State<DetailsBody> {
   _DetailsTab _tab = _DetailsTab.info;
 
   @override

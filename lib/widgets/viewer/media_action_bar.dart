@@ -22,9 +22,14 @@ class MediaActionBar extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback onOpenExternally;
   final VoidCallback onDownload;
-  final VoidCallback onDetails;
+  final VoidCallback? onDetails;
+  final Widget? handle;
+  final Widget? below;
 
   const MediaActionBar({
+    this.onDetails,
+    this.handle,
+    this.below,
     super.key,
     required this.isFavorite,
     required this.isBusy,
@@ -35,7 +40,6 @@ class MediaActionBar extends StatelessWidget {
     required this.onDelete,
     required this.onOpenExternally,
     required this.onDownload,
-    required this.onDetails,
   });
 
   @override
@@ -48,11 +52,15 @@ class MediaActionBar extends StatelessWidget {
     // short and leaving that strip unstyled - only the actual row content
     // needs padding up and away from the gesture area.
     return FrostedGlassContainer(
+      radius: const BorderRadius.vertical(
+        top: Radius.circular(NooRadii.sheetTop),
+      ),
       child: SafeArea(
         top: false,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            ?handle,
             if (transportControls != null) ...[
               transportControls!,
               Divider(height: 1, color: colors.fg1.withValues(alpha: 0.14)),
@@ -94,17 +102,18 @@ class MediaActionBar extends StatelessWidget {
                     ViewerIconButton(
                       icon: LucideIcons.trash2,
                       tooltip: 'Delete',
-                      color: colors.danger,
                       onTap: isBusy ? null : onDelete,
                     ),
-                  ViewerIconButton(
-                    icon: LucideIcons.info,
-                    tooltip: 'Details',
-                    onTap: onDetails,
-                  ),
+                  if (onDetails != null)
+                    ViewerIconButton(
+                      icon: LucideIcons.info,
+                      tooltip: 'Details',
+                      onTap: onDetails,
+                    ),
                 ],
               ),
             ),
+            ?below,
           ],
         ),
       ),

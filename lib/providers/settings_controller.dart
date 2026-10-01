@@ -9,6 +9,11 @@ import '../widgets/noo/nav/noo_nav_style.dart';
 /// in Settings.
 enum SwipeAction { none, favorite, delete, share }
 
+/// How the Android Upload FAB is sized: [auto] expands on Files/Photos and
+/// shrinks to an icon elsewhere, [mini] is always icon-only, [expanded]
+/// always shows the label.
+enum FabStyle { auto, mini, expanded }
+
 /// Thumb/track presets for the video player's seek bar, matching the four
 /// combinations offered by other Material You media players: a Material 3
 /// slider-style thumb ([classic]), an animated travelling wave with a round
@@ -31,6 +36,7 @@ class SettingsController extends ChangeNotifier {
   static const _prefDefaultTab = 'ui_default_tab';
   static const _prefSwipeLeftAction = 'ui_swipe_left_action';
   static const _prefSwipeRightAction = 'ui_swipe_right_action';
+  static const _prefFabStyle = 'ui_fab_style';
   static const _prefBottomBarStyle = 'ui_bottom_bar_style';
   static const _prefNavMenuStyle = 'ui_nav_menu_style';
   static const _prefSearchInBottomBar = 'ui_search_in_bottom_bar';
@@ -61,6 +67,7 @@ class SettingsController extends ChangeNotifier {
 
   SwipeAction _swipeLeftAction = SwipeAction.delete;
   SwipeAction _swipeRightAction = SwipeAction.favorite;
+  FabStyle _fabStyle = FabStyle.auto;
 
   // A one-shot request for the shell to switch its active bottom-nav tab
   // (e.g. a search result landing on Files) - consumed and cleared by
@@ -121,6 +128,7 @@ class SettingsController extends ChangeNotifier {
 
   SwipeAction get swipeLeftAction => _swipeLeftAction;
   SwipeAction get swipeRightAction => _swipeRightAction;
+  FabStyle get fabStyle => _fabStyle;
 
   Future<void> _load() async {
     try {
@@ -239,6 +247,14 @@ class SettingsController extends ChangeNotifier {
         _swipeRightAction = SwipeAction.values.firstWhere(
           (a) => a.name == swipeRightName,
           orElse: () => _swipeRightAction,
+        );
+      }
+
+      final fabName = prefs.getString(_prefFabStyle);
+      if (fabName != null) {
+        _fabStyle = FabStyle.values.firstWhere(
+          (f) => f.name == fabName,
+          orElse: () => _fabStyle,
         );
       }
 
@@ -403,5 +419,12 @@ class SettingsController extends ChangeNotifier {
     _swipeRightAction = action;
     notifyListeners();
     _prefsFuture.then((p) => p.setString(_prefSwipeRightAction, action.name));
+  }
+
+  void setFabStyle(FabStyle style) {
+    if (_fabStyle == style) return;
+    _fabStyle = style;
+    notifyListeners();
+    _prefsFuture.then((p) => p.setString(_prefFabStyle, style.name));
   }
 }

@@ -34,7 +34,10 @@ class NooShareSection extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: Text(title, style: NooText.sectionTitle.copyWith(color: colors.fg1)),
+              child: Text(
+                title,
+                style: NooText.sectionTitle.copyWith(color: colors.fg1),
+              ),
             ),
             ?trailing,
           ],
@@ -60,10 +63,13 @@ class NooPersonAccessRow extends StatelessWidget {
   final String name;
   final String? subtitle;
   final bool owner;
+
   /// Pill label for non-owners, e.g. "Can edit" / "Can view".
   final String permission;
   final VoidCallback? onPermissionTap;
+  final bool permissionLoading;
   final String ownerLabel;
+
   /// Replaces the owner label / permission pill (e.g. a plain search result).
   final Widget? trailing;
 
@@ -75,6 +81,7 @@ class NooPersonAccessRow extends StatelessWidget {
     this.owner = false,
     this.permission = 'Can edit',
     this.onPermissionTap,
+    this.permissionLoading = false,
     this.ownerLabel = 'Owner',
     this.trailing,
   });
@@ -121,7 +128,11 @@ class NooPersonAccessRow extends StatelessWidget {
           else if (owner)
             Text(ownerLabel, style: NooText.label.copyWith(color: colors.fg3))
           else
-            NooPermissionPill(label: permission, onTap: onPermissionTap),
+            NooPermissionPill(
+              label: permission,
+              onTap: onPermissionTap,
+              loading: permissionLoading,
+            ),
         ],
       ),
     );
@@ -133,8 +144,14 @@ class NooPersonAccessRow extends StatelessWidget {
 class NooPermissionPill extends StatelessWidget {
   final String label;
   final VoidCallback? onTap;
+  final bool loading;
 
-  const NooPermissionPill({super.key, required this.label, this.onTap});
+  const NooPermissionPill({
+    super.key,
+    required this.label,
+    this.onTap,
+    this.loading = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -152,9 +169,21 @@ class NooPermissionPill extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(label, style: NooText.label.copyWith(height: 1, color: colors.fg1)),
+            Text(
+              label,
+              style: NooText.label.copyWith(height: 1, color: colors.fg1),
+            ),
             const SizedBox(width: NooSpace.xxs),
-            Icon(LucideIcons.chevronDown, size: 14, color: colors.fg2),
+            loading
+                ? SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: colors.fg2,
+                    ),
+                  )
+                : Icon(LucideIcons.chevronDown, size: 14, color: colors.fg2),
           ],
         ),
       ),
