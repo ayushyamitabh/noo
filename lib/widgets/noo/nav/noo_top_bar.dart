@@ -109,7 +109,7 @@ class NooTopBar extends StatelessWidget implements PreferredSizeWidget {
 
     final Widget body = _ios
         ? _buildIos(colors, lead)
-        : _buildAndroid(colors, lead);
+        : _buildAndroid(context, colors, lead);
 
     return _NooTopBarScope(
       style: style,
@@ -177,7 +177,7 @@ class NooTopBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 
-  Widget _buildAndroid(NooColors colors, Widget? lead) {
+  Widget _buildAndroid(BuildContext context, NooColors colors, Widget? lead) {
     return SizedBox(
       height: _androidRow,
       child: Padding(
@@ -189,14 +189,16 @@ class NooTopBar extends StatelessWidget implements PreferredSizeWidget {
           spacing: 4,
           children: [
             ?lead,
-            // [androidTitleTrailing]'s own doc comment explains why this
-            // isn't a straight replacement: the title keeps its natural
-            // width (`Flexible`, not `Expanded` - it still shrinks/
-            // ellipsizes if there's truly no room, but doesn't force the
-            // row that wide otherwise) and sits to the trailing content's
-            // left rather than being displaced by it.
+            // The title is a non-flex child capped at 40% of the screen
+            // width (so it keeps its natural width but still ellipsizes),
+            // leaving the `Expanded` trailing widget all the remaining
+            // space. A `Flexible` title would instead split the free space
+            // 1:1 with it, since both default to flex 1.
             if (androidTitleTrailing != null) ...[
-              Flexible(
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.sizeOf(context).width * 0.4,
+                ),
                 child: Text(
                   title,
                   maxLines: 1,
