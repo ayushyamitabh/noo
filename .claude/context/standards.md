@@ -131,3 +131,16 @@ Networking is deliberately split: `package:http` for simple JSON/XML
 request-response calls, `package:dio` only where streaming/progress is
 needed (downloads). Don't introduce a third HTTP client — extend the
 existing split instead.
+
+## Play Store upload (CI)
+
+`.gitea/workflows/release.yml` (on `Release-*` tags) first checks the tag
+equals `Release-<pubspec version>`, builds the signed `.aab`, attaches it to a
+Gitea release, then uploads it with `r0adkll/upload-google-play` to the
+`internal` track as a **draft** (promote in Play Console, or edit
+`track`/`status` in the workflow). Requires the `PLAY_SERVICE_ACCOUNT_JSON`
+repo secret (service account with release permissions; the app's first
+release must be uploaded manually). Play rejects a repeated `versionCode`, so
+bump the `+N` in `pubspec.yaml` for every tag - re-tagging the same version
+will fail the upload. Release notes come from
+`distribution/whatsnew/whatsnew-en-US` (max 500 chars) - update per release.

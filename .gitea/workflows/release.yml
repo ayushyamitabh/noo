@@ -39,6 +39,16 @@ jobs:
           # platform/build-tools versions it actually needs on its own.
           packages: "platform-tools"
 
+      - name: Check tag matches pubspec version
+        # Play rejects a repeated versionCode and a mismatched tag would
+        # publish the wrong version name, so fail fast before building.
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
+          if [ "${GITHUB_REF_NAME}" != "Release-${VERSION}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match pubspec version ${VERSION}" >&2
+            exit 1
+          fi
+
       - name: Install dependencies
         run: flutter pub get
 
@@ -67,6 +77,7 @@ jobs:
           mkdir -p release
           cp build/app/outputs/bundle/release/app-release.aab "release/Noo-${VERSION}.aab"
           echo "AAB_PATH=release/Noo-${VERSION}.aab" >> "$GITHUB_ENV"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
 
       - name: Publish Gitea release with App Bundle attached
         # Gitea-native release action (not GitHub's) - authenticates and
@@ -77,3 +88,18 @@ jobs:
         uses: akkuman/gitea-release-action@v1
         with:
           files: ${{ env.AAB_PATH }}
+
+      - name: Upload to Google Play (internal track, draft)
+        # Stages the build only; promote it in Play Console, or change
+        # `status` to "completed" (and/or `track`) to roll out automatically.
+        # Needs the PLAY_SERVICE_ACCOUNT_JSON repo secret, and the app's
+        # first release must already have been uploaded by hand.
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: dev.ayushya.noo
+          releaseFiles: ${{ env.AAB_PATH }}
+          releaseName: ${{ env.VERSION }}
+          track: internal
+          status: draft
+          whatsNewDirectory: distribution/whatsnew
