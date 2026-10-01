@@ -32,6 +32,7 @@ class SettingsController extends ChangeNotifier {
   static const _prefSwipeLeftAction = 'ui_swipe_left_action';
   static const _prefSwipeRightAction = 'ui_swipe_right_action';
   static const _prefBottomBarStyle = 'ui_bottom_bar_style';
+  static const _prefNavMenuStyle = 'ui_nav_menu_style';
   static const _prefSearchInBottomBar = 'ui_search_in_bottom_bar';
   static const _prefAmoledDark = 'ui_amoled_dark';
   static const _prefMediaProgressBarStyle = 'ui_media_progress_bar_style';
@@ -43,6 +44,7 @@ class SettingsController extends ChangeNotifier {
   Color _seedColor = AppTheme.defaultAccent;
   ThemeMode _themeMode = ThemeMode.system;
   NooBottomBarStyle _bottomBarStyle = NooBottomBarStyle.attached;
+  NooNavMenuStyle _navMenuStyle = NooNavMenuStyle.drawer;
   bool _searchInBottomBar = false;
   bool _useDynamicColor = true;
   bool _amoledDark = false;
@@ -86,6 +88,7 @@ class SettingsController extends ChangeNotifier {
   Color get seedColor => _seedColor;
   ThemeMode get themeMode => _themeMode;
   NooBottomBarStyle get bottomBarStyle => _bottomBarStyle;
+  NooNavMenuStyle get navMenuStyle => _navMenuStyle;
   bool get searchInBottomBar => _searchInBottomBar;
   bool get useDynamicColor => _useDynamicColor;
   bool get amoledDark => _amoledDark;
@@ -135,6 +138,13 @@ class SettingsController extends ChangeNotifier {
         _bottomBarStyle = NooBottomBarStyle.values.firstWhere(
           (s) => s.name == bottomBarStyleName,
           orElse: () => _bottomBarStyle,
+        );
+      }
+      final navMenuStyleName = prefs.getString(_prefNavMenuStyle);
+      if (navMenuStyleName != null) {
+        _navMenuStyle = NooNavMenuStyle.values.firstWhere(
+          (s) => s.name == navMenuStyleName,
+          orElse: () => _navMenuStyle,
         );
       }
       _searchInBottomBar =
@@ -285,6 +295,13 @@ class SettingsController extends ChangeNotifier {
     _bottomBarStyle = style;
     notifyListeners();
     _prefsFuture.then((p) => p.setString(_prefBottomBarStyle, style.name));
+  }
+
+  void setNavMenuStyle(NooNavMenuStyle style) {
+    if (_navMenuStyle == style) return;
+    _navMenuStyle = style;
+    notifyListeners();
+    _prefsFuture.then((p) => p.setString(_prefNavMenuStyle, style.name));
   }
 
   /// Turning this on lowers [maxVisibleTabs] by one, so re-enforces the cap

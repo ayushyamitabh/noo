@@ -32,6 +32,20 @@ enum NooNavStyle {
 /// trailing padding to clear the bar (see `NooBottomBar.rowHeight`).
 enum NooBottomBarStyle { attached, floating }
 
+/// Which widget opens the shell's navigation menu (hidden tabs + Settings)
+/// on mobile - user-configurable in Settings (Appearance), same precedent
+/// as [NooBottomBarStyle]. [drawer] is the original pattern: a `menu`
+/// icon, top-left of the top bar, opens a left-edge `Drawer`. [avatarMenu]
+/// drops that icon entirely and repurposes the avatar button - already
+/// sitting top-right, already a tap target every user already knows - as
+/// the one entry point instead, opening a dropdown anchored below it (see
+/// `showAvatarMenu` in `widgets/avatar_menu.dart`) rather than a drawer
+/// sliding from the opposite edge. Applies on both platforms, since
+/// [NooTopBar]'s `onMenu`/avatar wiring is shared chrome, not
+/// Android-specific - only [AppDrawer]'s left-`Drawer` convention is being
+/// offered an alternative, not anything platform-only.
+enum NooNavMenuStyle { drawer, avatarMenu }
+
 /// One destination in a [NooBottomBar]. Data-agnostic on purpose - the app
 /// maps its own tab model (e.g. `AppTab`) onto these.
 @immutable

@@ -212,13 +212,31 @@ class _AccountSwitchRow extends StatelessWidget {
 }
 
 /// The current user's avatar in the mobile top bar. Tap opens the accounts
-/// sheet ([showAccountSwitcher]); swiping up/down on it cycles to the
-/// next/previous saved account immediately, with no confirmation - a
-/// shortcut alongside the full switcher.
+/// sheet ([showAccountSwitcher]) by default - or [onTap], when the caller
+/// overrides it (`AppTopBar` does this for
+/// `SettingsController.navMenuStyle`'s `avatarMenu` option, which
+/// repurposes this same button to open `showAvatarMenu` instead; avoids
+/// this file importing `widgets/avatar_menu.dart`, which itself imports
+/// this file for `openSettings`/`accountInitial`/`serverHost`). Swiping
+/// up/down on it cycles to the next/previous saved account immediately,
+/// with no confirmation, regardless of [onTap] - a shortcut that stays
+/// available either way.
 class ShellAvatarButton extends StatelessWidget {
   final double hitBox;
+  final VoidCallback? onTap;
 
-  const ShellAvatarButton({super.key, this.hitBox = 48});
+  /// Describes whatever [onTap] actually does - defaults to "Accounts"
+  /// (the account switcher), but a caller overriding [onTap] should
+  /// override this too so the tooltip/semantics describe the real action
+  /// instead of a stale default.
+  final String label;
+
+  const ShellAvatarButton({
+    super.key,
+    this.hitBox = 48,
+    this.onTap,
+    this.label = 'Accounts',
+  });
 
   Future<void> _handleVerticalSwipe(
     BuildContext context,
@@ -246,17 +264,17 @@ class ShellAvatarButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final session = context.watch<SessionController>();
     return Tooltip(
-      message: 'Accounts',
+      message: label,
       child: Semantics(
         button: true,
-        label: 'Accounts',
+        label: label,
         child: GestureDetector(
           onVerticalDragEnd: (details) =>
               _handleVerticalSwipe(context, details),
           child: SizedBox.square(
             dimension: hitBox,
             child: InkResponse(
-              onTap: () => showAccountSwitcher(context),
+              onTap: onTap ?? () => showAccountSwitcher(context),
               radius: hitBox / 2,
               child: Center(
                 child: NooAvatar(

@@ -56,6 +56,15 @@ class NooTopBar extends StatelessWidget implements PreferredSizeWidget {
   /// iOS only: the search field shown below the large title.
   final Widget? search;
 
+  /// Android only: replaces the plain title text with an arbitrary widget
+  /// (e.g. a search-field-styled launcher) in that same flexible middle
+  /// slot, between [leading]/the menu button and [actions]. iOS already
+  /// has a dedicated [search] slot below its large title for this; Android
+  /// has no large title to put a second row under, so a caller that wants
+  /// an inline search bar there replaces the title with one instead of
+  /// adding a row.
+  final Widget? androidTitleReplacement;
+
   /// Defaults to `bg` - the top bar sits on the screen background.
   final Color? backgroundColor;
 
@@ -67,6 +76,7 @@ class NooTopBar extends StatelessWidget implements PreferredSizeWidget {
     this.onMenu,
     this.actions = const [],
     this.search,
+    this.androidTitleReplacement,
     this.backgroundColor,
   });
 
@@ -179,12 +189,14 @@ class NooTopBar extends StatelessWidget implements PreferredSizeWidget {
           children: [
             ?lead,
             Expanded(
-              child: Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: NooText.title.copyWith(height: 1, color: colors.fg1),
-              ),
+              child:
+                  androidTitleReplacement ??
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: NooText.title.copyWith(height: 1, color: colors.fg1),
+                  ),
             ),
             ...actions,
           ],

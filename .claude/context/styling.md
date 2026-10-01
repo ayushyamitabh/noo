@@ -221,6 +221,26 @@ blocks are noted where they matter:
   `onSearchTap`) and lowers `SettingsController.maxVisibleTabs` by one -
   use that getter, not `defaultMaxVisibleTabs` from `models/app_tab.dart`,
   anywhere that needs the *current* cap on regular tabs.
+- `SettingsController.navMenuStyle` (`NooNavMenuStyle.drawer`/`avatarMenu`,
+  Settings → Appearance → "Navigation menu") picks what opens hidden tabs +
+  Settings on mobile: the original hamburger-opens-`AppDrawer` pattern, or
+  the avatar button opens [`showAvatarMenu`](../../lib/widgets/avatar_menu.dart)
+  instead. Wired through `AppTopBar`→`NooTopBar.onMenu` (null in `avatarMenu`
+  mode - no menu icon renders at all, see `NooTopBar`'s `lead` logic) and
+  `ShellAvatarButton`'s new `onTap`/`label` overrides (`shell_common.dart`) -
+  a caller passing a custom `onTap` *must* also pass a matching `label`, or
+  the tooltip/semantics still say "Accounts" for a button that no longer
+  opens the account switcher. `showAvatarMenu` is this app's first use of
+  `showGeneralDialog` directly (`barrierColor: Colors.transparent` +
+  `barrierDismissible: true` for a non-dimming click-outside-to-close menu,
+  not a modal flow) - there's no existing anchored-popup primitive here
+  (`PopupMenuButton`'s own width doesn't stretch to a full content column),
+  so don't reach for `showNooSheet`/`showNooDialog` for something shaped
+  like this. Also added `NooTopBar.androidTitleReplacement`: Android has no
+  large title to put a second search row under the way iOS's `search:`
+  slot does, so an inline search bar (`AppTopBar` passes a plain
+  `ShellSearchLauncher()` when search isn't in the bottom bar) replaces the
+  title in its flexible slot instead of sitting beside it as a bare icon.
 - [`SyncedHeaderScaffold`](../../lib/widgets/synced_header_scaffold.dart) —
   the pull-to-sync `CustomScrollView` header with the persistent sync-status
   chip and pull-to-refresh gesture/spinner. Every screen (including

@@ -423,6 +423,7 @@ class _MainShellViewState extends State<MainShellView> {
                           style: navStyle,
                           tab: tab,
                           searchInBottomBar: showBottomBarSearch,
+                          navMenuStyle: settings.navMenuStyle,
                         ),
                 ),
               )

@@ -51,6 +51,7 @@ class SettingsAppearanceSection extends StatelessWidget {
           children: [
             _ThemeRow(settings: settings),
             _BottomBarStyleRow(settings: settings),
+            _NavMenuStyleRow(settings: settings),
             NooSettingsRow(
               icon: LucideIcons.search,
               label: const Text('Search in bottom bar'),
@@ -220,6 +221,66 @@ class _BottomBarStyleRow extends StatelessWidget {
                   value: NooBottomBarStyle.floating,
                   icon: LucideIcons.panelBottomOpen,
                   label: 'Floating',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// "Navigation menu" (Settings → Appearance): which widget opens hidden
+/// tabs + Settings - the original `menu` icon that opens a left `Drawer`,
+/// or the avatar button instead (opens `showAvatarMenu`, a dropdown
+/// anchored under it) - see [NooNavMenuStyle]'s own doc comment for the
+/// full reachability rationale (dropping the hamburger removes one of the
+/// two top-corner targets the shell asks a thumb to reach, rather than
+/// adding a third kind of chrome like a side rail would).
+class _NavMenuStyleRow extends StatelessWidget {
+  final SettingsController settings;
+
+  const _NavMenuStyleRow({required this.settings});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.nooColors;
+    return Material(
+      color: colors.surface,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: NooSpace.md,
+          vertical: 12,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(LucideIcons.panelLeft, size: 20, color: colors.fg2),
+                const SizedBox(width: 14),
+                Text(
+                  'Navigation menu',
+                  style: NooText.bodyL.copyWith(color: colors.fg1),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            NooSegmentedControl<NooNavMenuStyle>(
+              fill: true,
+              value: settings.navMenuStyle,
+              onChanged: settings.setNavMenuStyle,
+              options: const [
+                NooSegmentOption(
+                  value: NooNavMenuStyle.drawer,
+                  icon: LucideIcons.menu,
+                  label: 'Hamburger',
+                ),
+                NooSegmentOption(
+                  value: NooNavMenuStyle.avatarMenu,
+                  icon: LucideIcons.userRound,
+                  label: 'Avatar',
                 ),
               ],
             ),
