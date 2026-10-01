@@ -236,7 +236,16 @@ blocks are noted where they matter:
   not a modal flow) - there's no existing anchored-popup primitive here
   (`PopupMenuButton`'s own width doesn't stretch to a full content column),
   so don't reach for `showNooSheet`/`showNooDialog` for something shaped
-  like this. Also added `NooTopBar.androidTitleReplacement`: Android has no
+  like this. It's positioned just past the status bar (`SafeArea`'s own
+  inset, not the top bar's full height on top of that) so it covers the
+  top bar - including the tab title - rather than sitting below it, and
+  its card carries two stacked `boxShadow`s rather than just
+  `nooDialogShadow` alone: that one shadow's blur is wide and soft enough
+  to read as basically invisible on a small card over a dark theme's
+  near-black `bg` (a dark, diffuse shadow needs real density close to the
+  edge to be visible against an already-dark backdrop), so a second,
+  tighter, more opaque contact shadow underneath it gives real elevation
+  in both themes. Also added `NooTopBar.androidTitleReplacement`: Android has no
   large title to put a second search row under the way iOS's `search:`
   slot does, so an inline search bar (`AppTopBar` passes a plain
   `ShellSearchLauncher()` when search isn't in the bottom bar) replaces the

@@ -9,8 +9,6 @@ import '../theme/design_tokens.dart';
 import 'noo/core/noo_avatar.dart';
 import 'noo/core/noo_badge.dart';
 import 'noo/lists/noo_settings_row.dart';
-import 'noo/nav/noo_top_bar.dart';
-import 'noo/noo_layout.dart';
 import 'shell/shell_common.dart';
 
 /// The dropdown [ShellAvatarButton] opens when
@@ -24,14 +22,13 @@ import 'shell/shell_common.dart';
 /// app to reuse (`PopupMenuButton`'s own width doesn't stretch to the full
 /// content column the way this needs to).
 Future<void> showAvatarMenu(BuildContext context) {
-  final navStyle = NooLayout.navStyle(context);
   return showGeneralDialog<void>(
     context: context,
     barrierColor: Colors.transparent,
     barrierDismissible: true,
     barrierLabel: 'Close menu',
     transitionDuration: NooMotion.fast,
-    pageBuilder: (context, _, _) => _AvatarMenuContent(navStyle: navStyle),
+    pageBuilder: (context, _, _) => const _AvatarMenuContent(),
     transitionBuilder: (context, animation, _, child) => FadeTransition(
       opacity: animation,
       child: ScaleTransition(
@@ -47,9 +44,7 @@ Future<void> showAvatarMenu(BuildContext context) {
 }
 
 class _AvatarMenuContent extends StatelessWidget {
-  final NooNavStyle navStyle;
-
-  const _AvatarMenuContent({required this.navStyle});
+  const _AvatarMenuContent();
 
   @override
   Widget build(BuildContext context) {
@@ -60,15 +55,6 @@ class _AvatarMenuContent extends StatelessWidget {
     final hiddenTabs = settings.tabOrder
         .where((t) => settings.hiddenTabs.contains(t))
         .toList();
-    // The row/avatar it opens from is always this tall + the status bar
-    // above it (the button that opens this can't be tapped while its own
-    // top bar is scrolled away, so it's always on-screen at this exact
-    // position when that happens) - matches `NooTopBar.preferredSize`
-    // exactly rather than a guessed constant.
-    final topBarHeight = NooTopBar(
-      style: navStyle,
-      title: '',
-    ).preferredSize.height;
 
     void closeAndOpenSettings() {
       Navigator.pop(context);
@@ -77,15 +63,15 @@ class _AvatarMenuContent extends StatelessWidget {
 
     return Align(
       alignment: Alignment.topCenter,
+      // Just the status-bar inset, not the top bar's own height on top of
+      // it - the card covers the top bar (title included) rather than
+      // sitting below it, so opening it reads as the avatar growing into
+      // this instead of a separate element appearing underneath the row
+      // it came from.
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: EdgeInsets.fromLTRB(
-            NooSpace.md,
-            topBarHeight,
-            NooSpace.md,
-            0,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: NooSpace.md),
           child: SizedBox(
             width: double.infinity,
             child: Container(
@@ -94,7 +80,24 @@ class _AvatarMenuContent extends StatelessWidget {
                 color: colors.surface,
                 border: Border.all(color: colors.line),
                 borderRadius: BorderRadius.circular(NooRadii.card),
-                boxShadow: const [nooDialogShadow],
+                // `nooDialogShadow` alone is a wide, soft, fairly faint
+                // shadow - built for a desktop dialog with plenty of room
+                // to fall off into. On a small card over a dark theme's
+                // near-black `bg`, that falloff is too gradual to read as
+                // elevation at all (a dark shadow needs real density close
+                // to the edge to be visible against an already-dark
+                // backdrop). A second, tighter, more opaque contact shadow
+                // underneath it gives an immediate value-step right at the
+                // card's edge in both themes, with the soft one still
+                // doing the wider ambient falloff on top.
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x40000000),
+                    blurRadius: 12,
+                    offset: Offset(0, 4),
+                  ),
+                  nooDialogShadow,
+                ],
               ),
               child: Material(
                 color: Colors.transparent,

@@ -100,12 +100,19 @@ class ActivityView extends StatelessWidget {
       ...tabBottomInsetSlivers(context),
     ];
 
-    final scrollView = CustomScrollView(
-      controller: scrollController,
-      // See files_view.dart's identical fix - without this, pull-to-
-      // refresh can't be triggered on an empty or single-item feed.
-      physics: const AlwaysScrollableScrollPhysics(),
-      slivers: contentSlivers,
+    // See files_view.dart's identical fix - without this, the sticky
+    // controls row rides up under the status bar once the floating top bar
+    // above it fully collapses.
+    final scrollView = SafeArea(
+      top: true,
+      bottom: false,
+      child: CustomScrollView(
+        controller: scrollController,
+        // See files_view.dart's identical fix - without this, pull-to-
+        // refresh can't be triggered on an empty or single-item feed.
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: contentSlivers,
+      ),
     );
 
     return ColoredBox(

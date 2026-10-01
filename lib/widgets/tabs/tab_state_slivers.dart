@@ -133,14 +133,31 @@ List<Widget> tabBottomInsetSlivers(BuildContext context) => [
 /// [SliverFloatingHeader] sizes itself from [topBar]'s own natural layout
 /// (like `SliverToBoxAdapter`) rather than a fixed extent declared up
 /// front - so [topBar]'s own internal `SafeArea` (see `NooTopBar`'s doc
-/// comment) already accounts for the status-bar inset correctly, with no
-/// extra height math needed here (unlike building this on the general-
-/// purpose `SliverPersistentHeader` would have required).
+/// comment) already accounts for the status-bar inset correctly while
+/// [topBar] itself is visible, with no extra height math needed here
+/// (unlike building this on the general-purpose `SliverPersistentHeader`
+/// would have required).
 ///
 /// Sits above a tab's own pinned in-content header (built with
 /// [StickyHeaderDelegate] - the sort/filter controls row, or the selection
 /// bar that replaces it) - put this sliver first in `contentSlivers` so
 /// that header stays exactly where it already is, independent of whether
 /// [topBar] is currently shown or scrolled away.
+///
+/// That pinned header needs its OWN protection from the status bar too,
+/// though: [topBar]'s `SafeArea` only reserves space while [topBar] has
+/// some height to put it in - once it's fully collapsed (0 height, [topBar]
+/// scrolled all the way away), that reservation disappears with it, and
+/// the pinned header would ride up underneath the status bar instead of
+/// stopping below it (a real bug this shipped with once already - caught
+/// by `tab_state_slivers_test.dart`'s regression test for it). Every tab
+/// view wraps its whole `CustomScrollView` (this sliver, the pinned header,
+/// and everything else) in `SafeArea(top: true, bottom: false, ...)` to
+/// fix this - that reserves the inset outside the scrolling/collapsing
+/// region entirely, so it's never implicated in this sliver's own
+/// collapse math regardless of [topBar]'s current state. Flutter's
+/// `SafeArea` nesting means this doesn't double the inset: the outer one
+/// zeroes `MediaQuery.padding.top` for everything below it, so [topBar]'s
+/// own inner `SafeArea` sees nothing left to add.
 Widget topBarSliver(PreferredSizeWidget topBar) =>
     SliverFloatingHeader(child: topBar);

@@ -32,6 +32,38 @@ class _FakeTopBar extends StatelessWidget implements PreferredSizeWidget {
 /// tree is currently pumped.
 Finder _header() => find.byType(SliverFloatingHeader, skipOffstage: false);
 
+/// A minimal stand-in for each tab's own pinned sort/filter row
+/// (`StickyHeaderDelegate`) - just needs to be a `SliverPersistentHeader`
+/// with `pinned: true` below `topBarSliver`, same contract every real tab
+/// view uses.
+class _FakeStickyHeader extends StatelessWidget {
+  const _FakeStickyHeader();
+
+  static const double height = 48;
+
+  @override
+  Widget build(BuildContext context) => const SizedBox(
+    height: height,
+    child: ColoredBox(color: Colors.red),
+  );
+}
+
+class _FakeStickyHeaderDelegate extends SliverPersistentHeaderDelegate {
+  @override
+  double get minExtent => _FakeStickyHeader.height;
+  @override
+  double get maxExtent => _FakeStickyHeader.height;
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) => const _FakeStickyHeader();
+  @override
+  bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) =>
+      false;
+}
+
 Future<void> _pumpHost(WidgetTester tester, ScrollController controller) {
   return tester.pumpWidget(
     MaterialApp(
@@ -137,6 +169,84 @@ void main() {
       expect(
         tester.getSize(find.byType(_FakeTopBar)).height,
         _FakeTopBar.height,
+      );
+    },
+  );
+
+  testWidgets(
+    'a pinned header below topBarSliver stays clear of the status bar once '
+    'the floating bar fully collapses (regression: it used to ride up '
+    'underneath the status bar once the only thing reserving that space '
+    "disappeared along with the bar's own height)",
+    (tester) async {
+      final controller = ScrollController();
+      addTearDown(controller.dispose);
+      const statusBarHeight = 40.0;
+
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(
+            padding: EdgeInsets.only(top: statusBarHeight),
+          ),
+          child: MaterialApp(
+            theme: nooTheme(Brightness.light),
+            home: Scaffold(
+              // The fix under test: wrapping the scroll view (not just the
+              // top bar) in `SafeArea(top: true)` reserves the status-bar
+              // inset outside the scrolling/collapsing region entirely, so
+              // it's never implicated in `topBarSliver`'s own collapse math.
+              body: SafeArea(
+                top: true,
+                bottom: false,
+                child: CustomScrollView(
+                  controller: controller,
+                  slivers: [
+                    topBarSliver(const _FakeTopBar()),
+                    SliverPersistentHeader(
+                      pinned: true,
+                      delegate: _FakeStickyHeaderDelegate(),
+                    ),
+                    SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) =>
+                            SizedBox(height: 60, child: Text('Item $index')),
+                        childCount: 40,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Fully visible before any scroll - right below the reserved inset.
+      expect(
+        tester.getTopLeft(find.byType(_FakeStickyHeader)).dy,
+        _FakeTopBar.height + statusBarHeight,
+      );
+
+      // Scroll well past the top bar's own height so it collapses fully.
+      final gesture = await tester.startGesture(const Offset(200, 300));
+      await gesture.moveBy(const Offset(0, -300));
+      await tester.pump();
+      await gesture.up();
+      await tester.pump();
+
+      expect(
+        tester.renderObject<RenderSliver>(_header()).geometry!.paintExtent,
+        0,
+        reason:
+            'the top bar should be fully collapsed for this check to '
+            'mean anything',
+      );
+      // The regression: without the fix, this would be 0 (or negative,
+      // scrolled up under the status bar) instead of sitting right at the
+      // reserved inset.
+      expect(
+        tester.getTopLeft(find.byType(_FakeStickyHeader)).dy,
+        statusBarHeight,
       );
     },
   );

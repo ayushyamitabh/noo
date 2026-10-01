@@ -297,13 +297,21 @@ bare system prompt gives no context on its own.
   matching `Scaffold.appBar`'s old `pickRequest == null` guard - see
   `buildAppTabView`'s doc comment. It sits above each tab's own pinned
   in-content header (the sort/filter controls row, or Files/Photos'
-  selection bar - see below); the two float/scroll independently.
-  `BottomNavBar` (`widgets/bottom_nav_bar.dart`) adapts
-  the pinned `AppTab`s onto `NooBottomBar`. `AppDrawer`
+  selection bar - see below); the two float/scroll independently - each
+  tab also wraps its whole `CustomScrollView` in `SafeArea(top: true,
+  bottom: false, ...)` so that pinned header stays clear of the status bar
+  once the floating top bar above it fully collapses (see
+  `topBarSliver`'s own doc comment for why that reservation can't live
+  inside the top bar itself). `BottomNavBar` (`widgets/bottom_nav_bar.dart`)
+  adapts the pinned `AppTab`s onto `NooBottomBar`. `AppDrawer`
   (`widgets/app_drawer.dart`) builds a `NooDrawer`: account block, storage
   meter, a "More" list of the hidden tabs, Settings, and an "Edit tabs"
   link (opens Settings - there's no in-page anchor to scroll to its Tabs
-  section yet).
+  section yet). `SettingsController.navMenuStyle` (Settings → Appearance →
+  "Navigation menu") offers an alternative to the hamburger/drawer pair:
+  the avatar button opens `showAvatarMenu` (`widgets/avatar_menu.dart`)
+  instead, a dropdown holding the same hidden-tabs + Settings content -
+  see `styling.md`'s Gotchas for the wiring.
 - **Desktop:** a `NooSidebar` (account card, pinned tabs, divider,
   remaining tabs, storage meter, Settings) sits beside a `NooToolbar`
   (tab title, search, an "Upload" action on Files/Photos) over the same

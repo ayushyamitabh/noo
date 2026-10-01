@@ -853,14 +853,30 @@ class _FilesViewState extends State<FilesView> {
             unawaited(sync.syncOnPull());
             return browser.reload();
           },
-          child: CustomScrollView(
-            controller: widget.scrollController,
-            // Pull-to-refresh needs a scroll physics that allows dragging
-            // past the edge even when content doesn't fill the viewport -
-            // an empty or single-item list otherwise can't be pulled at all
-            // under the platform default physics.
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: contentSlivers,
+          // `topBarSliver`'s floating header can collapse all the way to
+          // zero height (fully scrolled away), at which point the sticky
+          // controls row right below it in `contentSlivers` would otherwise
+          // ride up underneath the status bar instead of stopping below it
+          // - the floating top bar used to be the only thing reserving that
+          // space (via its own internal `SafeArea`), and that reservation
+          // disappears along with it once it's fully hidden. Wrapping the
+          // whole scroll view keeps the inset outside the scrolling region
+          // entirely, so it's never implicated in the floating header's own
+          // collapse/reveal math - safe to apply unconditionally, since
+          // desktop's `MediaQuery.padding.top` is 0 anyway (no topBar / no
+          // status bar there).
+          child: SafeArea(
+            top: true,
+            bottom: false,
+            child: CustomScrollView(
+              controller: widget.scrollController,
+              // Pull-to-refresh needs a scroll physics that allows dragging
+              // past the edge even when content doesn't fill the viewport -
+              // an empty or single-item list otherwise can't be pulled at
+              // all under the platform default physics.
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: contentSlivers,
+            ),
           ),
         ),
       ),

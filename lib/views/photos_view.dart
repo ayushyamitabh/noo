@@ -369,12 +369,19 @@ class _PhotosViewState extends State<PhotosView> {
           color: colors.accent,
           backgroundColor: colors.surface,
           onRefresh: photosController.fetchAllMedia,
-          child: CustomScrollView(
-            controller: widget.scrollController,
-            // See files_view.dart's identical fix - without this, pull-to-
-            // refresh can't be triggered on an empty or single-item list.
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: contentSlivers,
+          // See files_view.dart's identical fix - without this, the sticky
+          // controls row rides up under the status bar once the floating
+          // top bar above it fully collapses.
+          child: SafeArea(
+            top: true,
+            bottom: false,
+            child: CustomScrollView(
+              controller: widget.scrollController,
+              // See files_view.dart's identical fix - without this, pull-to-
+              // refresh can't be triggered on an empty or single-item list.
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: contentSlivers,
+            ),
           ),
         ),
       ),
