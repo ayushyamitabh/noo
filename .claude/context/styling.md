@@ -30,10 +30,12 @@ widgets. Key points:
   OS-provided `ColorScheme` wins over the seed color — always thread both
   `dynamicScheme` and `useDynamicColor` through when adding a theme knob.
 - **Font**: Inter via `google_fonts`, applied through
-  `GoogleFonts.interTextTheme(...)`. In tests, set
-  `GoogleFonts.config.allowRuntimeFetching = false` in `setUpAll` — without
-  it, the font-fetch call to Google's CDN can stall `pumpAndSettle`
-  indefinitely (see `standards.md`).
+  `GoogleFonts.interTextTheme(...)`. Font files ship in
+  `assets/google_fonts/` (Instrument Sans, Schibsted Grotesk) and
+  `main()` sets `GoogleFonts.config.allowRuntimeFetching = false`, so the
+  app never contacts Google (the privacy policy on the website relies on
+  this — keep it true; add new weights as bundled files). Tests set the
+  same flag in `setUpAll` (see `standards.md`).
 - **Cards**: flat (`elevation: 0`), 20px rounded corners,
   `surfaceContainerLow`.
 - **App bars**: flat, not centered, `surface` background.
@@ -324,3 +326,13 @@ blocks are noted where they matter:
   generator step. `assets/icon/app_icon_monochrome.png` is deliberately a
   tightly-cropped glyph (unlike the launcher's safe-zone-padded monochrome
   layer), so it renders at a sensible size at 72-80px.
+
+## Text/markdown viewer
+
+`MediaTextPreview` is an editable monospace `TextField` padded clear of the status bar, top bar and action bar; a Save button appears when dirty (read-only for offline copies). `NooPersonAccessRow.trailing` replaces the owner label/permission pill (used by share-search results). Sheets whose close button lives in `showNooSheet` children must pop via a `Builder` context, not the caller's.
+
+`showNooSheet` insets its body by the keyboard (`viewInsets.bottom`) so focused fields stay visible; the body's widget structure must not change when the keyboard opens, or the sheet content is rebuilt and loses focus.
+
+Markdown files (`.md`/`.markdown`) in `MediaTextPreview` open rendered via `flutter_markdown_plus` (`Markdown`, styled from Noo tokens in `_markdownStyle`), with a top-right Edit/Preview toggle (hidden for read-only offline copies). Other text files go straight to the editor.
+
+`ShareSheet`: focusing the people search field does not scroll; once the user types, `_revealPeopleSection` animates the "Share with people" section (keyed by `_peopleKey` on the `NooShareSection`, not the inner column) to just below the sheet's top edge with a small gap.

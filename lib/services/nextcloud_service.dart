@@ -147,6 +147,19 @@ class NextcloudService {
     return response.bodyBytes;
   }
 
+  /// Overwrites the file at [itemPath] with [bytes] (WebDAV PUT) - used by
+  /// the in-app text editor. Returns whether the server accepted it.
+  Future<bool> putBytes(String itemPath, List<int> bytes) async {
+    final response = await http.put(
+      Uri.parse(fileUrl(itemPath)),
+      headers: _headers,
+      body: bytes,
+    );
+    return response.statusCode == 200 ||
+        response.statusCode == 201 ||
+        response.statusCode == 204;
+  }
+
   Future<bool> testConnection() async {
     try {
       final davPath = '$_cleanServerUrl/remote.php/dav/files/$username/';

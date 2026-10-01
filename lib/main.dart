@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
@@ -44,6 +45,8 @@ import 'widgets/shell/shell_common.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // Fonts ship in assets/google_fonts; never fetch them from Google at runtime.
+  GoogleFonts.config.allowRuntimeFetching = false;
   runApp(
     MultiProvider(
       // Split out of the former single `ServerProvider` god object - see

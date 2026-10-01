@@ -206,6 +206,7 @@ class NooTopBar extends StatelessWidget implements PreferredSizeWidget {
                   style: NooText.title.copyWith(height: 1, color: colors.fg1),
                 ),
               ),
+              const SizedBox(width: NooSpace.md),
               Expanded(child: androidTitleTrailing!),
             ] else
               Expanded(

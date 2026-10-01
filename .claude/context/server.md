@@ -801,3 +801,5 @@ Flutter's own default to already be high enough.
 `isRestoringSession` still gates the splash screen until the above resolves
 — see `standards.md` for why widget tests must mock both storage channels
 rather than relying on this async path throwing naturally.
+
+- `putBytes(path, bytes)` does a WebDAV `PUT` to overwrite a file; used by the text/markdown editor (`MediaTextPreview`).

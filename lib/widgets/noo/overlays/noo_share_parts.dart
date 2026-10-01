@@ -64,6 +64,8 @@ class NooPersonAccessRow extends StatelessWidget {
   final String permission;
   final VoidCallback? onPermissionTap;
   final String ownerLabel;
+  /// Replaces the owner label / permission pill (e.g. a plain search result).
+  final Widget? trailing;
 
   const NooPersonAccessRow({
     super.key,
@@ -74,6 +76,7 @@ class NooPersonAccessRow extends StatelessWidget {
     this.permission = 'Can edit',
     this.onPermissionTap,
     this.ownerLabel = 'Owner',
+    this.trailing,
   });
 
   @override
@@ -113,7 +116,9 @@ class NooPersonAccessRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: NooSpace.sm),
-          if (owner)
+          if (trailing != null)
+            trailing!
+          else if (owner)
             Text(ownerLabel, style: NooText.label.copyWith(color: colors.fg3))
           else
             NooPermissionPill(label: permission, onTap: onPermissionTap),

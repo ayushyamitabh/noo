@@ -90,32 +90,6 @@ class/method already makes obvious.
   `Align`).
 - Run with `flutter test`.
 
-## Play Store screenshots
-
-`bash tool/screenshots.sh` (Git Bash is fine on Windows) regenerates the store
-listing screenshots **without any real data**: it runs the real, unmodified app
-against a throwaway Docker Nextcloud (`tool/demo_server/`) seeded with invented
-content, on a wiped 1080x1920 emulator with a demo-mode status bar, and drives
-it with `integration_test/store_screenshots_test.dart` (host-side driver:
-`test_driver/integration_test.dart`, which saves `adb screencap` images).
-Output lands in `store_listing/screenshots/` (gitignored) after
-`tool/finalize_screenshots.py` flattens alpha and checks Play's size/aspect
-limits (each side 320-3840 px, long side at most 2x the short side - a stock
-1080x2400 phone screen is 2.22:1 and would be rejected).
-
-- The test logs in by writing the demo user's account/app password into
-  storage via `AccountStore` before calling `main()`, so it skips the browser
-  login flow; it also fixes the theme (light, non-dynamic colour), the visible
-  tabs and the first-run notification prompt so shots are reproducible.
-- It finds things by tab icon (`AppTab.icon` inside `FloatingBottomNavBar`),
-  tooltips, the `ValueKey('files')`/`ValueKey('offline')` on the two
-  `FilesView`s, and the fake content's names (defined in
-  `tool/demo_server/seed.py`) - keep those in sync if you rename either side.
-- `flutter test` only runs `test/`, so this never runs as part of the normal
-  suite; `integration_test` is a dev-only dependency.
-- Always review the images before uploading - see
-  `tool/demo_server/README.md` for the known places real data could appear.
-
 ## Local install/deploy
 
 Never use `flutter install` to push a build to a test device — it always

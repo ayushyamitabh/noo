@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 0.0.1+2
+version: 1.0.0+3
 
 environment:
   sdk: ^3.12.2
@@ -58,14 +58,10 @@ dependencies:
   webview_flutter: ^4.14.1
   permission_handler: ^11.3.1
   connectivity_plus: ^6.1.5
+  flutter_markdown_plus: ^1.0.12
 
 dev_dependencies:
   flutter_test:
-    sdk: flutter
-
-  # Drives tool/screenshots.sh (Play Store screenshots against a fake-data
-  # demo server) - dev only, never part of the release build.
-  integration_test:
     sdk: flutter
 
   # The "flutter_lints" package below contains a set of recommended lints to
@@ -89,6 +85,7 @@ flutter:
   assets:
     - assets/icon/app_icon.png
     - assets/icon/app_icon_monochrome.png
+    - assets/google_fonts/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

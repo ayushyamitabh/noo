@@ -45,6 +45,3 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-# Play Store screenshot tooling (tool/screenshots.sh)
-/store_listing/screenshots/
-/tool/demo_server/.venv/

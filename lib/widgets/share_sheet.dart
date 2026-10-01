@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -71,11 +72,13 @@ class ShareSheet extends StatefulWidget {
     return showNooSheet(
       context,
       children: [
-        NooOverlayHeader(
-          leading: detailsFileTile(item),
-          title: item.name,
-          subtitle: detailsMetaLine(item),
-          onClose: () => Navigator.pop(context),
+        Builder(
+          builder: (sheetContext) => NooOverlayHeader(
+            leading: detailsFileTile(item),
+            title: item.name,
+            subtitle: detailsMetaLine(item),
+            onClose: () => Navigator.of(sheetContext).pop(),
+          ),
         ),
         ShareSheet(item: item),
       ],
@@ -99,9 +102,36 @@ class _ShareSheetState extends State<ShareSheet> {
   bool _showInherited = false;
   final _peopleController = TextEditingController();
   final _linkController = TextEditingController();
+  final _peopleFocus = FocusNode();
+  final _peopleKey = GlobalKey();
+
+  /// Once the user types, scrolls the sheet so the people field and its
+  /// results (under their title) sit near the top, leaving a little room under the sheet's
+  /// rounded top edge.
+  void _revealPeopleSection() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final ctx = _peopleKey.currentContext;
+      final box = ctx?.findRenderObject();
+      if (ctx == null || box is! RenderBox) return;
+      final position = Scrollable.maybeOf(ctx)?.position;
+      final viewport = RenderAbstractViewport.maybeOf(box);
+      if (position == null || viewport == null) return;
+      final target = (viewport.getOffsetToReveal(box, 0).offset - 8).clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      );
+      position.animateTo(
+        target,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+    });
+  }
 
   @override
   void dispose() {
+    _peopleFocus.dispose();
     _peopleController.dispose();
     _linkController.dispose();
     super.dispose();
@@ -128,6 +158,7 @@ class _ShareSheetState extends State<ShareSheet> {
       return;
     }
     setState(() => _isSearching = true);
+    _revealPeopleSection();
     final ops = context.read<ItemOperations>();
     final results = await ops.searchSharees(trimmed);
     if (!mounted) return;
@@ -135,6 +166,7 @@ class _ShareSheetState extends State<ShareSheet> {
       _searchResults = results;
       _isSearching = false;
     });
+    _revealPeopleSection();
   }
 
   /// The single "Name, email or group" field: reuses whichever match is
@@ -364,6 +396,7 @@ class _ShareSheetState extends State<ShareSheet> {
           absorbing: _isAddingPerson,
           child: NooTextField(
             controller: _peopleController,
+            focusNode: _peopleFocus,
             leadingIcon: LucideIcons.search,
             placeholder: 'Name, email or group',
             onChanged: _search,
@@ -381,17 +414,34 @@ class _ShareSheetState extends State<ShareSheet> {
           ),
         ),
         for (final sharee in _searchResults)
-          NooSettingsRow(
-            icon: sharee.type == ShareeType.group
-                ? LucideIcons.users
-                : LucideIcons.user,
-            label: Text(sharee.label),
-            subtitle: sharee.subtitle != null ? Text(sharee.subtitle!) : null,
+          InkWell(
+            borderRadius: BorderRadius.circular(NooRadii.input),
             onTap: () => _addSharee(sharee),
+            child: NooPersonAccessRow(
+              avatar: NooAvatar(
+                initials: _initial(sharee.label),
+                color: NooPhotoTile.paletteColor(sharee.label.hashCode),
+                icon: sharee.type == ShareeType.group
+                    ? LucideIcons.users
+                    : null,
+              ),
+              name: sharee.label,
+              subtitle: sharee.subtitle,
+              trailing: const SizedBox.shrink(),
+            ),
           ),
-        const SizedBox(height: NooSpace.xs),
+        if (_searchResults.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: NooSpace.xs),
+            child: Divider(height: 1, thickness: 1, color: colors.line),
+          )
+        else
+          const SizedBox(height: NooSpace.xs),
         NooPersonAccessRow(
-          avatar: NooAvatar(initials: _initial(session.username), current: true),
+          avatar: NooAvatar(
+            initials: _initial(session.username),
+            current: true,
+          ),
           name: session.username,
           owner: true,
         ),
@@ -402,12 +452,16 @@ class _ShareSheetState extends State<ShareSheet> {
               color: NooPhotoTile.paletteColor(
                 (share.sharedWithDisplayName ?? share.id).hashCode,
               ),
-              icon: share.shareType == ShareType.group ? LucideIcons.users : null,
+              icon: share.shareType == ShareType.group
+                  ? LucideIcons.users
+                  : null,
             ),
             name: share.sharedWithDisplayName ?? 'Shared',
             subtitle: share.shareType == ShareType.group
                 ? 'Group'
-                : (share.shareType == ShareType.email ? 'Invited by email' : null),
+                : (share.shareType == ShareType.email
+                      ? 'Invited by email'
+                      : null),
             permission: (share.permissions & 2) != 0 ? 'Can edit' : 'Can view',
             onPermissionTap: () => _openPersonMenu(share),
           ),
@@ -429,7 +483,9 @@ class _ShareSheetState extends State<ShareSheet> {
                     ),
                   ),
                   Icon(
-                    _showInherited ? LucideIcons.chevronUp : LucideIcons.chevronDown,
+                    _showInherited
+                        ? LucideIcons.chevronUp
+                        : LucideIcons.chevronDown,
                     size: 16,
                     color: colors.fg3,
                   ),
@@ -464,7 +520,10 @@ class _ShareSheetState extends State<ShareSheet> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('Internal link', style: NooText.bodyL.copyWith(color: colors.fg1)),
+                    Text(
+                      'Internal link',
+                      style: NooText.bodyL.copyWith(color: colors.fg1),
+                    ),
                     Text(
                       'For people who already have access',
                       style: NooText.meta.copyWith(color: colors.fg3),
@@ -559,6 +618,7 @@ class _ShareSheetState extends State<ShareSheet> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         NooShareSection(
+          key: _peopleKey,
           title: 'Share with people',
           child: _peopleSection(colors, session, peopleShares, internalLink),
         ),
@@ -572,13 +632,16 @@ class _ShareSheetState extends State<ShareSheet> {
           caption: hasLink
               ? null
               : 'Anyone with the link can access this ${widget.item.isFolder ? 'folder' : 'file'}.',
-          child: hasLink ? _linkSection(publicLinkShares.first) : const SizedBox.shrink(),
+          child: hasLink
+              ? _linkSection(publicLinkShares.first)
+              : const SizedBox.shrink(),
         ),
         if (!widget.item.isFolder) ...[
           const SizedBox(height: 22),
           NooShareSection(
             title: 'Send file directly',
-            caption: "Link settings above don't apply - this sends the file's bytes directly.",
+            caption:
+                "Link settings above don't apply - this sends the file's bytes directly.",
             child: NooButton(
               variant: NooButtonVariant.outline,
               size: NooButtonSize.card,

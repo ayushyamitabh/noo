@@ -106,40 +106,51 @@ class _NooSheetBodyState extends State<_NooSheetBody> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          if (!_needsPeek) {
-            return ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: constraints.maxHeight * _kNooSheetPeekFraction,
-              ),
-              child: _buildScrollable(null),
-            );
-          }
-          return DraggableScrollableSheet(
-            initialChildSize: _kNooSheetPeekFraction,
-            minChildSize: _kNooSheetMinFraction,
-            maxChildSize: _kNooSheetMaxFraction,
-            expand: false,
-            builder: (context, scrollController) {
-              // Plain `DraggableScrollableSheet` doesn't dismiss the modal
-              // route on its own when dragged down to its floor - it just
-              // stops resizing there - so pop explicitly once it's been
-              // dragged (near) all the way down, matching a native
-              // peek sheet's swipe-to-dismiss.
-              return NotificationListener<DraggableScrollableNotification>(
-                onNotification: (notification) {
-                  if (notification.extent <= notification.minExtent + 0.01) {
-                    Navigator.of(context).maybePop();
-                  }
-                  return false;
-                },
-                child: _buildScrollable(scrollController),
+    // A modal bottom sheet doesn't avoid the keyboard itself, so a focused
+    // field would be covered. Inset by the keyboard and, while it's up, let
+    // the content use all the space above it.
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    final keyboardUp = keyboard > 0;
+    return Padding(
+      padding: EdgeInsets.only(bottom: keyboard),
+      child: SafeArea(
+        bottom: !keyboardUp,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            if (!_needsPeek) {
+              return ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: keyboardUp
+                      ? constraints.maxHeight
+                      : constraints.maxHeight * _kNooSheetPeekFraction,
+                ),
+                child: _buildScrollable(null),
               );
-            },
-          );
-        },
+            }
+            return DraggableScrollableSheet(
+              initialChildSize: _kNooSheetPeekFraction,
+              minChildSize: _kNooSheetMinFraction,
+              maxChildSize: _kNooSheetMaxFraction,
+              expand: false,
+              builder: (context, scrollController) {
+                // Plain `DraggableScrollableSheet` doesn't dismiss the modal
+                // route on its own when dragged down to its floor - it just
+                // stops resizing there - so pop explicitly once it's been
+                // dragged (near) all the way down, matching a native
+                // peek sheet's swipe-to-dismiss.
+                return NotificationListener<DraggableScrollableNotification>(
+                  onNotification: (notification) {
+                    if (notification.extent <= notification.minExtent + 0.01) {
+                      Navigator.of(context).maybePop();
+                    }
+                    return false;
+                  },
+                  child: _buildScrollable(scrollController),
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }
