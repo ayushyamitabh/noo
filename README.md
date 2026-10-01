@@ -35,10 +35,6 @@ Website: <https://noo.ayushya.dev>
   sign in through your browser, and Noo never sees or stores your password,
   only a scoped app password
 
-## Screenshots
-
-_Coming soon._
-
 ## Getting started
 
 Prerequisites:
