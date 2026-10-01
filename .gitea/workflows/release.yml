@@ -77,27 +77,3 @@ jobs:
         uses: akkuman/gitea-release-action@v1
         with:
           files: ${{ env.AAB_PATH }}
-
-      - name: Decode Play Console service account key
-        # Skipped (rather than failing the whole run) until the secret is
-        # set up - see tool/upload_play_bundle.py's doc comment for what
-        # that setup involves and its one hard prerequisite: Google won't
-        # accept API calls for an app that's never had a single manual
-        # upload through the Play Console web UI.
-        if: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64 != '' }}
-        run: echo "$SERVICE_ACCOUNT_JSON_BASE64" | base64 -d > "${{ runner.temp }}/play-service-account.json"
-        env:
-          SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64 }}
-
-      - name: Upload App Bundle to Play Console library
-        # Deliberately doesn't touch any release track - see
-        # tool/upload_play_bundle.py. Uploaded bundles show up under
-        # Release > App bundle explorer in Play Console, ready to promote
-        # to a track by hand whenever it's actually time to ship.
-        if: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64 != '' }}
-        run: |
-          pip install --quiet google-api-python-client google-auth
-          python3 tool/upload_play_bundle.py "${{ env.AAB_PATH }}"
-        env:
-          GOOGLE_PLAY_PACKAGE_NAME: dev.ayushya.noo
-          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH: ${{ runner.temp }}/play-service-account.json
