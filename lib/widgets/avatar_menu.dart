@@ -75,9 +75,20 @@ class _AvatarMenuContent extends StatelessWidget {
           child: SizedBox(
             width: double.infinity,
             child: Container(
-              clipBehavior: Clip.antiAlias,
+              // No `color`/`clipBehavior` here - a `Container` with both a
+              // `border` and `clipBehavior` set paints the border as part
+              // of its *outer* decoration, then paints its (clipped) child
+              // on top right up to that same boundary with no gap for the
+              // border's own stroke width to show through. An opaque child
+              // touching that edge - every row below has its own full-bleed
+              // `Material` fill - then paints straight over the inner half
+              // of the border, which read as the border going missing
+              // specifically wherever an opaque row sits (every corner but
+              // the two by the header, which has no opaque fill of its
+              // own). The 1px `Padding` + inset `ClipRRect` below keeps the
+              // clipped, filled content entirely inside the border's own
+              // stroke instead of racing it for the same pixels.
               decoration: BoxDecoration(
-                color: colors.surface,
                 border: Border.all(color: colors.line),
                 borderRadius: BorderRadius.circular(NooRadii.card),
                 // `nooDialogShadow` alone is a wide, soft, fairly faint
@@ -99,81 +110,88 @@ class _AvatarMenuContent extends StatelessWidget {
                   nooDialogShadow,
                 ],
               ),
-              child: Material(
-                color: Colors.transparent,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Avatar on the right, name/host on the left - mirrors the
-                    // top bar's own right-aligned avatar exactly, so this
-                    // header reads as a continuation of the button that
-                    // opened it rather than a disconnected card.
-                    InkWell(
-                      onTap: closeAndOpenSettings,
-                      child: Padding(
-                        padding: const EdgeInsets.all(NooSpace.md),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    session.username,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: NooText.bodyL.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                      color: colors.fg1,
-                                    ),
+              child: Padding(
+                padding: const EdgeInsets.all(1),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(NooRadii.card - 1),
+                  child: Material(
+                    color: colors.surface,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Avatar on the right, name/host on the left - mirrors the
+                        // top bar's own right-aligned avatar exactly, so this
+                        // header reads as a continuation of the button that
+                        // opened it rather than a disconnected card.
+                        InkWell(
+                          onTap: closeAndOpenSettings,
+                          child: Padding(
+                            padding: const EdgeInsets.all(NooSpace.md),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        session.username,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: NooText.bodyL.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                          color: colors.fg1,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        serverHost(session.serverUrl),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: NooText.meta.copyWith(
+                                          color: colors.fg3,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    serverHost(session.serverUrl),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: NooText.meta.copyWith(
-                                      color: colors.fg3,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                                ),
+                                const SizedBox(width: 12),
+                                NooAvatar(
+                                  initials: accountInitial(session.username),
+                                  current: true,
+                                  size: 40,
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 12),
-                            NooAvatar(
-                              initials: accountInitial(session.username),
-                              current: true,
-                              size: 40,
-                            ),
-                          ],
+                          ),
                         ),
-                      ),
-                    ),
-                    if (hiddenTabs.isNotEmpty) ...[
-                      Divider(height: 1, color: colors.line),
-                      for (final tab in hiddenTabs)
+                        if (hiddenTabs.isNotEmpty) ...[
+                          Divider(height: 1, color: colors.line),
+                          for (final tab in hiddenTabs)
+                            NooSettingsRow(
+                              icon: tab.icon,
+                              label: Text(tab.label),
+                              trailing: tab == AppTab.trash && trashCount > 0
+                                  ? NooBadge(
+                                      tone: NooBadgeTone.accent,
+                                      child: Text('$trashCount'),
+                                    )
+                                  : null,
+                              onTap: () {
+                                Navigator.pop(context);
+                                settings.requestTab(tab);
+                              },
+                            ),
+                        ],
+                        Divider(height: 1, color: colors.line),
                         NooSettingsRow(
-                          icon: tab.icon,
-                          label: Text(tab.label),
-                          trailing: tab == AppTab.trash && trashCount > 0
-                              ? NooBadge(
-                                  tone: NooBadgeTone.accent,
-                                  child: Text('$trashCount'),
-                                )
-                              : null,
-                          onTap: () {
-                            Navigator.pop(context);
-                            settings.requestTab(tab);
-                          },
+                          icon: LucideIcons.settings,
+                          label: const Text('Settings'),
+                          onTap: closeAndOpenSettings,
                         ),
-                    ],
-                    Divider(height: 1, color: colors.line),
-                    NooSettingsRow(
-                      icon: LucideIcons.settings,
-                      label: const Text('Settings'),
-                      onTap: closeAndOpenSettings,
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),

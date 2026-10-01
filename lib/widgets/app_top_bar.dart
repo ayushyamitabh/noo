@@ -16,9 +16,9 @@ import 'shell/shell_common.dart';
 ///   title, then an inline search field that opens [SearchView].
 /// - Android: `menu`, title, avatar actions. Upload has no top-bar icon
 ///   here - it's the [NooFab] `MainShellView` shows instead. When search
-///   isn't in the bottom bar, the title itself is replaced by an inline
-///   search-field-styled launcher (`androidTitleReplacement`) rather than
-///   a bare search icon sitting beside it.
+///   isn't in the bottom bar, an inline search-field-styled launcher
+///   (`androidTitleTrailing`) sits to the title's own right, rather than a
+///   bare search icon over in `actions`.
 ///
 /// [style] is resolved by the caller (`NooLayout.navStyle`) rather than
 /// read from context here, since [preferredSize] is a plain getter with no
@@ -68,9 +68,9 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
           ? () => Scaffold.of(context).openDrawer()
           : null,
       // Android has no large title to put a second search row under the
-      // way iOS does (`search:` below) - an inline bar replaces the title
-      // itself instead of sitting beside it as a plain icon action.
-      androidTitleReplacement: !_ios && _showSearch
+      // way iOS does (`search:` below) - an inline bar sits beside the
+      // title instead, rather than a plain search icon over in `actions`.
+      androidTitleTrailing: !_ios && _showSearch
           ? const ShellSearchLauncher()
           : null,
       actions: [

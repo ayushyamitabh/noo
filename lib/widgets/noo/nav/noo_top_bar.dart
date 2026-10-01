@@ -56,14 +56,15 @@ class NooTopBar extends StatelessWidget implements PreferredSizeWidget {
   /// iOS only: the search field shown below the large title.
   final Widget? search;
 
-  /// Android only: replaces the plain title text with an arbitrary widget
-  /// (e.g. a search-field-styled launcher) in that same flexible middle
-  /// slot, between [leading]/the menu button and [actions]. iOS already
-  /// has a dedicated [search] slot below its large title for this; Android
-  /// has no large title to put a second row under, so a caller that wants
-  /// an inline search bar there replaces the title with one instead of
-  /// adding a row.
-  final Widget? androidTitleReplacement;
+  /// Android only: an extra widget (e.g. a search-field-styled launcher) in
+  /// the flexible middle slot, to the title's own right - [title] keeps
+  /// its natural (shrink-to-fit, ellipsized) width on the left, and this
+  /// takes whatever space is left rather than replacing it. iOS already has
+  /// a dedicated [search] slot below its large title for this; Android has
+  /// no large title to put a second row under, so a caller that wants an
+  /// inline search bar there puts it beside the title instead of adding a
+  /// row.
+  final Widget? androidTitleTrailing;
 
   /// Defaults to `bg` - the top bar sits on the screen background.
   final Color? backgroundColor;
@@ -76,7 +77,7 @@ class NooTopBar extends StatelessWidget implements PreferredSizeWidget {
     this.onMenu,
     this.actions = const [],
     this.search,
-    this.androidTitleReplacement,
+    this.androidTitleTrailing,
     this.backgroundColor,
   });
 
@@ -188,16 +189,31 @@ class NooTopBar extends StatelessWidget implements PreferredSizeWidget {
           spacing: 4,
           children: [
             ?lead,
-            Expanded(
-              child:
-                  androidTitleReplacement ??
-                  Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: NooText.title.copyWith(height: 1, color: colors.fg1),
-                  ),
-            ),
+            // [androidTitleTrailing]'s own doc comment explains why this
+            // isn't a straight replacement: the title keeps its natural
+            // width (`Flexible`, not `Expanded` - it still shrinks/
+            // ellipsizes if there's truly no room, but doesn't force the
+            // row that wide otherwise) and sits to the trailing content's
+            // left rather than being displaced by it.
+            if (androidTitleTrailing != null) ...[
+              Flexible(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: NooText.title.copyWith(height: 1, color: colors.fg1),
+                ),
+              ),
+              Expanded(child: androidTitleTrailing!),
+            ] else
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: NooText.title.copyWith(height: 1, color: colors.fg1),
+                ),
+              ),
             ...actions,
           ],
         ),

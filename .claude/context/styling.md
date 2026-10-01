@@ -245,11 +245,23 @@ blocks are noted where they matter:
   near-black `bg` (a dark, diffuse shadow needs real density close to the
   edge to be visible against an already-dark backdrop), so a second,
   tighter, more opaque contact shadow underneath it gives real elevation
-  in both themes. Also added `NooTopBar.androidTitleReplacement`: Android has no
-  large title to put a second search row under the way iOS's `search:`
-  slot does, so an inline search bar (`AppTopBar` passes a plain
-  `ShellSearchLauncher()` when search isn't in the bottom bar) replaces the
-  title in its flexible slot instead of sitting beside it as a bare icon.
+  in both themes. The card's border can go missing wherever an opaque row
+  sits against it too (every corner but the header's, which has no
+  full-bleed fill of its own) if a `Container` combines `border` with its
+  own `clipBehavior` - that paints the border as part of the *outer*
+  decoration, then the clipped child on top right up to the same boundary,
+  with no gap for the border's own stroke to show through. Fixed the same
+  way any bordered-and-clipped `Container` should be: no `clipBehavior` on
+  the bordered `Container` itself, and a 1px-inset `ClipRRect` (radius
+  reduced by that same 1px) around the filled, clipped content instead, so
+  it never paints over the border. Also added
+  `NooTopBar.androidTitleTrailing`: Android has no large title to put a
+  second search row under the way iOS's `search:` slot does, so an inline
+  search bar (`AppTopBar` passes a plain `ShellSearchLauncher()` when
+  search isn't in the bottom bar) sits to the title's own right in that
+  flexible slot - `Flexible`, not `Expanded`, so the title still shrinks/
+  ellipsizes if there's truly no room but doesn't claim more than it needs
+  otherwise - instead of the title being replaced by it.
 - [`SyncedHeaderScaffold`](../../lib/widgets/synced_header_scaffold.dart) —
   the pull-to-sync `CustomScrollView` header with the persistent sync-status
   chip and pull-to-refresh gesture/spinner. Every screen (including
