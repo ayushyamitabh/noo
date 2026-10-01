@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/session_controller.dart';
 import '../views/account_view.dart';
+import 'noo/core/noo_avatar.dart';
 
 /// Top-bar avatar button that opens the account screen. Replaces the old
 /// "Account" bottom-nav destination, matching how Google Drive surfaces
@@ -38,7 +39,6 @@ class ProfileAvatarButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<SessionController>();
-    final colorScheme = Theme.of(context).colorScheme;
     final initial = provider.username.isNotEmpty
         ? provider.username[0].toUpperCase()
         : '?';
@@ -55,18 +55,7 @@ class ProfileAvatarButton extends StatelessWidget {
               MaterialPageRoute(builder: (_) => const AccountView()),
             );
           },
-          icon: CircleAvatar(
-            radius: 17,
-            backgroundColor: colorScheme.primary,
-            child: Text(
-              initial,
-              style: TextStyle(
-                color: colorScheme.onPrimary,
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-              ),
-            ),
-          ),
+          icon: NooAvatar(initials: initial, current: true, size: 32),
         ),
       ),
     );

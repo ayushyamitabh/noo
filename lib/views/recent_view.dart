@@ -1,58 +1,37 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../models/nextcloud_item.dart';
 import '../providers/recent_controller.dart';
-import '../widgets/more_tabs_button.dart';
-import '../widgets/profile_avatar_button.dart';
-import '../widgets/synced_header_scaffold.dart';
+import '../theme/design_tokens.dart';
+import '../widgets/details/details_sheet.dart';
+import '../widgets/noo/files/noo_file_kind.dart';
+import '../widgets/noo/files/noo_file_row.dart';
+import '../widgets/noo/files/noo_file_table.dart';
+import '../widgets/noo/lists/noo_grouped_list.dart';
+import '../widgets/noo/lists/noo_settings_row.dart';
+import '../widgets/noo/noo_layout.dart';
+import '../widgets/noo/overlays/noo_sheet.dart';
+import '../widgets/share_sheet.dart';
+import '../widgets/tabs/tab_day_groups.dart';
+import '../widgets/tabs/tab_location.dart';
+import '../widgets/tabs/tab_state_slivers.dart';
 import 'file_viewer_screen.dart';
 
-IconData _recentItemIcon(NextcloudItemType type) {
-  switch (type) {
-    case NextcloudItemType.folder:
-      return Icons.folder_rounded;
-    case NextcloudItemType.image:
-      return Icons.image_rounded;
-    case NextcloudItemType.video:
-      return Icons.movie_rounded;
-    case NextcloudItemType.audio:
-      return Icons.audiotrack_rounded;
-    case NextcloudItemType.document:
-      return Icons.description_rounded;
-    case NextcloudItemType.archive:
-      return Icons.folder_zip_rounded;
-    case NextcloudItemType.file:
-      return Icons.insert_drive_file_rounded;
-  }
-}
-
-Color _recentItemIconColor(BuildContext context, NextcloudItemType type) {
-  final colorScheme = Theme.of(context).colorScheme;
-  switch (type) {
-    case NextcloudItemType.folder:
-      return colorScheme.primary;
-    case NextcloudItemType.image:
-      return Colors.amber.shade700;
-    case NextcloudItemType.video:
-      return Colors.deepOrange.shade600;
-    case NextcloudItemType.audio:
-      return Colors.purple.shade600;
-    case NextcloudItemType.document:
-      return Colors.blue.shade700;
-    case NextcloudItemType.archive:
-      return Colors.teal.shade700;
-    case NextcloudItemType.file:
-      return colorScheme.outline;
-  }
-}
-
 /// Recently modified files across the whole account (not folders), newest
-/// first — see [RecentController.fetchAll].
+/// first - see [RecentController.fetchAll]. Grouped into Today/Yesterday/
+/// This week/Earlier per `DESIGN_SYSTEM.md` §4; meta is "Modified {time} ·
+/// {location}" since the server only ever reports a modification, not a
+/// distinct action per entry.
 class RecentView extends StatefulWidget {
   final ScrollController scrollController;
 
-  const RecentView({super.key, required this.scrollController});
+  /// This tab's own shell top bar, planted as its first sliver - see
+  /// `buildAppTabView`'s doc comment. Null on desktop and while picking.
+  final PreferredSizeWidget? topBar;
+
+  const RecentView({super.key, required this.scrollController, this.topBar});
 
   @override
   State<RecentView> createState() => _RecentViewState();
@@ -63,8 +42,7 @@ class _RecentViewState extends State<RecentView> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final colors = context.nooColors;
     final recent = context.watch<RecentController>();
 
     if (!_requested) {
@@ -73,174 +51,180 @@ class _RecentViewState extends State<RecentView> {
     }
 
     final items = recent.items;
+    final isDesktop = NooLayout.isDesktop(context);
+    final groups = groupByRecentBucket<NextcloudItem>(
+      items,
+      (item) => item.lastModified,
+    );
 
     final List<Widget> contentSlivers = [
-      const SliverToBoxAdapter(child: SizedBox(height: 16)),
-
+      if (widget.topBar != null) topBarSliver(widget.topBar!),
+      const SliverToBoxAdapter(child: SizedBox(height: NooSpace.md)),
       if (recent.isLoading && items.isEmpty)
-        const SliverFillRemaining(
-          hasScrollBody: false,
-          child: Center(child: CircularProgressIndicator()),
-        )
+        tabLoadingSliver
       else if (recent.errorMessage != null)
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.error_outline_rounded,
-                    size: 64,
-                    color: colorScheme.error,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Could not load recent files',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      color: colorScheme.error,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    recent.errorMessage!,
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  FilledButton.icon(
-                    onPressed: recent.fetchAll,
-                    icon: const Icon(Icons.refresh_rounded),
-                    label: const Text('Retry'),
-                  ),
-                ],
-              ),
-            ),
-          ),
+        tabErrorSliver(
+          context,
+          title: 'Could not load recent files',
+          message: recent.errorMessage!,
+          onRetry: recent.fetchAll,
         )
       else if (items.isEmpty)
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.history_rounded,
-                  size: 64,
-                  color: colorScheme.outlineVariant,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'No recent files',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
+        tabEmptySliver(
+          context,
+          icon: LucideIcons.clock,
+          message: 'No recent files',
         )
+      else if (isDesktop)
+        _buildDesktopTable(context, groups)
       else
-        SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          sliver: SliverList(
-            delegate: SliverChildBuilderDelegate((context, index) {
-              final item = items[index];
-              return _buildTile(context, item);
-            }, childCount: items.length),
-          ),
-        ),
-
-      const SliverToBoxAdapter(child: SizedBox(height: 100)),
-      const SliverFillRemaining(hasScrollBody: false, child: SizedBox()),
+        _buildMobileGroups(context, groups),
+      ...tabBottomInsetSlivers(context),
     ];
 
-    return SyncedHeaderScaffold(
-      scrollController: widget.scrollController,
-      actions: const [MoreTabsButton(), ProfileAvatarButton()],
-      onRefresh: recent.fetchAll,
-      contentSlivers: contentSlivers,
-    );
-  }
-
-  Widget _buildTile(BuildContext context, NextcloudItem item) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final iconColor = _recentItemIconColor(context, item.type);
-    final folderPath = item.path.substring(
-      0,
-      item.path.length - item.name.length,
-    );
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () => _openFile(context, item),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: iconColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    _recentItemIcon(item.type),
-                    color: iconColor,
-                    size: 22,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.name,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        folderPath.isEmpty ? '/' : folderPath,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        DateFormat.yMMMd().add_jm().format(item.lastModified),
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.primary,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+    return ColoredBox(
+      color: colors.bg,
+      child: RefreshIndicator(
+        color: colors.accent,
+        backgroundColor: colors.surface,
+        onRefresh: recent.fetchAll,
+        // See files_view.dart's identical fix - without this, the sticky
+        // controls row rides up under the status bar once the floating top
+        // bar above it fully collapses.
+        child: SafeArea(
+          top: true,
+          bottom: false,
+          child: CustomScrollView(
+            controller: widget.scrollController,
+            // See files_view.dart's identical fix - without this, pull-to-
+            // refresh can't be triggered on an empty or single-item list.
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: contentSlivers,
           ),
         ),
       ),
     );
   }
 
+  Widget _buildMobileGroups(
+    BuildContext context,
+    List<TabDayGroup<NextcloudItem>> groups,
+  ) {
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: NooSpace.sm),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate((context, index) {
+          final group = groups[index];
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: index == groups.length - 1 ? 0 : 18,
+            ),
+            child: NooGroupedList(
+              label: group.label,
+              children: [
+                for (final item in group.items) _buildRow(context, item),
+              ],
+            ),
+          );
+        }, childCount: groups.length),
+      ),
+    );
+  }
+
+  Widget _buildDesktopTable(
+    BuildContext context,
+    List<TabDayGroup<NextcloudItem>> groups,
+  ) {
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: NooSpace.xl,
+        vertical: NooSpace.xs,
+      ),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate((context, index) {
+          final group = groups[index];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TabGroupLabel(group.label),
+                const NooFileTableHeader(
+                  col2Label: 'Modified',
+                  col3Label: 'Location',
+                ),
+                for (final item in group.items) _buildDesktopRow(context, item),
+              ],
+            ),
+          );
+        }, childCount: groups.length),
+      ),
+    );
+  }
+
+  Widget _buildRow(BuildContext context, NextcloudItem item) {
+    return NooFileRow(
+      kind: NooFileKind.from(
+        name: item.name,
+        mimeType: item.mimeType,
+        isDirectory: item.isFolder,
+      ),
+      name: item.name,
+      meta: 'Modified ${_metaTime(item.lastModified)} · ${_location(item)}',
+      favorite: item.isFavorite,
+      iosStyle: NooLayout.iosStyle(context),
+      onTap: () => _openFile(context, item),
+      onMore: () => _showItemSheet(context, item),
+    );
+  }
+
+  Widget _buildDesktopRow(BuildContext context, NextcloudItem item) {
+    return NooFileTableRow(
+      kind: NooFileKind.from(
+        name: item.name,
+        mimeType: item.mimeType,
+        isDirectory: item.isFolder,
+      ),
+      name: item.name,
+      col2: _metaTime(item.lastModified),
+      col3: _location(item),
+      favorite: item.isFavorite,
+      onTap: () => _openFile(context, item),
+      onMore: () => _showItemSheet(context, item),
+    );
+  }
+
+  void _showItemSheet(BuildContext context, NextcloudItem item) {
+    showNooSheet(
+      context,
+      children: [
+        NooGroupedList(
+          children: [
+            NooSettingsRow(
+              icon: LucideIcons.info,
+              label: const Text('Details'),
+              onTap: () {
+                Navigator.pop(context);
+                DetailsSheet.show(context, item);
+              },
+            ),
+            NooSettingsRow(
+              icon: LucideIcons.share2,
+              label: const Text('Share'),
+              onTap: () {
+                Navigator.pop(context);
+                ShareSheet.show(context, item);
+              },
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Preserves the original screen's exact tap behavior: always opens the
+  /// media viewer (the server's recent-files search only ever returns
+  /// files, never folders, so there's no folder-navigation case to handle).
   void _openFile(BuildContext context, NextcloudItem item) {
     final recent = context.read<RecentController>();
     final siblings = recent.items.where((i) => i.isMedia).toList();
@@ -250,3 +234,14 @@ class _RecentViewState extends State<RecentView> {
     );
   }
 }
+
+String _metaTime(DateTime dt) {
+  final now = DateTime.now();
+  if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
+    return DateFormat.jm().format(dt);
+  }
+  if (dt.year == now.year) return DateFormat.MMMd().format(dt);
+  return DateFormat.yMMMd().format(dt);
+}
+
+String _location(NextcloudItem item) => tabLocationLabel(item.path, item.name);

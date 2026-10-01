@@ -75,7 +75,46 @@ class/method already makes obvious.
   never completes) and the app stays on `_SplashView`'s indeterminate
   spinner, which makes `pumpAndSettle()` hang until its own timeout instead
   of failing fast. See `test/widget_test.dart` for the reference setup.
+- Design-system components (`lib/widgets/noo/`) are tested in
+  `test/widgets/noo/`, one file per component folder. Use the helpers in
+  `noo_test_utils.dart`:
+  - `setUpNooTests()` turns off font fetching.
+  - `testNooWidgets(...)` runs a body once per theme, light and dark, built
+    through the real `AppTheme`, and hands it the `NooColors`.
+  - `pumpNoo(...)` mounts the widget.
+
+  Build themes inside the test body, not at file level, because `AppTheme`
+  touches Google Fonts before the test binding exists. `pumpNoo` centers
+  the child, which loosens its constraints. To catch a widget stretching to
+  fill its parent, put it in a bounded box (for example, `SizedBox` +
+  `Align`).
 - Run with `flutter test`.
+
+## Play Store screenshots
+
+`bash tool/screenshots.sh` (Git Bash is fine on Windows) regenerates the store
+listing screenshots **without any real data**: it runs the real, unmodified app
+against a throwaway Docker Nextcloud (`tool/demo_server/`) seeded with invented
+content, on a wiped 1080x1920 emulator with a demo-mode status bar, and drives
+it with `integration_test/store_screenshots_test.dart` (host-side driver:
+`test_driver/integration_test.dart`, which saves `adb screencap` images).
+Output lands in `store_listing/screenshots/` (gitignored) after
+`tool/finalize_screenshots.py` flattens alpha and checks Play's size/aspect
+limits (each side 320-3840 px, long side at most 2x the short side - a stock
+1080x2400 phone screen is 2.22:1 and would be rejected).
+
+- The test logs in by writing the demo user's account/app password into
+  storage via `AccountStore` before calling `main()`, so it skips the browser
+  login flow; it also fixes the theme (light, non-dynamic colour), the visible
+  tabs and the first-run notification prompt so shots are reproducible.
+- It finds things by tab icon (`AppTab.icon` inside `FloatingBottomNavBar`),
+  tooltips, the `ValueKey('files')`/`ValueKey('offline')` on the two
+  `FilesView`s, and the fake content's names (defined in
+  `tool/demo_server/seed.py`) - keep those in sync if you rename either side.
+- `flutter test` only runs `test/`, so this never runs as part of the normal
+  suite; `integration_test` is a dev-only dependency.
+- Always review the images before uploading - see
+  `tool/demo_server/README.md` for the known places real data could appear.
 
 ## Local install/deploy
 
@@ -99,15 +138,18 @@ on the device. `android/app/build.gradle.kts` picks a release signing key
 in this order: a local `android/key.properties` (gitignored — points at a
 gitignored keystore file, e.g. `android/app/release-keystore.jks`), then
 CI env vars (`RELEASE_KEYSTORE_PATH`/`_PASSWORD`, `RELEASE_KEY_ALIAS`/
-`_PASSWORD`, set by `.gitea/workflows/build.yml` from repo secrets), then
-falls back to the debug key if neither is configured. As long as the same
-dedicated release keystore backs both `key.properties` locally and the
-Gitea secrets, local release builds and CI-built release APKs share one
-signature, so `adb install -r` works cleanly either way. A local checkout
-with no `key.properties` set up falls back to the (per-machine, ungitted)
-debug key, which won't match a CI-signed APK — installing one over the
-other still forces a full uninstall, since there's no way around Android's
-signature check from the tooling side.
+`_PASSWORD`, set from the same repo secrets by both `.gitea/workflows/
+build.yml`, triggered by `RC*` tags and producing a sideloadable APK, and
+`.gitea/workflows/release.yml`, triggered by `Release-*` tags and producing
+the `.aab` Play Console wants), then falls back to the debug key if neither
+is configured. As long as the same dedicated release keystore backs both
+`key.properties` locally and the Gitea secrets, local release builds and
+CI-built release APKs share one signature, so `adb install -r` works
+cleanly either way. A local checkout with no `key.properties` set up falls
+back to the (per-machine, ungitted) debug key, which won't match a
+CI-signed APK — installing one over the other still forces a full
+uninstall, since there's no way around Android's signature check from the
+tooling side.
 
 ## Dependencies
 

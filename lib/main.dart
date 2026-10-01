@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -22,12 +23,24 @@ import 'providers/trash_controller.dart';
 import 'services/pick_intent_service.dart';
 import 'services/share_intent_service.dart';
 import 'theme/app_theme.dart';
+import 'theme/design_tokens.dart';
 import 'views/lock_screen_view.dart';
 import 'views/login_view.dart';
-import 'views/search_view.dart';
 import 'views/share_upload_view.dart';
+import 'widgets/app_drawer.dart';
 import 'widgets/app_tab_view_builder.dart';
-import 'widgets/floating_bottom_bar.dart';
+import 'widgets/app_top_bar.dart';
+import 'widgets/bottom_nav_bar.dart';
+import 'widgets/create_menu.dart';
+import 'widgets/noo/core/noo_avatar.dart';
+import 'widgets/noo/core/noo_button.dart';
+import 'widgets/noo/core/noo_fab.dart';
+import 'widgets/noo/nav/noo_nav_style.dart';
+import 'widgets/noo/nav/noo_sidebar.dart';
+import 'widgets/noo/nav/noo_toolbar.dart';
+import 'widgets/noo/noo_layout.dart';
+import 'widgets/noo/overlays/noo_dialog.dart';
+import 'widgets/shell/shell_common.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -61,8 +74,7 @@ void main() {
               SyncStatusController(context.read(), context.read()),
         ),
         ChangeNotifierProvider(
-          create: (context) =>
-              PhotosController(context.read(), context.read()),
+          create: (context) => PhotosController(context.read(), context.read()),
         ),
         ChangeNotifierProvider(
           create: (context) =>
@@ -143,21 +155,19 @@ class _SplashView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final colors = context.nooColors;
     return Scaffold(
+      backgroundColor: colors.bg,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // The monochrome adaptive-icon layer is a plain white silhouette
             // on transparent, meant to be tinted rather than shown as-is -
-            // srcIn recolors it to the theme's foreground so it reads
-            // correctly in both light and dark mode.
+            // srcIn recolors it to fg-1 so it reads correctly in both light
+            // and dark mode.
             ColorFiltered(
-              colorFilter: ColorFilter.mode(
-                colorScheme.onSurface,
-                BlendMode.srcIn,
-              ),
+              colorFilter: ColorFilter.mode(colors.fg1, BlendMode.srcIn),
               child: Image.asset(
                 'assets/icon/app_icon_monochrome.png',
                 width: 72,
@@ -170,7 +180,7 @@ class _SplashView extends StatelessWidget {
               height: 22,
               child: CircularProgressIndicator(
                 strokeWidth: 2.5,
-                color: colorScheme.primary,
+                color: colors.accent,
               ),
             ),
           ],
@@ -246,26 +256,34 @@ class _MainShellViewState extends State<MainShellView> {
     if (status.isGranted || status.isPermanentlyDenied) return;
     if (!mounted) return;
 
-    final shouldRequest = await showDialog<bool>(
-      context: context,
+    final colors = context.nooColors;
+    final shouldRequest = await showNooDialog<bool>(
+      context,
+      title: 'Allow notifications?',
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Allow notifications?'),
-        content: const Text(
+      children: [
+        Text(
           'Noo shows upload and download progress as a notification, so '
           'you can track transfers that keep running in the background.',
+          style: NooText.body.copyWith(color: colors.fg2),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Not now'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Allow'),
-          ),
-        ],
-      ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          spacing: 10,
+          children: [
+            NooButton(
+              variant: NooButtonVariant.secondary,
+              onTap: () => Navigator.of(context).pop(false),
+              child: const Text('Not now'),
+            ),
+            NooButton(
+              variant: NooButtonVariant.primary,
+              onTap: () => Navigator.of(context).pop(true),
+              child: const Text('Allow'),
+            ),
+          ],
+        ),
+      ],
     );
     if (shouldRequest == true) {
       await Permission.notification.request();
@@ -294,9 +312,15 @@ class _MainShellViewState extends State<MainShellView> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.nooColors;
     final settings = context.watch<SettingsController>();
     final pick = context.watch<PickController>();
     final connectivity = context.watch<ConnectivityController>();
+    final session = context.watch<SessionController>();
+    final quota = context.watch<FilesController>().quota;
+    // Cheap and already loaded once the Trash tab has been visited this
+    // session - not worth adding a fetch just to populate a nav badge.
+    final trashCount = context.watch<TrashController>().items.length;
 
     // A one-shot request (e.g. tapping a search result) to switch tabs -
     // consumed here so it only fires once, then cleared after this frame
@@ -317,24 +341,233 @@ class _MainShellViewState extends State<MainShellView> {
     // user's own hidden/reordered tab settings rather than respecting
     // them, since picking is a separate mode from normal browsing. With
     // no network at all, every other tab would just show its own loading
-    // spinner forever/an error state, so the bottom nav collapses to just
-    // Offline - the one tab that works without a connection (see
+    // spinner forever/an error state, so the nav collapses to just Offline
+    // - the one tab that works without a connection (see
     // `FilesView(offline: true)`/`ConnectivityController`).
-    final visible = pickRequest != null
+    final overrideActive = pickRequest != null || connectivity.isOffline;
+    final pinnedTabs = pickRequest != null
         ? [AppTab.files, AppTab.photos]
         : connectivity.isOffline
         ? [AppTab.offline]
         : settings.visibleTabs;
-    final selectedTab = visible.contains(_currentTab)
-        ? _currentTab
-        : (visible.isNotEmpty ? visible.first : AppTab.files);
-    final selectedIndex = visible
-        .indexOf(selectedTab)
-        .clamp(0, visible.isEmpty ? 0 : visible.length - 1);
+    // The drawer/sidebar's "More" section - hidden while an override above
+    // is active, same as the drawer itself being unavailable during pick.
+    final hiddenTabs = overrideActive
+        ? const <AppTab>[]
+        : settings.tabOrder
+              .where((t) => settings.hiddenTabs.contains(t))
+              .toList();
 
-    final navItems = visible
-        .map((tab) => FloatingNavItem(label: tab.label, icon: tab.icon))
-        .toList();
+    // A tab opened from "More" isn't one of the pinned destinations, but
+    // should stay shown and selected (with no destination highlighted in
+    // the bottom bar/sidebar) until the user taps a pinned or another
+    // "More" tab.
+    final displayTabs = !overrideActive && !pinnedTabs.contains(_currentTab)
+        ? [...pinnedTabs, _currentTab]
+        : pinnedTabs;
+    final selectedTab = displayTabs.contains(_currentTab)
+        ? _currentTab
+        : (displayTabs.isNotEmpty ? displayTabs.first : AppTab.files);
+    final selectedIndex = displayTabs
+        .indexOf(selectedTab)
+        .clamp(0, displayTabs.isEmpty ? 0 : displayTabs.length - 1);
+    final pinnedIndex = pinnedTabs.indexOf(selectedTab);
+
+    void selectTab(AppTab tab) {
+      if (tab == _currentTab) return;
+      setState(() => _currentTab = tab);
+    }
+
+    String? trashBadge(AppTab tab) =>
+        tab == AppTab.trash && trashCount > 0 ? '$trashCount' : null;
+
+    final isDesktop = NooLayout.isDesktop(context);
+    final navStyle = NooLayout.navStyle(context);
+    // Picking/offline already override the tab set itself (see pinnedTabs
+    // above) - Search doesn't belong in either: there's nothing to search
+    // for a file-picking flow, and Search needs the network Offline mode
+    // doesn't have.
+    final showBottomBarSearch = !overrideActive && settings.searchInBottomBar;
+
+    // Each tab renders its own sticky selection toolbar inline (right under
+    // its sort/filter row) instead of the shell swapping in a shared one,
+    // so the nav chrome stays put and usable regardless of selection state.
+    //
+    // Each tab also builds its own [AppTopBar] (labelled for that tab, not
+    // just whichever is currently selected) and plants it as that tab's own
+    // first sliver - see `buildAppTabView`'s doc comment and `topBarSliver`
+    // in `tabs/tab_state_slivers.dart` - instead of one shared instance
+    // living in `Scaffold.appBar`. That's what gives each tab's top bar
+    // Material's native floating-away-on-scroll-down/reappear-on-scroll-up
+    // behavior, tied to that tab's own `ScrollController`: a fixed
+    // `Scaffold.appBar` can't do that (no per-tab scroll signal reaches
+    // it), and a shared single instance can't show 7 different tab labels
+    // at once now that every tab keeps its own independent scroll state.
+    // Null on desktop (which shows `NooToolbar` instead - embedding it here
+    // too, since `tabStack` is shared by both layouts below, would double
+    // up the top chrome there) and while picking (no top bar at all, same
+    // as this screen's old `Scaffold.appBar: pickRequest == null ? ... :
+    // null`).
+    final tabStack = Stack(
+      children: [
+        IndexedStack(
+          index: selectedIndex,
+          children: displayTabs
+              .map(
+                (tab) => buildAppTabView(
+                  tab,
+                  _scrollControllers[tab]!,
+                  topBar: isDesktop || pickRequest != null
+                      ? null
+                      : AppTopBar(
+                          style: navStyle,
+                          tab: tab,
+                          searchInBottomBar: showBottomBarSearch,
+                          navMenuStyle: settings.navMenuStyle,
+                        ),
+                ),
+              )
+              .toList(),
+        ),
+        if (pick.isDownloadingForPick) const _PickingProgressOverlay(),
+      ],
+    );
+
+    final canUpload =
+        pickRequest == null &&
+        (selectedTab == AppTab.files || selectedTab == AppTab.photos);
+
+    Widget scaffold;
+    if (isDesktop) {
+      scaffold = Scaffold(
+        backgroundColor: colors.bg,
+        body: Row(
+          children: [
+            NooSidebar(
+              account: NooSidebarAccount(
+                avatar: NooAvatar(
+                  initials: accountInitial(session.username),
+                  current: true,
+                  size: 32,
+                ),
+                name: session.username,
+                subtitle: serverHost(session.serverUrl),
+                onTap: () => showAccountSwitcher(context),
+              ),
+              items: [
+                for (final tab in pinnedTabs)
+                  NooSidebarItem(
+                    icon: tab.icon,
+                    label: tab.label,
+                    count: trashBadge(tab),
+                    selected: tab == selectedTab,
+                    onTap: () => selectTab(tab),
+                  ),
+                if (hiddenTabs.isNotEmpty) const NooSidebarDivider(),
+                for (final tab in hiddenTabs)
+                  NooSidebarItem(
+                    icon: tab.icon,
+                    label: tab.label,
+                    count: trashBadge(tab),
+                    selected: tab == selectedTab,
+                    onTap: () => selectTab(tab),
+                  ),
+              ],
+              storage: NooSidebarStorage(
+                value: quotaFraction(quota),
+                detail: quotaDetail(quota),
+              ),
+              settings: NooSidebarItem(
+                icon: LucideIcons.settings,
+                label: 'Settings',
+                onTap: () => openSettings(context),
+              ),
+            ),
+            Expanded(
+              child: Column(
+                children: [
+                  NooToolbar(
+                    title: selectedTab.label,
+                    search: const ShellSearchLauncher(onSurface: true),
+                    actions: [
+                      if (canUpload)
+                        NooButton(
+                          icon: LucideIcons.upload,
+                          onTap: () => showCreateMenu(context),
+                          child: const Text('Upload'),
+                        ),
+                    ],
+                  ),
+                  Expanded(
+                    child: ColoredBox(color: colors.surface, child: tabStack),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      final bottomBarStyle = settings.bottomBarStyle;
+      scaffold = Scaffold(
+        backgroundColor: colors.bg,
+        drawerScrimColor: colors.scrim,
+        // The top bar itself no longer lives here - see `tabStack` above.
+        drawer: pickRequest == null ? const AppDrawer() : null,
+        // Floating needs the body to draw behind the bar's own transparent
+        // margin (see NooBottomBarStyle's doc comment) instead of stopping
+        // short of it like attached does.
+        extendBody: bottomBarStyle == NooBottomBarStyle.floating,
+        // Android-only extended Upload FAB - iOS uses the top bar's `plus`
+        // instead (see AppTopBar). Stays mounted across every tab (picking
+        // aside) and collapses to an icon-only circle off Files/Photos,
+        // rather than the Scaffold popping it fully in/out on every tab
+        // switch - see NooFab's [collapsed].
+        floatingActionButton:
+            pickRequest == null && navStyle == NooNavStyle.android
+            ? NooFab(
+                collapsed: !canUpload,
+                barStyle: bottomBarStyle,
+                onTap: () => showCreateMenu(context),
+              )
+            : null,
+        body: tabStack,
+        bottomNavigationBar: BottomNavBar(
+          style: navStyle,
+          barStyle: bottomBarStyle,
+          tabs: pinnedTabs,
+          selectedIndex: pinnedIndex,
+          onSearchTap: showBottomBarSearch ? () => openSearch(context) : null,
+          onDestinationSelected: (index) {
+            final tappedTab = pinnedTabs[index];
+            if (tappedTab == _currentTab) {
+              if (settings.tapTabToScrollTop) {
+                final controller = _scrollControllers[tappedTab];
+                // `hasClients` only means a position is attached - not that
+                // it's finished its first layout. Calling animateTo before
+                // that throws deep inside Flutter's ballistic-scroll code
+                // (min/maxScrollExtent are still null), and since this
+                // fires synchronously from the nav bar's tap handler, the
+                // exception corrupts that tab's scroll view instead of
+                // just being logged - a real crash seen in the wild
+                // (Files rendering empty after re-tapping its own tab).
+                if (controller != null &&
+                    controller.hasClients &&
+                    controller.position.hasContentDimensions) {
+                  controller.animateTo(
+                    0,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOutCubic,
+                  );
+                }
+              }
+              return;
+            }
+            selectTab(tappedTab);
+          },
+        ),
+      );
+    }
 
     return PopScope(
       // While picking, system back cancels the pick (and tells the caller
@@ -344,53 +577,7 @@ class _MainShellViewState extends State<MainShellView> {
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop && pickRequest != null) pick.cancelPick();
       },
-      child: Scaffold(
-        body: Stack(
-          children: [
-            IndexedStack(
-              index: selectedIndex,
-              children: visible
-                  .map((tab) => buildAppTabView(tab, _scrollControllers[tab]!))
-                  .toList(),
-            ),
-            if (pick.isDownloadingForPick) const _PickingProgressOverlay(),
-            // Each tab now renders its own sticky selection toolbar inline
-            // (right under its sort/filter row) instead of this shell
-            // swapping in a shared floating bar - the bottom nav stays put
-            // and usable regardless of selection state.
-            FloatingBottomNavBar(
-              selectedIndex: selectedIndex,
-              items: navItems,
-              opacity: settings.bottomBarOpacity,
-              blurSigma: settings.bottomBarBlur,
-              onDestinationSelected: (index) {
-                final tappedTab = visible[index];
-                if (tappedTab == _currentTab) {
-                  if (settings.tapTabToScrollTop) {
-                    final controller = _scrollControllers[tappedTab];
-                    if (controller != null && controller.hasClients) {
-                      controller.animateTo(
-                        0,
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeOutCubic,
-                      );
-                    }
-                  }
-                  return;
-                }
-                setState(() {
-                  _currentTab = tappedTab;
-                });
-              },
-              onSearchTap: () {
-                Navigator.of(
-                  context,
-                ).push(MaterialPageRoute(builder: (_) => const SearchView()));
-              },
-            ),
-          ],
-        ),
-      ),
+      child: scaffold,
     );
   }
 }
@@ -403,21 +590,27 @@ class _PickingProgressOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.nooColors;
     return Positioned.fill(
       child: ColoredBox(
-        color: Colors.black.withValues(alpha: 0.35),
-        child: const Center(
-          child: Card(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Preparing file...'),
-                ],
-              ),
+        color: colors.scrim,
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: colors.surface,
+              borderRadius: BorderRadius.circular(NooRadii.dialog),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(color: colors.accent),
+                const SizedBox(height: 16),
+                Text(
+                  'Preparing file…',
+                  style: NooText.body.copyWith(color: colors.fg1),
+                ),
+              ],
             ),
           ),
         ),

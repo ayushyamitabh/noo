@@ -10,6 +10,7 @@ Reference files in this project:
 - `Noo Design System.dc.html` is the visual component sheet.
 - `noo-kit.js` holds the tokens (`TH`), the icon set (`SVG`/`ic`), file-type mapping (`KIND`) and mock data.
 - `Mobile Screen.dc.html` and `Desktop Screen.dc.html` are the reference builds for each screen.
+- [Noo — Missing Screens](https://claude.ai/artifact/3AGPqqMdkLSC2ypCh2CQs4) is a live design canvas (Claude Design, not a static file in this repo) covering pieces this doc originally had no recipe for: Media viewer, Search, the Upload/Move/Copy destination picker, the Details sheet's tab switch, and the Selection action bar (mobile + desktop). It has both an iOS row (built first, ready for later) and an Android row (built to match right now) - same content, chrome adapted per the platform rule above. §4 below is the written-up version of what's approved there; go back to the canvas for pixel-level layout, not just the summary.
 
 ---
 
@@ -107,7 +108,19 @@ Use **Lucide** (pinned to `lucide-static@0.460.0`) at a 1.8 stroke. Sizes are 14
 **FAB** (Android only)
 - An extended pill: 56px tall, accent fill, labelled "Upload".
 - Sits 16px from the right and bottom edges of the content area.
-- Shows only on Files and Photos.
+- Stays mounted on every tab; it's only the extended label that's tied to
+  Files/Photos. Elsewhere it collapses to an icon-only 56px circle or
+  rounded square (see below) - still tappable, it always targets the Files
+  tab's current folder - animating the width/label change rather than the
+  button popping fully in/out as the Scaffold's default FAB transition
+  would on every tab switch.
+- Corner radius follows the bottom bar style (Settings → Appearance):
+  fully round (`pill`, 999) when the bar is floating, matching that mode's
+  other already-rounder elements (the bar itself at 28px, its search
+  satellite a full circle); a rounded square (`card`, 20) when the bar is
+  attached, to suit that mode's flatter, edge-to-edge corners. Same radius
+  whether the FAB is collapsed to a circle/square or expanded to the full
+  pill shape.
 
 **Chip**
 - A pill, 32–34px tall, 12px horizontal padding, Label 13–14.
@@ -157,7 +170,35 @@ Use **Lucide** (pinned to `lucide-static@0.460.0`) at a 1.8 stroke. Sizes are 14
 **Swipe action**
 - The row slides and uncovers a 96px action block. Delete is white on danger-fill; Favorite is white on accent.
 - The block has a 20px icon above a 12/600 label.
+- Releasing past half the block snaps it open; dragging further still (past 1.8× the block's width, a haptic tick marks the crossing and the icon bumps up 15%) arms the action, and releasing while armed fires it immediately - one swipe-through gesture instead of open-then-tap. The block grows to fill however far it's dragged, so there's never a gap behind it.
 - Swipe actions are set in Settings → Swipe on a file.
+
+**Selection action bar** (Files, Photos, Favorites - anywhere with
+multi-select)
+- Replaces that screen's own sort/filter row in place while selecting -
+  never a second bar stacked underneath it, and never the shell's own top
+  bar/toolbar, which don't change for selection.
+- A `surface` card, radius 20, in the screen's usual gutter (12 mobile, 24
+  desktop) - selection reads as a distinct mode, not a bare row of buttons
+  on `bg`.
+- Left to right: a 36px `surface-2` close circle (`x`), then "N selected"
+  (17/500), then the bulk actions, trailing-anchored. Fixed width, never
+  scrolls: only the first few actions show inline (3 on mobile, 4 on
+  desktop - there can be up to 9: favorite, share, download, delete, copy,
+  move, rename, sync, details); the rest sit behind a trailing "More"
+  button that opens the same grouped-list sheet a file row's own overflow
+  menu (`ellipsis`/`ellipsis-vertical`) already uses. Which actions land in
+  the inline slots vs. "More" is the user's own priority order (Settings
+  → Action bar, §4's 9-part list), not a fixed per-kind assignment.
+- Mobile: inline actions are plain 20px accent-text icons, no fill; "More"
+  is the same 40px `NooOverflowButton` treatment (`ellipsis`/
+  `ellipsis-vertical`, fg-3) file rows use for their own overflow menu.
+- Desktop: inline actions are labelled tonal pills (accent-soft/
+  accent-text), danger-soft/danger for the one labelled "Delete" - desktop
+  has the room for labels, and the app's other toolbar actions are already
+  labelled buttons rather than bare icons. "More" is a secondary pill
+  (surface-2/fg-1) with a trailing `chevron-down`, so it reads as "opens a
+  menu" rather than another bulk action.
 
 **Grid card**
 - Surface fill, radius 18. Mobile uses 2 columns with a 10px gap; desktop uses 5 columns with a 16px gap.
@@ -175,8 +216,13 @@ Use **Lucide** (pinned to `lucide-static@0.460.0`) at a 1.8 stroke. Sizes are 14
 
 **Banner / summary card**
 - A surface card with radius 20 (surface-2 on desktop) and padding of 14–18.
-- Trash: an info icon, the retention text, and "Empty trash" as a danger text button.
-- Offline: the stat, a 6px progress bar, the last-sync meta, and a "Sync now" tonal button.
+- The action sits on its own row below the description text, not squeezed
+  onto the same line - a long retention message/caption and the action
+  used to fight for the same row's width.
+- Trash: an info icon, the retention text, then "Empty trash" as a
+  right-aligned danger text button on the row below.
+- Offline: the stat and caption, then a "Sync now" tonal button on the row
+  below, then the 6px progress bar and the last-sync meta.
 
 **Progress bar**
 - 6px tall pill. Surface-3 track with an accent fill.
@@ -192,6 +238,13 @@ Use **Lucide** (pinned to `lucide-static@0.460.0`) at a 1.8 stroke. Sizes are 14
 - Left to right: an optional 20px icon in fg-2, then the label (16) with an optional subtitle (13, fg-3), then a trailing control.
 - Trailing control is one of: a toggle, a value in fg-3 with a chevron (desktop uses a 32px dropdown with radius 10), a segmented control, a pill button, or a status badge.
 - A destructive row uses danger text.
+- Exception: a segmented control with 3+ labelled segments (Theme's
+  System/Light/Dark) gets its own row below the label instead of a
+  trailing slot - three icon+label segments crammed in next to the label
+  left each one too cramped to read. Label row, then the full-width
+  segmented control on the row below, both on one continuous surface (no
+  divider between them) - same shape the sort sheet's Ascending/Descending
+  control and Photos' filter-sheet type control already use.
 
 **Tab order row**
 - A grip icon (`grip-vertical`, fg-3), the tab icon, the label, then a pin button: a 36px circle (30 on desktop) that is accent-soft with `pin` when pinned, or surface-2 with `pin-off` when not.
@@ -227,9 +280,13 @@ Mobile always has **5 pinned tabs in the bottom bar**. The rest go in the drawer
 | Element | iOS | Android |
 |---|---|---|
 | Status bar | 54px, Dynamic Island | 40px |
-| Top bar | 44px row: `menu` on the left; `plus` and avatar on the right (all accent-text). Then a 34px large title, then the search field. | 64px: `menu`, 22px title, `search`, avatar |
-| Bottom bar | Surface fill, 1px top line. Icon 24 above a 10px label. Active: accent-text. Idle: fg-3. 34px home indicator below. | Surface fill, 80px. The active icon sits in a 56×32 accent-soft pill with a 12px label. 20px gesture bar below. |
-| Upload | `plus` in the nav bar | Extended FAB |
+| Top bar | 44px row: `menu` on the left; `plus` and avatar on the right (all accent-text). Then a 34px large title, then the search field. | 64px: `menu`, 22px title, avatar - see "Search" below for what replaces `search` there, and "Navigation menu" for `menu` |
+| Bottom bar | Surface fill, 1px top line. Icon 24 above a 10px label. Active: accent-text. Idle: fg-3. 34px home indicator below. | Surface fill, 80px. Icon 24 above a 12px label (label space is always reserved, just invisible when idle, so nothing shifts on selection). The active icon sits inside a 56×32 accent-soft pill that slides between tabs as one shared indicator, rather than popping in/out per tab. 20px gesture bar below. |
+| Bottom bar - floating (Settings → Appearance → "Bottom bar", both platforms) | Same content, inset 16px from both side edges and clear of the bottom safe area instead of edge to edge, radius 28 (the sheet-top/drawer-edge radius) rather than square corners. Product UI otherwise stays flat (see 1.4), but this is the one other place - besides desktop dialogs - that gets the app's one shadow: a 1px `line` border plus the dialog shadow, since a bar that's genuinely floating above scrolling content needs to read as elevated. Row height drops (iOS 50, same as attached; Android 64 vs 80) to suit. Android's idle tabs drop their reserved label space in this mode - the icon just centers in the button and renders a touch bigger (25 vs 24px) - rather than sitting high with a gap held open under it. `Scaffold.extendBody: true` while floating, so the body scrolls behind the bar's transparent margin instead of stopping short of it - which means every tab's scrollable list has to pad its own bottom enough to clear the bar's footprint, since nothing does that for it automatically once the body draws behind the bar. The Android FAB stays fully round in this mode (see "Upload" below), consistent with the bar's own rounder shape. |
+| Bottom bar - "Search in bottom bar" (Settings → Appearance, either bar style) | Adds a Search entry that's never highlighted (tapping it pushes Search, same as the top bar's own search action, which this replaces so there's only one entry point on screen) - the row's last item when attached (same styling as a real tab, just permanently idle), or its own separate, always fully round satellite circle beside the bar when floating. Costs one regular tab: `SettingsController.maxVisibleTabs` drops from 5 to 4 while this is on. |
+| Search (top bar, when not in the bottom bar) | A real inline search field (`NooSearchField`, non-editable launcher) below the large title | A search-field-styled launcher takes the title's own flexible slot instead of a bare `search` icon beside it - no second row to put it under the way iOS has |
+| Navigation menu (Settings → Appearance → "Navigation menu", both platforms) | `drawer` (default): the `menu` icon opens the left `Drawer` (hidden tabs + Settings), unchanged. `avatarMenu`: no `menu` icon at all - the avatar button opens a dropdown instead (`showAvatarMenu`), anchored under the top bar, full width minus the same 16px gutter every content row uses, with the same hidden-tabs + Settings content the drawer holds (not its storage bar - this is a quick menu, not the drawer's full account summary). The avatar sits in the exact same (right-end) position either way, and the dropdown's own header repeats it there too, so the open menu reads as having grown out of the button that opened it. Not a mandatory replacement: this halves the top-corner surface a thumb has to reach (from `menu` + avatar down to avatar alone) without costing any permanent screen width the way an earlier side-rail exploration would have. |
+| Upload | `plus` in the nav bar | Extended FAB - fully round (pill) when the bottom bar is floating, rounded square (`card` radius) when it's attached |
 | Overflow icon | `ellipsis` | `ellipsis-vertical` |
 | Settings | Pushed screen with a "‹ Files" back button and a large title. No bottom bar. | Pushed screen with a back arrow and a title. No bottom bar. |
 | Biometric label | "Lock with Face ID" | "Lock with fingerprint" |
@@ -272,10 +329,28 @@ Sidebar items are 38px tall with radius 12, an 18px icon and a 14/500 label. The
   - Toolbar: sort chip (`Name ↑`), type filter chip, List/Grid segmented toggle.
   - Desktop adds Modified and Shared filter chips, an active-filter chip, and an item count.
   - Content: a list, or a grid when the toggle is set.
-- **Photos:** type chips (All, Photos, Videos, Camera), then the photo grid grouped by month. The grid view is the only view.
+- **Photos:** a sort chip and a filter chip (mirroring Files' own controls
+  row - no List/Grid toggle, the grid is the only view). The type filter
+  (All, Photos, Videos - Camera isn't backed by real data, see the view's
+  doc comment) lives inside the filter sheet as a full-width segmented
+  control, the same "label, then the control on its own row below" shape
+  Settings' Theme row uses, not its own row of chips. Every icon (All,
+  Photos, Videos in the filter sheet; All, Files, Folders in Files' own
+  filter sheet, same treatment) always shows; only the *selected* segment
+  also shows its label (`NooSegmentedControl`'s `labelOnlySelected`) - the
+  same List/Grid-toggle-style pill both screens' filter sheets use, not
+  Files' old checkmark list or Photos' own always-labelled track. Then the
+  photo grid grouped by month.
 - **Favorites:** a file list with a star as the trailing icon.
 - **Offline:** a summary card (or 4 stat cards on desktop), then a list whose rows show sync status icons and status meta.
-- **Shares:** a segmented control (With you, By you, Links), then a list. The meta reads "Owner · Permission".
+- **Shares:** a segmented control (With you, By you, Links), then a list. The
+  meta reads "Owner · Permission". No per-row overflow menu on any of the
+  three scopes - tapping a row (file or folder) opens the full Share sheet
+  for that item (fetched fresh via `FilesController.fetchItemAtPath`, since
+  a share only carries enough metadata for its own row), the same sheet
+  Files/Photos open from their own Share action - that's already where
+  copying a link or removing access lives, so a second, row-local menu here
+  was redundant.
 - **Recent:** a list grouped into Today, Yesterday and This week. The meta is the action plus the location.
 - **Activity:** the feed grouped by day. Desktop limits it to 760px wide.
 - **Trash:** a retention banner, then a list. Mobile rows get a restore icon; desktop rows get a tonal "Restore" pill.
@@ -287,14 +362,88 @@ Sidebar items are 38px tall with radius 12, an 18px icon and a 14/500 label. The
   5. Files cache
   6. Appearance
   7. Tabs
-  8. Swipe on a file
+  8. Action bar - a reorder-only list (no pin/hide, unlike Tabs): the
+     priority order for the Selection action bar's bulk actions (favorite,
+     share, download, delete, copy, move, rename, sync, details) - the
+     first few (3 mobile / 4 desktop) land in the bar's fixed inline
+     slots, the rest sit behind "More". See §2 "Selection action bar".
+  9. Swipe on a file
 
-  Mobile uses one column of grouped lists. Desktop uses a 2-column grid of cards with a 1px line and radius 20.
+  Mobile is a two-level menu, the way native iOS/Android Settings apps
+  work: the account card stays pinned at the top of a single top-level
+  list, and every other section (2-9 above) becomes one tappable
+  `NooSettingsRow` - icon, title, chevron - in a `NooGroupedList` below it.
+  Tapping a row pushes a new screen (`NooTopBar`/`NooTopBarBack`) holding
+  just that section's own content full-screen, so no page is ever more
+  than one category deep and no section needs to be individually
+  collapsible any more. Two earlier designs were tried and dropped: a
+  trailing jump rail (one small icon per section, pinned where the
+  scrollbar would sit), and - after that - one long column of every
+  section inline, each individually collapsible (`NooGroupedList`'s
+  `collapsible` param) so the page could at least be collapsed down. Both
+  scrolled the *same* page to or past an anchor; a genuinely separate
+  pushed screen per category removes the scroll-depth problem outright
+  instead of just working around it. Desktop is unchanged: a 2-column grid
+  of cards with a 1px line and radius 20, wide enough to see most sections
+  without scrolling, so it gets neither a menu nor collapsing.
 - **Share sheet / dialog:** sections in this order:
   1. Header: file tile, name, size · folder, and close.
   2. **Share with people:** an input ("Name, email or group"), then the people with access. The owner comes first; the others each have a permission pill ("Can edit ▾").
   3. **Share link:** a toggle, then the URL field in mono with a primary "Copy link" button, then option chips (permission, expiry, password, allow download).
   4. **Send file directly:** an outline button, with a caption saying that link settings don't apply.
+- **Details sheet:** header (file tile, name, size · folder, close) as in the
+  Share sheet above, then a segmented control switching Info/Versions/Activity
+  in place below it - there's no separate tab-strip component, so the
+  segmented control (already used for List/Grid and the Shares scope) is the
+  one that does this job too. Info is a flat label/value list (Size, Type,
+  Location, Modified, Created, ...). Versions and Activity reuse their own
+  row/feed treatment. Same on every platform - this sheet has no iOS/Android
+  split.
+- **Media viewer** (the full-screen photo/video viewer): the stage is `bg`,
+  following the app's own theme rather than a fixed black - a black stage
+  in light mode read as jarringly out of place. A translucent, blurred top
+  bar (back, filename, meta) and bottom bar float over the media in a
+  `surface`-tinted panel (also theme-following, at a higher opacity than a
+  typical blur so it stays legible over arbitrary photo/video brightness
+  underneath - icons/text are `fg1`, matching); this is the one deliberate
+  exception to "no blur" in product UI, since it's chrome over photo/video
+  content, not over the app's own surfaces. A short edge gradient outside
+  each panel (toward `surface`, not a fixed black) extends that same
+  contrast a little past the panel's hard edge. Both bars' background
+  extends edge-to-edge behind the status bar/gesture area, with only their
+  content padded clear of it. Back is a plain arrow (`arrow-left`), not the iOS
+  chevron+label pushed-screen pattern - platform split still to do. The
+  bottom bar holds every action in one row (share, favorite, open
+  externally, download, delete, details) on every platform; don't add a
+  top-bar overflow menu for the same actions. Video adds a transport row
+  above the action row: time · seek bar · time, then play/pause and mute
+  centered below it. A photo can be pinch-zoomed; while zoomed in, the
+  gallery's own left/right swipe between items is disabled so panning
+  around the zoomed photo doesn't also swipe to the next one - it comes
+  back the moment the photo returns to its un-zoomed scale. A PDF preview
+  stays at its fit-width scale as its floor rather than letting the user
+  zoom out past it, since going below 1.0 scale removes any limit on how
+  far the page can be panned, including off-screen entirely.
+- **Search:** pushed from the shell's search entry point (`menu`/`search`
+  icon in the top bar, or the inline field below an iOS large title -
+  DESIGN_SYSTEM §2 "Search field" placement). The destination screen is one
+  shared recipe for both platforms: back arrow + the pill `NooSearchField`
+  (not the inset-panel text-field shape - a search field is always the pill,
+  except the one named iOS-inline exception) taking over the top row,
+  autofocus, a clear button once there's a query. Below it: a file list
+  (mobile rows / desktop table, same as Files), or a centered icon + short
+  sentence-case message for the empty ("Search your files") and no-results
+  states.
+- **Upload / Move / Copy destination picker:** a pushed screen (outside the
+  tab shell, so it carries its own complete top bar) titled "Upload to" /
+  "Move to" / "Copy to". Back arrow (Android) or "Cancel" text (iOS) leading,
+  no trailing action. The same `FilesControlsRow` (sort chip, filter chip,
+  List/Grid toggle right-anchored) Files itself uses, then a breadcrumb row,
+  then a folder-only list/grid (no files: this screen only browses folders)
+  using the standard file row/tile/grid-card at the folder kind. Bottom bar:
+  a centered meta line ("Moving 3 items") above a full-width 52px primary
+  CTA ("Upload here" / "Move here" / "Copy here") - a count, never a
+  filename, even for a single item.
 
 ---
 

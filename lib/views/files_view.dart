@@ -1,14 +1,16 @@
+import 'dart:async';
 import 'dart:io';
-import 'package:file_picker/file_picker.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/nextcloud_item.dart';
 import '../models/selection_action.dart';
+import '../models/sync_status.dart';
 import '../providers/files_controller.dart';
 import '../providers/folder_browser.dart';
 import '../providers/item_operations.dart';
@@ -18,24 +20,34 @@ import '../providers/session_controller.dart';
 import '../providers/settings_controller.dart';
 import '../providers/sync_status_controller.dart';
 import '../services/download_service.dart';
-import '../services/share_intent_service.dart';
-import '../widgets/breadcrumbs.dart';
+import '../services/nextcloud_service.dart';
+import '../theme/design_tokens.dart';
 import '../widgets/details/details_sheet.dart';
+import '../widgets/files/file_breadcrumb_row.dart';
 import '../widgets/files_controls_row.dart';
 import '../widgets/item_icon.dart';
 import '../widgets/manage_synced_folders_sheet.dart';
-import '../widgets/media_grid_tile.dart';
-import '../widgets/more_tabs_button.dart';
-import '../widgets/profile_avatar_button.dart';
-import '../widgets/selectable_thumbnail.dart';
+import '../widgets/noo/core/noo_button.dart';
+import '../widgets/noo/files/noo_file_kind.dart';
+import '../widgets/noo/files/noo_file_row.dart';
+import '../widgets/noo/files/noo_file_table.dart';
+import '../widgets/noo/files/noo_file_tile.dart';
+import '../widgets/noo/files/noo_status_icon.dart';
+import '../widgets/noo/files/noo_swipe_action.dart';
+import '../widgets/noo/lists/noo_grouped_list.dart';
+import '../widgets/noo/lists/noo_selection_bar.dart';
+import '../widgets/noo/lists/noo_settings_row.dart';
+import '../widgets/noo/lists/noo_summary_card.dart';
+import '../widgets/noo/media/noo_grid_card.dart';
+import '../widgets/noo/nav/noo_bottom_bar.dart';
+import '../widgets/noo/noo_layout.dart';
+import '../widgets/noo/overlays/noo_sheet.dart';
 import '../widgets/share_sheet.dart';
 import '../widgets/sticky_header_delegate.dart';
-import '../widgets/swipeable_item.dart';
-import '../widgets/sync_status_badge.dart';
-import '../widgets/synced_header_scaffold.dart';
+import '../widgets/tabs/tab_state_slivers.dart';
+import '../widgets/synced_header_scaffold.dart' show formatBytes;
 import 'file_viewer_screen.dart';
 import 'move_copy_destination_picker.dart';
-import 'share_upload_view.dart';
 
 /// The Files tab - and, with [offline] set, the Offline tab, which is the
 /// same view over the device-sync mirror instead of the server: the Files
@@ -44,15 +56,20 @@ import 'share_upload_view.dart';
 /// thumbnails; [offline] only swaps the data source (`FolderBrowser`),
 /// reads images from the local file instead of a server preview, and turns
 /// off everything that needs the server (selection and its bulk actions,
-/// swipe actions, sync badges, the "+" menu, pick mode).
+/// swipe actions, the "+" menu, pick mode).
 class FilesView extends StatefulWidget {
   final ScrollController scrollController;
   final bool offline;
+
+  /// This tab's own shell top bar, planted as its first sliver - see
+  /// `buildAppTabView`'s doc comment. Null on desktop and while picking.
+  final PreferredSizeWidget? topBar;
 
   const FilesView({
     super.key,
     required this.scrollController,
     this.offline = false,
+    this.topBar,
   });
 
   @override
@@ -122,13 +139,104 @@ class _FolderEnterAnimationState extends State<_FolderEnterAnimation>
   }
 }
 
-class _FilesViewState extends State<FilesView>
-    with SingleTickerProviderStateMixin {
+/// The 40px round icon button used in the controls row for a
+/// screen-specific action ("Manage synced folders") that doesn't fit
+/// `FilesControlsRow`'s chip set - same circular-hit-target treatment as
+/// `NooFileRow`'s own overflow button.
+class _HeaderIconButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  const _HeaderIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.nooColors;
+    return SizedBox.square(
+      dimension: 40,
+      child: Tooltip(
+        message: tooltip,
+        child: Material(
+          color: colors.surface,
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onTap,
+            child: Icon(icon, size: 18, color: colors.fg1),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The thumbnail-area content for an image/video grid card: the actual
+/// preview fills the area (cropped to cover, decoded at the painted size),
+/// falling back to [fallback] (the file-kind icon) on error, with a play
+/// badge for video - replaces `MediaGridTile` now that grid cards come from
+/// `NooGridCard` instead of a hand-rolled column. Shared by the Files and
+/// Offline tabs; they differ only in where the pixels come from
+/// ([localFile] - the device-sync mirror vs. a server preview).
+class _GridThumbnail extends StatelessWidget {
+  final NextcloudItem item;
+  final NextcloudService? service;
+  final File? localFile;
+  final Widget fallback;
+
+  const _GridThumbnail({
+    required this.item,
+    required this.service,
+    required this.localFile,
+    required this.fallback,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cachePixels =
+            (constraints.maxWidth * MediaQuery.of(context).devicePixelRatio)
+                .round();
+        final provider = ResizeImage(
+          localFile != null
+              ? FileImage(localFile!) as ImageProvider
+              : NetworkImage(item.previewUrl!, headers: service?.authHeaders),
+          width: cachePixels,
+          height: cachePixels,
+        );
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Image(
+              image: provider,
+              fit: BoxFit.cover,
+              filterQuality: FilterQuality.low,
+              gaplessPlayback: true,
+              errorBuilder: (ctx, err, stack) => Center(child: fallback),
+            ),
+            if (item.type == NextcloudItemType.video)
+              const Center(
+                child: Icon(
+                  LucideIcons.circlePlay,
+                  color: Colors.white,
+                  size: 36,
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _FilesViewState extends State<FilesView> {
   final Set<String> _selectedIds = {};
   int _lastPathDepth = 1;
-  final ScrollController _controlsScrollController = ScrollController();
-  final ScrollController _selectionActionsScrollController = ScrollController();
-  final List<AnimationController> _scrollHintControllers = [];
 
   bool get _isSelecting => _selectedIds.isNotEmpty;
 
@@ -143,9 +251,8 @@ class _FilesViewState extends State<FilesView>
 
   /// The on-device copy of [item] for the Offline tab; null online, where
   /// thumbnails come from server previews instead.
-  File? _localFileFor(BuildContext context, NextcloudItem item) => _offline
-      ? context.read<OfflineController>().localFileFor(item)
-      : null;
+  File? _localFileFor(BuildContext context, NextcloudItem item) =>
+      _offline ? context.read<OfflineController>().localFileFor(item) : null;
 
   // (Online only - the Offline tab always reloads on first build, since a
   // local listing has no cheap "already loaded" signal.)
@@ -161,93 +268,35 @@ class _FilesViewState extends State<FilesView>
   // that just never got its initial fetch.
   bool _requestedInitialLoad = false;
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _playScrollHint(_controlsScrollController),
-    );
-  }
-
-  /// A one-shot hint that a horizontally-scrollable row actually scrolls:
-  /// nudges it a little to the right and back, once - a motion cue instead
-  /// of a persistent widget (a chevron badge, an edge fade) sitting on top
-  /// of the actual controls the whole time. Shared by the controls row
-  /// (played once it first appears) and the selection actions row (played
-  /// the first time a selection starts, see `_toggleSelection`). No-ops if
-  /// there's nothing to scroll (row already fits).
-  Future<void> _playScrollHint(ScrollController scrollController) async {
-    // The delay lets the row's first frame (and its actual layout/max
-    // scroll extent) settle before nudging it, and reads more like a
-    // deliberate hint than something that happens to fire on load.
-    await Future.delayed(const Duration(milliseconds: 500));
-    if (!mounted || !scrollController.hasClients) return;
-    final maxExtent = scrollController.position.maxScrollExtent;
-    if (maxExtent <= 0) return;
-    final double peak = maxExtent < 36 ? maxExtent : 36;
-    // Driven as a single controller (rather than two chained animateTo
-    // calls) with mirrored ease-in-out halves, so the motion decelerates
-    // smoothly into the peak and back out instead of visibly changing
-    // pace where the two legs meet.
-    final controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    );
-    _scrollHintControllers.add(controller);
-    final hint = TweenSequence<double>([
-      TweenSequenceItem(
-        tween: Tween(
-          begin: 0.0,
-          end: peak,
-        ).chain(CurveTween(curve: Curves.easeInOutSine)),
-        weight: 50,
-      ),
-      TweenSequenceItem(
-        tween: Tween(
-          begin: peak,
-          end: 0.0,
-        ).chain(CurveTween(curve: Curves.easeInOutSine)),
-        weight: 50,
-      ),
-    ]).animate(controller);
-    void onTick() {
-      if (scrollController.hasClients) {
-        scrollController.jumpTo(hint.value);
-      }
-    }
-
-    hint.addListener(onTick);
-    await controller.forward();
-    hint.removeListener(onTick);
-    _scrollHintControllers.remove(controller);
-    controller.dispose();
-  }
-
-  @override
-  void dispose() {
-    for (final controller in _scrollHintControllers) {
-      controller.dispose();
-    }
-    _controlsScrollController.dispose();
-    _selectionActionsScrollController.dispose();
-    super.dispose();
-  }
-
   void _toggleSelection(NextcloudItem item) {
     HapticFeedback.selectionClick();
-    final enteringSelection = _selectedIds.isEmpty;
     setState(() {
       if (!_selectedIds.remove(item.id)) _selectedIds.add(item.id);
     });
-    if (enteringSelection && _isSelecting) {
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _playScrollHint(_selectionActionsScrollController),
-      );
-    }
   }
 
   void _clearSelection() {
     setState(_selectedIds.clear);
+  }
+
+  /// Routes a tap on an item, in picking, selecting or plain-browsing mode
+  /// alike - shared by the mobile row, the desktop table row and the grid
+  /// card so all three navigate/select/open exactly the same way.
+  void _handleItemTap(
+    BuildContext context,
+    NextcloudItem item, {
+    required bool picking,
+  }) {
+    final browser = _browserOf(context);
+    if (picking) {
+      _handlePickTap(context, item);
+    } else if (_isSelecting) {
+      _toggleSelection(item);
+    } else if (item.isFolder) {
+      browser.navigateToFolder(item.path);
+    } else {
+      _openFile(context, item);
+    }
   }
 
   /// Routes a tap on an item while Noo is acting as another app's picker:
@@ -278,81 +327,97 @@ class _FilesViewState extends State<FilesView>
   }
 
   /// The bulk actions shown in the sticky selection toolbar for the
-  /// currently-selected items.
+  /// currently-selected items, and reused for a single item's overflow
+  /// sheet (see [_showItemActions]).
   List<SelectionAction> _buildSelectionActions(
     BuildContext context,
     List<NextcloudItem> selected,
   ) {
-    final pick = context.watch<PickController>();
-    final sync = context.watch<SyncStatusController>();
+    // read, not watch: this builds a one-shot action list, and - unlike its
+    // other call site inside build() - `_showItemActions` calls this from
+    // an onTap/onPressed callback, well outside any build method. `watch`
+    // there throws ("Tried to listen to a value exposed with provider...
+    // outside of a widget's build method"), which - thrown from inside a
+    // tap handler - just aborts silently before `showNooSheet` ever runs:
+    // the exact "the menu does nothing" bug.
+    final pick = context.read<PickController>();
+    final sync = context.read<SyncStatusController>();
     if (pick.isPicking) {
       return [
         SelectionAction(
-          icon: Icons.check_rounded,
+          kind: SelectionActionKind.favorite,
+          icon: LucideIcons.check,
           label: 'Use ${selected.length} item(s)',
           onTap: () => pick.confirmPick(selected),
         ),
       ];
     }
-    return [
+    final allFavorited = selected.every((i) => i.isFavorite);
+    final allSynced = selected.every((i) => sync.isPathSynced(i.path));
+    final actions = [
       SelectionAction(
-        icon: selected.every((i) => i.isFavorite)
-            ? Icons.favorite_rounded
-            : Icons.favorite_border_rounded,
-        label: selected.every((i) => i.isFavorite)
-            ? 'Remove from favorites'
-            : 'Favorite',
+        kind: SelectionActionKind.favorite,
+        icon: allFavorited ? LucideIcons.starOff : LucideIcons.star,
+        label: allFavorited ? 'Remove from favorites' : 'Favorite',
         onTap: () => _favoriteSelected(context, selected),
       ),
       SelectionAction(
-        icon: Icons.share_rounded,
+        kind: SelectionActionKind.share,
+        icon: LucideIcons.share2,
         label: 'Share',
         onTap: () => selected.length == 1
             ? ShareSheet.show(context, selected.single)
             : _shareSelected(context, selected),
       ),
       SelectionAction(
-        icon: Icons.download_rounded,
+        kind: SelectionActionKind.download,
+        icon: LucideIcons.download,
         label: 'Download',
         onTap: () => _downloadSelected(context, selected),
       ),
       SelectionAction(
-        icon: Icons.delete_outline_rounded,
+        kind: SelectionActionKind.delete,
+        icon: LucideIcons.trash2,
         label: 'Delete',
         onTap: () => _confirmDeleteSelected(context, selected),
       ),
       SelectionAction(
-        icon: Icons.copy_rounded,
+        kind: SelectionActionKind.copy,
+        icon: LucideIcons.copy,
         label: 'Copy',
         onTap: () => _moveOrCopySelected(context, selected, copy: true),
       ),
       SelectionAction(
-        icon: Icons.drive_file_move_rounded,
+        kind: SelectionActionKind.move,
+        icon: LucideIcons.folderInput,
         label: 'Move',
         onTap: () => _moveOrCopySelected(context, selected, copy: false),
       ),
       if (selected.length == 1)
         SelectionAction(
-          icon: Icons.drive_file_rename_outline_rounded,
+          kind: SelectionActionKind.rename,
+          icon: LucideIcons.filePen,
           label: 'Rename',
           onTap: () => _renameItem(selected.single),
         ),
       SelectionAction(
-        icon: selected.every((i) => sync.isPathSynced(i.path))
-            ? Icons.sync_rounded
-            : Icons.sync_outlined,
-        label: selected.every((i) => sync.isPathSynced(i.path))
-            ? 'Stop syncing to device'
-            : 'Sync to device',
+        kind: SelectionActionKind.sync,
+        icon: LucideIcons.hardDriveDownload,
+        label: allSynced ? 'Stop syncing to device' : 'Sync to device',
         onTap: () => _toggleSyncSelected(context, sync, selected),
       ),
       if (selected.length == 1)
         SelectionAction(
-          icon: Icons.info_outline_rounded,
+          kind: SelectionActionKind.details,
+          icon: LucideIcons.info,
           label: 'Details',
           onTap: () => DetailsSheet.show(context, selected.single),
         ),
     ];
+    return orderSelectionActions(
+      actions,
+      context.read<SettingsController>().selectionActionOrder,
+    );
   }
 
   Future<void> _renameItem(NextcloudItem item) async {
@@ -452,14 +517,85 @@ class _FilesViewState extends State<FilesView>
     }
   }
 
+  /// `SyncItemStatus` (this app's device-sync model) -> `NooSyncStatus`
+  /// (the design system's row/table status-icon set). There's no "shared"
+  /// signal on `NextcloudItem` today, so that half of the design's status
+  /// set never lights up here - see the report for the promotion note.
+  List<NooSyncStatus> _nooStatuses(SyncItemStatus status) {
+    switch (status) {
+      case SyncItemStatus.syncing:
+        return const [NooSyncStatus.syncing];
+      case SyncItemStatus.synced:
+        return const [NooSyncStatus.synced];
+      case SyncItemStatus.conflict:
+        return const [NooSyncStatus.error];
+      case SyncItemStatus.none:
+        return const [];
+    }
+  }
+
+  /// Real image/video thumbnail for a row/table tile, reusing
+  /// `item_icon.dart`'s existing preview-loading (server or, offline, the
+  /// local mirror file) rather than re-deriving it - null falls back to
+  /// `NooFileTile`'s plain kind icon.
+  Widget? _rowThumbnail(
+    BuildContext context,
+    NextcloudItem item,
+    SessionController session,
+    NooFileTileSize size,
+  ) {
+    final isMedia = _offline
+        ? item.type == NextcloudItemType.image
+        : (item.type == NextcloudItemType.image ||
+                  item.type == NextcloudItemType.video) &&
+              item.previewUrl != null;
+    if (!isMedia) return null;
+    return ItemThumbnail(
+      item: item,
+      service: session.service,
+      localFile: _localFileFor(context, item),
+      size: size.extent,
+      borderRadius: size.radius,
+      iconSize: size.iconSize,
+    );
+  }
+
+  /// The user's configured swipe action for one side of a row, or null if
+  /// that side is off or set to an action the design's two-slot
+  /// `NooSwipeAction` has no room for (`SwipeAction.share` - still reachable
+  /// via the row's overflow menu / the "Share" bulk action).
+  NooSwipeActionSpec? _swipeSpec(
+    SwipeAction action,
+    NextcloudItem item,
+    ItemOperations ops,
+  ) {
+    switch (action) {
+      case SwipeAction.favorite:
+        return NooSwipeActionSpec(
+          kind: NooSwipeActionKind.favorite,
+          onTriggered: () => ops.toggleItemFavorite(item),
+        );
+      case SwipeAction.delete:
+        return NooSwipeActionSpec(
+          kind: NooSwipeActionKind.delete,
+          onTriggered: () => _confirmAndDeleteViaSwipe(item),
+        );
+      case SwipeAction.share:
+      case SwipeAction.none:
+        return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final colors = context.nooColors;
     // Display prefs (grid/list, filters, sort) live on FilesController for
     // both tabs; `browser` is the tab's own folder listing.
     final files = context.watch<FilesController>();
     final browser = _browserOf(context);
+    final sync = context.watch<SyncStatusController>();
+    final isDesktop = NooLayout.isDesktop(context);
+    final gutter = NooLayout.gutter(context);
 
     if (!_requestedInitialLoad) {
       _requestedInitialLoad = true;
@@ -479,46 +615,69 @@ class _FilesViewState extends State<FilesView>
         .where((i) => _selectedIds.contains(i.id))
         .toList();
 
-    final controlsRow = Padding(
-      // 16, not 20 - matches the SliverAppBar toolbar's own default
-      // horizontal content inset when it's selecting, so the two rows'
-      // content lines up instead of the controls row looking shifted in.
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // The scroll-hint nudge (see _playScrollHint) plays on this row
-          // once, right after it first appears.
-          FilesControlsRow(
-            folderPath: browser.currentFolderPath,
-            showStorageScope: !_offline,
-            scrollController: _controlsScrollController,
-          ),
-          if (hasBreadcrumbs) ...[
-            const SizedBox(height: 10),
-            SizedBox(
-              height: 32,
-              child: Breadcrumbs(
-                pathStack: browser.pathStack,
-                onTap: (index) => browser.navigateToPathIndex(index),
-              ),
+    final topRow = _isSelecting
+        ? _buildSelectionBar(context, selectedItems)
+        : Padding(
+            padding: const EdgeInsets.fromLTRB(
+              NooSpace.sm,
+              NooSpace.sm,
+              NooSpace.sm,
+              NooSpace.xs,
             ),
-          ],
-        ],
-      ),
-    );
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilesControlsRow(
+                        folderPath: browser.currentFolderPath,
+                        showStorageScope: !_offline,
+                      ),
+                    ),
+                    if (_offline) ...[
+                      const SizedBox(width: NooSpace.xs),
+                      _HeaderIconButton(
+                        icon: LucideIcons.folderSync,
+                        tooltip: 'Manage synced folders',
+                        onTap: () => ManageSyncedFoldersSheet.show(context),
+                      ),
+                    ],
+                  ],
+                ),
+                if (hasBreadcrumbs) ...[
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 32,
+                    child: FileBreadcrumbRow(
+                      pathStack: browser.pathStack,
+                      onTap: (index) => browser.navigateToPathIndex(index),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          );
 
     final List<Widget> contentSlivers = [
-      // Sticky while browsing; once selecting, the selection bar takes over
-      // the very top of the screen instead (see `selectionBar` below), so
-      // this is free to scroll away rather than staying pinned under it.
+      if (widget.topBar != null) topBarSliver(widget.topBar!),
+      // Pinned in both states - while browsing this is the controls row
+      // (+ breadcrumbs), while selecting it's the selection bar (see
+      // `topRow` above): either way it's the one thing that always stays
+      // at the very top of the scroll view.
       SliverPersistentHeader(
-        pinned: !_isSelecting,
+        pinned: true,
         delegate: StickyHeaderDelegate(
-          height: hasBreadcrumbs ? 114 : 72,
-          child: controlsRow,
+          // 20 (topRow's own top+bottom padding) + 44 (FilesControlsRow's
+          // fixed height) [+ 10 gap + 32 breadcrumbs height, if present].
+          // Getting this wrong overflows the sliver header by exactly the
+          // shortfall - a real bug this shipped with once already.
+          height: _isSelecting ? 56 : (hasBreadcrumbs ? 106 : 64),
+          child: topRow,
         ),
       ),
+      if (_offline)
+        SliverToBoxAdapter(child: _buildOfflineSummary(context, sync)),
       // Files List / Grid
       if (browser.isLoading)
         const SliverFillRemaining(
@@ -534,32 +693,27 @@ class _FilesViewState extends State<FilesView>
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.error_outline_rounded,
-                    size: 64,
-                    color: colorScheme.error,
-                  ),
+                  Icon(LucideIcons.circleAlert, size: 56, color: colors.danger),
                   const SizedBox(height: 16),
                   Text(
-                    _offline ? 'Could not read local files' : 'WebDAV Sync Error',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      color: colorScheme.error,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    _offline
+                        ? 'Could not read local files'
+                        : 'WebDAV Sync Error',
+                    style: NooText.cardTitle.copyWith(color: colors.danger),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     browser.errorMessage!,
                     textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
+                    style: NooText.body.copyWith(color: colors.fg3),
                   ),
                   const SizedBox(height: 20),
-                  FilledButton.icon(
-                    onPressed: browser.reload,
-                    icon: const Icon(Icons.refresh_rounded),
-                    label: Text(_offline ? 'Retry' : 'Retry Connection'),
+                  NooButton(
+                    variant: NooButtonVariant.secondary,
+                    size: NooButtonSize.field,
+                    icon: LucideIcons.refreshCw,
+                    onTap: browser.reload,
+                    child: Text(_offline ? 'Retry' : 'Retry Connection'),
                   ),
                 ],
               ),
@@ -574,20 +728,16 @@ class _FilesViewState extends State<FilesView>
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
-                  _offline
-                      ? Icons.offline_pin_outlined
-                      : Icons.folder_open_rounded,
-                  size: 64,
-                  color: colorScheme.outlineVariant,
+                  _offline ? LucideIcons.hardDriveDownload : LucideIcons.folder,
+                  size: 56,
+                  color: colors.fg3,
                 ),
                 const SizedBox(height: 12),
                 Text(
                   _offline && !hasBreadcrumbs
                       ? 'Nothing downloaded yet'
                       : 'Folder is empty',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
+                  style: NooText.cardTitle.copyWith(color: colors.fg2),
                 ),
               ],
             ),
@@ -596,13 +746,18 @@ class _FilesViewState extends State<FilesView>
       else if (files.isGridView)
         SliverPadding(
           key: const ValueKey('files-grid'),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          padding: EdgeInsets.fromLTRB(
+            gutter,
+            NooSpace.xs,
+            gutter,
+            NooSpace.lg,
+          ),
           sliver: SliverGrid(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 1.1,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: isDesktop ? 5 : 2,
+              childAspectRatio: isDesktop ? 1.05 : 0.92,
+              crossAxisSpacing: isDesktop ? 16 : 10,
+              mainAxisSpacing: isDesktop ? 16 : 10,
             ),
             delegate: SliverChildBuilderDelegate((context, index) {
               final item = browser.items[index];
@@ -615,10 +770,21 @@ class _FilesViewState extends State<FilesView>
             }, childCount: browser.items.length),
           ),
         )
-      else
+      else if (isDesktop) ...[
         SliverPadding(
-          key: const ValueKey('files-list'),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          key: const ValueKey('files-table-header'),
+          padding: EdgeInsets.fromLTRB(gutter, NooSpace.xs, gutter, 0),
+          sliver: SliverToBoxAdapter(
+            child: _buildDesktopHeader(
+              context,
+              files,
+              browser.currentFolderPath,
+            ),
+          ),
+        ),
+        SliverPadding(
+          key: const ValueKey('files-table'),
+          padding: EdgeInsets.fromLTRB(gutter, 0, gutter, NooSpace.lg),
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate((context, index) {
               final item = browser.items[index];
@@ -626,20 +792,46 @@ class _FilesViewState extends State<FilesView>
                 key: ValueKey('${browser.currentFolderPath}::${item.id}'),
                 index: index,
                 fromRight: navigatingDeeper,
-                child: _buildListTile(context, item),
+                child: _buildDesktopRow(context, item),
               );
             }, childCount: browser.items.length),
           ),
         ),
-
-      // Fixed clearance so the last item isn't hidden behind the floating
-      // nav bar, regardless of list length.
-      const SliverToBoxAdapter(child: SizedBox(height: 100)),
-      // For a short list this stretches the white card's background down to
-      // the screen edge (matching the empty/loading/error states, which
-      // already use SliverFillRemaining); for a long list that already fills
-      // the viewport it contributes nothing extra.
-      const SliverFillRemaining(hasScrollBody: false, child: SizedBox()),
+      ] else
+        SliverPadding(
+          key: const ValueKey('files-list'),
+          padding: const EdgeInsets.fromLTRB(
+            NooSpace.sm,
+            NooSpace.xs,
+            NooSpace.sm,
+            NooSpace.lg,
+          ),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate((context, index) {
+              final item = browser.items[index];
+              return _FolderEnterAnimation(
+                key: ValueKey('${browser.currentFolderPath}::${item.id}'),
+                index: index,
+                fromRight: navigatingDeeper,
+                child: _buildMobileRow(
+                  context,
+                  item,
+                  index,
+                  browser.items.length,
+                ),
+              );
+            }, childCount: browser.items.length),
+          ),
+        ),
+      // List/grid/table above only pad NooSpace.lg at the bottom - plenty
+      // once Scaffold shrinks the body above an attached bar, but floating
+      // draws the body behind the bar instead, so it needs the bar's own
+      // footprint added on top or the last row ends up under it.
+      if (context.watch<SettingsController>().bottomBarStyle ==
+          NooBottomBarStyle.floating)
+        SliverToBoxAdapter(
+          child: SizedBox(height: bottomBarClearance(context)),
+        ),
     ];
 
     return PopScope(
@@ -652,96 +844,154 @@ class _FilesViewState extends State<FilesView>
           browser.navigateUp();
         }
       },
-      child: SyncedHeaderScaffold(
-        scrollController: widget.scrollController,
-        onRefresh: browser.reload,
-        actions: [
-          if (_offline)
-            IconButton(
-              icon: const Icon(Icons.sync_rounded),
-              tooltip: 'Manage synced folders',
-              onPressed: () => ManageSyncedFoldersSheet.show(context),
-            )
-          else
-            IconButton(
-              icon: const Icon(Icons.add_rounded),
-              tooltip: 'New',
-              onPressed: () => _showCreateMenu(context),
+      child: ColoredBox(
+        color: colors.bg,
+        child: RefreshIndicator(
+          color: colors.accent,
+          backgroundColor: colors.surface,
+          onRefresh: () {
+            unawaited(sync.syncOnPull());
+            return browser.reload();
+          },
+          // `topBarSliver`'s floating header can collapse all the way to
+          // zero height (fully scrolled away), at which point the sticky
+          // controls row right below it in `contentSlivers` would otherwise
+          // ride up underneath the status bar instead of stopping below it
+          // - the floating top bar used to be the only thing reserving that
+          // space (via its own internal `SafeArea`), and that reservation
+          // disappears along with it once it's fully hidden. Wrapping the
+          // whole scroll view keeps the inset outside the scrolling region
+          // entirely, so it's never implicated in the floating header's own
+          // collapse/reveal math - safe to apply unconditionally, since
+          // desktop's `MediaQuery.padding.top` is 0 anyway (no topBar / no
+          // status bar there).
+          child: SafeArea(
+            top: true,
+            bottom: false,
+            child: CustomScrollView(
+              controller: widget.scrollController,
+              // Pull-to-refresh needs a scroll physics that allows dragging
+              // past the edge even when content doesn't fill the viewport -
+              // an empty or single-item list otherwise can't be pulled at
+              // all under the platform default physics.
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: contentSlivers,
             ),
-          const MoreTabsButton(),
-          const ProfileAvatarButton(),
-        ],
-        selectionBar: _isSelecting
-            ? _buildSelectionBar(context, theme, selectedItems)
-            : null,
-        contentSlivers: contentSlivers,
+          ),
+        ),
       ),
     );
   }
 
-  /// Replaces the top bar entirely while selecting (see
-  /// `SyncedHeaderScaffold.selectionBar`) - a close button, the "N
-  /// selected" count, and the horizontally-scrollable bulk actions.
+  /// The Offline tab's summary card (`DESIGN_SYSTEM.md`'s "Banner / summary
+  /// card", Offline variant): a status headline, a folder/file count
+  /// caption, a conflict callout when there is one, and "Sync now".
+  ///
+  /// `SyncStatusController` doesn't track local bytes used or a last-sync
+  /// timestamp anywhere today (no getter exposes either), so the literal
+  /// "used GB" stat / progress bar / "last sync" meta the mockup shows
+  /// aren't backed by real data - inventing them would mean fabricating
+  /// numbers, so this shows the status/count summary that data actually
+  /// supports instead. See the report for what a literal match would need.
+  Widget _buildOfflineSummary(BuildContext context, SyncStatusController sync) {
+    final gutter = NooLayout.gutter(context);
+    final hasConflicts = sync.syncConflicts.isNotEmpty;
+    final stat = hasConflicts
+        ? 'Sync issue'
+        : sync.isSyncingNow
+        ? 'Syncing…'
+        : (sync.syncEverything || sync.syncedPaths.isNotEmpty)
+        ? 'Synced'
+        : 'Sync off';
+
+    final String caption;
+    if (sync.syncEverything) {
+      caption = 'Whole account synced to this device';
+    } else {
+      final folders = sync.syncedFolderCount;
+      final files = sync.syncedPaths.length - folders;
+      if (folders == 0 && files == 0) {
+        caption = 'Nothing synced yet - use "Sync to device" in Files';
+      } else {
+        final parts = <String>[
+          if (folders > 0) '$folders folder${folders == 1 ? '' : 's'}',
+          if (files > 0) '$files file${files == 1 ? '' : 's'}',
+        ];
+        caption = '${parts.join(' & ')} synced to this device';
+      }
+    }
+
+    final meta = hasConflicts
+        ? '${sync.syncConflicts.length} item${sync.syncConflicts.length == 1 ? '' : 's'} couldn\'t sync · tap a row to retry'
+        : null;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(gutter, 0, gutter, NooSpace.sm),
+      child: NooSummaryCard(
+        stat: stat,
+        caption: caption,
+        meta: meta,
+        tone: hasConflicts
+            ? NooSummaryCardTone.danger
+            : NooSummaryCardTone.normal,
+        action: NooButton(
+          variant: NooButtonVariant.tonal,
+          size: NooButtonSize.compact,
+          icon: LucideIcons.refreshCw,
+          disabled: sync.isSyncingNow,
+          onTap: () => sync.syncOnPull(),
+          child: const Text('Sync now'),
+        ),
+      ),
+    );
+  }
+
+  /// Takes over the controls row's own sticky slot while selecting - see
+  /// `NooSelectionBar` (design canvas
+  /// https://claude.ai/artifact/3AGPqqMdkLSC2ypCh2CQs4, "Selection action
+  /// bar" - DESIGN_SYSTEM.md has no §4 recipe of its own for this).
   Widget _buildSelectionBar(
     BuildContext context,
-    ThemeData theme,
     List<NextcloudItem> selectedItems,
   ) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: [
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.5,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded, size: 20),
-                    tooltip: 'Cancel selection',
-                    onPressed: _clearSelection,
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${selectedItems.length} selected',
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
+    return NooSelectionBar(
+      count: selectedItems.length,
+      actions: _buildSelectionActions(context, selectedItems),
+      onClose: _clearSelection,
+      isDesktop: NooLayout.isDesktop(context),
+      iosStyle: NooLayout.iosStyle(context),
+    );
+  }
+
+  /// A single item's actions (the same list the multi-select bar offers,
+  /// just for one item) - the overflow menu every file row/table row/grid
+  /// card opens, so acting on one item doesn't need a long-press into
+  /// selection mode first.
+  ///
+  /// One sheet on every platform: a precisely-anchored desktop context
+  /// menu would need the tapped button's screen position, but
+  /// `NooFileRow`/`NooFileTableRow`/`NooGridCard`'s `onMore` is a plain
+  /// `VoidCallback` with no position, and those components aren't mine to
+  /// change - see the report.
+  void _showItemActions(BuildContext context, NextcloudItem item) {
+    final actions = _buildSelectionActions(context, [item]);
+    showNooSheet(
+      context,
+      children: [
+        NooGroupedList(
+          children: [
+            for (final action in actions)
+              NooSettingsRow(
+                icon: action.icon,
+                label: Text(action.label),
+                onTap: () {
+                  Navigator.pop(context);
+                  action.onTap();
+                },
               ),
-            ),
-          ),
-          Expanded(
-            child: SingleChildScrollView(
-              controller: _selectionActionsScrollController,
-              scrollDirection: Axis.horizontal,
-              // Left-aligned (not anchored to the trailing edge) so the
-              // first action's left edge sits at a fixed spot - lining up
-              // with the controls row's own first icon directly below it -
-              // regardless of how many actions there are.
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (final action in _buildSelectionActions(
-                    context,
-                    selectedItems,
-                  ))
-                    IconButton(
-                      icon: Icon(action.icon, size: 20),
-                      tooltip: action.label,
-                      onPressed: action.onTap,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -817,9 +1067,7 @@ class _FilesViewState extends State<FilesView>
     // just some)? Save straight from the local copy instead of a fresh
     // network fetch through DownloadService - see
     // SyncStatusController.localSyncedFilePath.
-    final localPaths = await Future.wait(
-      files.map(sync.localSyncedFilePath),
-    );
+    final localPaths = await Future.wait(files.map(sync.localSyncedFilePath));
     if (localPaths.every((path) => path != null)) {
       try {
         for (var i = 0; i < files.length; i++) {
@@ -828,7 +1076,7 @@ class _FilesViewState extends State<FilesView>
           await FileSaver.instance.saveFile(
             name: baseName,
             filePath: localPaths[i]!,
-            ext: ext,
+            fileExtension: ext,
           );
         }
         messenger.showSnackBar(
@@ -943,10 +1191,20 @@ class _FilesViewState extends State<FilesView>
     );
   }
 
-  Widget _buildListTile(BuildContext context, NextcloudItem item) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final browser = _browserOf(context);
+  /// Mobile 64px row (`NooFileRow`) - swipeable when browsing normally,
+  /// plain when selecting/picking/offline (matching the old
+  /// `SwipeableItem`'s gating exactly). Rounds the top corners of the
+  /// first row and the bottom corners of the last one, with a 1px `line`
+  /// divider between rows, so the whole list reads as one radius-20
+  /// surface card rather than `NooGroupedList`'s own (non-lazy) `Column` -
+  /// this list needs to stay a lazily-built `SliverList` for long folders.
+  Widget _buildMobileRow(
+    BuildContext context,
+    NextcloudItem item,
+    int index,
+    int count,
+  ) {
+    final colors = context.nooColors;
     final pick = context.watch<PickController>();
     final sync = context.watch<SyncStatusController>();
     final session = context.watch<SessionController>();
@@ -955,110 +1213,150 @@ class _FilesViewState extends State<FilesView>
     final isSelected = _selectedIds.contains(item.id);
     // Pick mode and selection are server-side features - never on Offline.
     final picking = !_offline && pick.isPicking;
+    final status = _offline ? SyncItemStatus.none : sync.syncStatusFor(item);
+    final isConflict = status == SyncItemStatus.conflict;
 
-    // No border radius here — the outer ClipRRect below is the only place
-    // that rounds this tile's corners. Rounding it here too would give the
-    // tile its own independent rounded edge, which becomes visible as a
-    // stray floating corner while it slides during a swipe.
-    final card = Material(
-      color: isSelected
-          ? colorScheme.primaryContainer.withValues(alpha: 0.5)
-          : colorScheme.surfaceContainerLow,
-      child: InkWell(
-        onTap: () {
-          if (picking) {
-            _handlePickTap(context, item);
-          } else if (_isSelecting) {
-            _toggleSelection(item);
-          } else if (item.isFolder) {
-            browser.navigateToFolder(item.path);
-          } else {
-            _openFile(context, item);
-          }
-        },
-        onLongPress: _offline || (picking && !pick.pickRequest!.allowMultiple)
-            ? null
-            : () => _toggleSelection(item),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
-            children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  SelectableThumbnail(
-                    isSelected: isSelected,
-                    size: 44,
-                    checkmarkSize: 24,
-                    child: ItemThumbnail(
-                      item: item,
-                      service: session.service,
-                      localFile: _localFileFor(context, item),
-                      size: 44,
-                      borderRadius: 12,
-                      iconSize: 22,
-                    ),
-                  ),
-                  // Everything on the Offline tab is synced by definition.
-                  if (!_offline)
-                    Positioned(
-                      right: -2,
-                      bottom: -2,
-                      child: SyncStatusBadge(
-                        status: sync.syncStatusFor(item),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.name,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      item.isFolder
-                          ? 'Folder'
-                          : '${formatBytes(item.size)} • ${DateFormat.yMMMd().format(item.lastModified)}',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+    final row = NooFileRow(
+      kind: NooFileKind.from(
+        name: item.name,
+        mimeType: item.mimeType,
+        isDirectory: item.isFolder,
       ),
+      name: item.name,
+      size: !item.isFolder && !isConflict ? formatBytes(item.size) : null,
+      modified: !item.isFolder && !isConflict
+          ? DateFormat.yMMMd().format(item.lastModified)
+          : null,
+      meta: isConflict
+          ? "Couldn't sync · Tap to retry"
+          : (item.isFolder ? 'Folder' : null),
+      statuses: _nooStatuses(status),
+      favorite: item.isFavorite,
+      iosStyle: NooLayout.iosStyle(context),
+      selected: isSelected,
+      thumbnail: _rowThumbnail(context, item, session, NooFileTileSize.row),
+      onTap: () => _handleItemTap(context, item, picking: picking),
+      onLongPress: _offline || (picking && !pick.pickRequest!.allowMultiple)
+          ? null
+          : () => _toggleSelection(item),
+      onMore: !_isSelecting && !picking
+          ? () => _showItemActions(context, item)
+          : null,
     );
 
-    final content = _isSelecting || picking || _offline
-        ? card
-        : SwipeableItem(
-            itemKey: ValueKey('file-${item.id}'),
-            itemName: item.name,
-            settings: settings,
-            onFavorite: () => ops.toggleItemFavorite(item),
-            onShare: () => ShareSheet.show(context, item),
-            onDelete: () => _deleteViaSwipe(item),
-            child: card,
+    final swipeable = _isSelecting || picking || _offline
+        ? row
+        : NooSwipeAction(
+            startAction: _swipeSpec(settings.swipeRightAction, item, ops),
+            endAction: _swipeSpec(settings.swipeLeftAction, item, ops),
+            child: row,
           );
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: ClipRRect(borderRadius: BorderRadius.circular(16), child: content),
+    final isFirst = index == 0;
+    final isLast = index == count - 1;
+    return Column(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.vertical(
+            top: isFirst ? const Radius.circular(NooRadii.card) : Radius.zero,
+            bottom: isLast ? const Radius.circular(NooRadii.card) : Radius.zero,
+          ),
+          child: swipeable,
+        ),
+        if (!isLast) Container(height: 1, color: colors.line),
+      ],
     );
   }
 
-  Future<void> _deleteViaSwipe(NextcloudItem item) async {
+  /// Desktop table header - sort state comes from the same per-folder
+  /// `FilesController` prefs the mobile sort chip uses, so both tabs and
+  /// both layouts always agree.
+  Widget _buildDesktopHeader(
+    BuildContext context,
+    FilesController files,
+    String folderPath,
+  ) {
+    const columns = [
+      FileSortField.name,
+      FileSortField.size,
+      FileSortField.dateModified,
+    ];
+    final field = files.sortFieldFor(folderPath);
+    final sortColumn = columns.indexOf(field);
+    return NooFileTableHeader(
+      col2Label: 'Size',
+      col3Label: 'Modified',
+      sortColumn: sortColumn < 0 ? null : sortColumn,
+      sortAscending: files.sortAscendingFor(folderPath),
+      onSort: (index) {
+        final tapped = columns[index];
+        if (files.sortFieldFor(folderPath) == tapped) {
+          files.toggleSortOrderFor(folderPath);
+        } else {
+          files.setSortFieldFor(folderPath, tapped);
+        }
+      },
+    );
+  }
+
+  /// Desktop 52px table row (`NooFileTableRow`) - no swipe actions or card
+  /// framing (the design's desktop rows sit directly on the pane).
+  Widget _buildDesktopRow(BuildContext context, NextcloudItem item) {
+    final pick = context.watch<PickController>();
+    final sync = context.watch<SyncStatusController>();
+    final session = context.watch<SessionController>();
+    final isSelected = _selectedIds.contains(item.id);
+    final picking = !_offline && pick.isPicking;
+    final status = _offline ? SyncItemStatus.none : sync.syncStatusFor(item);
+
+    return NooFileTableRow(
+      kind: NooFileKind.from(
+        name: item.name,
+        mimeType: item.mimeType,
+        isDirectory: item.isFolder,
+      ),
+      name: item.name,
+      col2: item.isFolder ? null : formatBytes(item.size),
+      col3: item.isFolder ? null : DateFormat.yMMMd().format(item.lastModified),
+      statuses: _nooStatuses(status),
+      favorite: item.isFavorite,
+      selected: isSelected,
+      thumbnail: _rowThumbnail(context, item, session, NooFileTileSize.desktop),
+      onTap: () => _handleItemTap(context, item, picking: picking),
+      onMore: !_isSelecting && !picking
+          ? () => _showItemActions(context, item)
+          : null,
+    );
+  }
+
+  Future<void> _confirmAndDeleteViaSwipe(NextcloudItem item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Delete Item'),
+          content: Text(
+            'Delete "${item.name}" from the server? This cannot be undone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(dialogContext).colorScheme.error,
+              ),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true || !mounted) return;
+    HapticFeedback.mediumImpact();
+
     final ops = context.read<ItemOperations>();
     final success = await ops.deleteItem(item.path);
     if (!mounted) return;
@@ -1072,128 +1370,64 @@ class _FilesViewState extends State<FilesView>
     );
   }
 
+  /// `NooGridCard` (`DESIGN_SYSTEM.md`'s grid card): a full-bleed thumbnail
+  /// area (real preview, or the file-kind soft color + icon when there
+  /// isn't one) above a name/meta line. The card has no slot for a
+  /// favorite star or sync-status icon (only the row/table variants do) -
+  /// see the report.
   Widget _buildGridCard(BuildContext context, NextcloudItem item) {
-    final browser = _browserOf(context);
+    final colors = context.nooColors;
     final pick = context.watch<PickController>();
     final sync = context.watch<SyncStatusController>();
+    final session = context.watch<SessionController>();
     final isSelected = _selectedIds.contains(item.id);
     final picking = !_offline && pick.isPicking;
+    final status = _offline ? SyncItemStatus.none : sync.syncStatusFor(item);
+    final kind = NooFileKind.from(
+      name: item.name,
+      mimeType: item.mimeType,
+      isDirectory: item.isFolder,
+    );
     // Offline reads the image straight from the local mirror; videos have
     // no local thumbnail (that would need a frame-extraction plugin), so
-    // they fall through to the plain icon card there.
+    // they fall through to the plain kind-icon card there.
     final isMedia = _offline
         ? item.type == NextcloudItemType.image
         : (item.type == NextcloudItemType.image ||
                   item.type == NextcloudItemType.video) &&
               item.previewUrl != null;
+    final meta = status == SyncItemStatus.conflict
+        ? "Couldn't sync · Tap to retry"
+        : (item.isFolder ? 'Folder' : formatBytes(item.size));
 
-    return Material(
-      color: Theme.of(context).colorScheme.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(20),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () {
-          if (picking) {
-            _handlePickTap(context, item);
-          } else if (_isSelecting) {
-            _toggleSelection(item);
-          } else if (item.isFolder) {
-            browser.navigateToFolder(item.path);
-          } else {
-            _openFile(context, item);
-          }
-        },
-        onLongPress: _offline || (picking && !pick.pickRequest!.allowMultiple)
-            ? null
-            : () => _toggleSelection(item),
-        child: Stack(
-          children: [
-            SelectableThumbnail(
-              isSelected: isSelected,
-              checkmarkSize: 32,
-              child: isMedia
-                  ? _buildMediaGridContent(context, item)
-                  : _buildPlainGridContent(context, item),
-            ),
-            if (!_offline)
-              Positioned(
-                right: 6,
-                bottom: 6,
-                child: SyncStatusBadge(status: sync.syncStatusFor(item)),
+    return NooGridCard(
+      name: item.name,
+      meta: meta,
+      placeholderColor: kind.background(colors),
+      icon: kind.icon,
+      iconColor: kind.foreground(colors),
+      thumbnail: isMedia
+          ? _GridThumbnail(
+              item: item,
+              service: session.service,
+              localFile: _localFileFor(context, item),
+              fallback: Icon(
+                kind.icon,
+                color: kind.foreground(colors),
+                size: 32,
               ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Grid content for images/videos - see [MediaGridTile].
-  Widget _buildMediaGridContent(BuildContext context, NextcloudItem item) {
-    final session = context.watch<SessionController>();
-    final localFile = _localFileFor(context, item);
-
-    return MediaGridTile(
-      item: item,
-      imageBuilder: (cachePixels) => ResizeImage(
-        localFile != null
-            ? FileImage(localFile)
-            : NetworkImage(
-                item.previewUrl!,
-                headers: session.service?.authHeaders,
-              ),
-        width: cachePixels,
-        height: cachePixels,
-      ),
-      fallbackBuilder: (ctx) => _buildPlainGridContent(ctx, item),
-    );
-  }
-
-  /// Grid content for folders and non-previewable files: an icon badge
-  /// with name/size below, since there's no meaningful preview to show.
-  Widget _buildPlainGridContent(BuildContext context, NextcloudItem item) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final iconColor = getIconColor(context, item.type);
-
-    return Padding(
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(getItemIcon(item.type), color: iconColor, size: 24),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                item.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                item.isFolder ? 'Folder' : formatBytes(item.size),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  fontSize: 11,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+            )
+          : null,
+      thumbnailHeight: NooLayout.isDesktop(context) ? 118 : 104,
+      selected: isSelected,
+      onTap: () => _handleItemTap(context, item, picking: picking),
+      onLongPress: _offline || (picking && !pick.pickRequest!.allowMultiple)
+          ? null
+          : () => _toggleSelection(item),
+      onMore: !_isSelecting && !picking
+          ? () => _showItemActions(context, item)
+          : null,
+      verticalOverflowIcon: !NooLayout.iosStyle(context),
     );
   }
 
@@ -1218,118 +1452,5 @@ class _FilesViewState extends State<FilesView>
       context,
       FileViewerScreen.route(item: item, siblings: files.items),
     );
-  }
-
-  void _showCreateMenu(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: colorScheme.surfaceContainerHigh,
-      showDragHandle: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.upload_file_rounded),
-                  title: const Text('Upload File'),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    _pickAndUploadFile(context);
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.create_new_folder_outlined),
-                  title: const Text('New Folder'),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    _showCreateFolderDialog(context);
-                  },
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  void _showCreateFolderDialog(BuildContext context) {
-    final files = context.read<FilesController>();
-    final controller = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Create New Folder'),
-          content: TextField(
-            controller: controller,
-            decoration: const InputDecoration(
-              labelText: 'Folder Name',
-              hintText: 'e.g. Finance',
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                final name = controller.text.trim();
-                if (name.isNotEmpty) {
-                  Navigator.pop(context);
-                  final success = await files.createFolder(name);
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          success
-                              ? 'Created folder $name'
-                              : 'Failed to create folder',
-                        ),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                  }
-                }
-              },
-              child: const Text('Create'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  // Mirrors `main.dart`'s `_handleSharedFiles` exactly, so picking a file
-  // via "+" lands on the same destination-picker screen and background
-  // foreground-service upload as receiving one via Android's "Share
-  // to..." sheet does, rather than a separate in-app-only upload path.
-  Future<void> _pickAndUploadFile(BuildContext context) async {
-    final picked = await FilePicker.pickFiles();
-    if (picked.isEmpty) return;
-    final files = picked
-        .where((f) => f.path != null)
-        .map(
-          (f) => SharedFileRef(
-            uri: Uri.file(f.path!).toString(),
-            name: f.name,
-            size: f.lengthSync(),
-          ),
-        )
-        .toList();
-    if (files.isEmpty || !context.mounted) return;
-
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => ShareUploadView(files: files)));
   }
 }

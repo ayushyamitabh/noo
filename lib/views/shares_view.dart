@@ -1,53 +1,63 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import '../models/nextcloud_item.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../models/nextcloud_share.dart';
+import '../providers/files_controller.dart';
 import '../providers/shares_controller.dart';
-import '../widgets/more_tabs_button.dart';
-import '../widgets/profile_avatar_button.dart';
-import '../widgets/synced_header_scaffold.dart';
+import '../theme/design_tokens.dart';
+import '../widgets/noo/core/noo_segmented_control.dart';
+import '../widgets/noo/files/noo_file_kind.dart';
+import '../widgets/noo/files/noo_file_row.dart';
+import '../widgets/noo/files/noo_file_table.dart';
+import '../widgets/noo/noo_layout.dart';
+import '../widgets/share_sheet.dart';
+import '../widgets/tabs/tab_state_slivers.dart';
 
-IconData _shareItemIcon(NextcloudItemType type) {
-  switch (type) {
-    case NextcloudItemType.folder:
-      return Icons.folder_rounded;
-    case NextcloudItemType.image:
-      return Icons.image_rounded;
-    case NextcloudItemType.video:
-      return Icons.movie_rounded;
-    case NextcloudItemType.audio:
-      return Icons.audiotrack_rounded;
-    case NextcloudItemType.document:
-      return Icons.description_rounded;
-    case NextcloudItemType.archive:
-      return Icons.folder_zip_rounded;
-    case NextcloudItemType.file:
-      return Icons.insert_drive_file_rounded;
-  }
-}
+/// Which slice of [SharesController.shares] is on screen - `With you` maps
+/// straight onto the controller's own `sharedWithMe: true` fetch, but the
+/// controller only ever exposes one boolean scope, so `By you` and `Links`
+/// both use its `sharedWithMe: false` fetch and are told apart client-side
+/// by [NextcloudShare.shareType] (see `_visibleShares`). `SharesController`
+/// caches each of its two scopes after its first fetch, so switching
+/// between any of the three - including back to `With you` after leaving
+/// it - only re-fetches a scope that's never been loaded yet, not on every
+/// single switch.
+enum _ShareScope { withYou, byYou, links }
 
 IconData _shareTypeIcon(ShareType type) {
   switch (type) {
     case ShareType.user:
-      return Icons.person_rounded;
+      return LucideIcons.user;
     case ShareType.group:
-      return Icons.groups_rounded;
+      return LucideIcons.users;
     case ShareType.publicLink:
-      return Icons.link_rounded;
+      return LucideIcons.link;
     case ShareType.email:
-      return Icons.email_rounded;
+      return LucideIcons.mail;
     case ShareType.federated:
-      return Icons.public_rounded;
+      return LucideIcons.globe;
     case ShareType.other:
-      return Icons.share_rounded;
+      return LucideIcons.share2;
   }
+}
+
+/// "Can edit" when any write bit (update/create/delete) is set on the OCS
+/// share permissions bitmask, "Can view" otherwise - kept to the two
+/// broad buckets the row's one-line meta has room for.
+String _permissionLabel(int permissions) {
+  const update = 2, create = 4, delete = 8;
+  final canWrite = permissions & (update | create | delete) != 0;
+  return canWrite ? 'Can edit' : 'Can view';
 }
 
 class SharesView extends StatefulWidget {
   final ScrollController scrollController;
 
-  const SharesView({super.key, required this.scrollController});
+  /// This tab's own shell top bar, planted as its first sliver - see
+  /// `buildAppTabView`'s doc comment. Null on desktop and while picking.
+  final PreferredSizeWidget? topBar;
+
+  const SharesView({super.key, required this.scrollController, this.topBar});
 
   @override
   State<SharesView> createState() => _SharesViewState();
@@ -55,11 +65,13 @@ class SharesView extends StatefulWidget {
 
 class _SharesViewState extends State<SharesView> {
   bool _requested = false;
+  // Mirrors `SharesController.sharedWithMe`'s own default (false, "shared
+  // by me") so the first fetch this triggers matches what's shown.
+  _ShareScope _scope = _ShareScope.byYou;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final colors = context.nooColors;
     final sharesController = context.watch<SharesController>();
 
     if (!_requested) {
@@ -69,247 +81,216 @@ class _SharesViewState extends State<SharesView> {
       );
     }
 
-    final shares = sharesController.shares;
+    final shares = _visibleShares(sharesController);
+    final isDesktop = NooLayout.isDesktop(context);
 
     final List<Widget> contentSlivers = [
-      SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-          child: SegmentedButton<bool>(
-            segments: const [
-              ButtonSegment(value: false, label: Text('Shared by me')),
-              ButtonSegment(value: true, label: Text('Shared with me')),
+      if (widget.topBar != null) topBarSliver(widget.topBar!),
+      SliverPadding(
+        padding: EdgeInsets.fromLTRB(
+          NooLayout.gutter(context),
+          NooSpace.md,
+          NooLayout.gutter(context),
+          0,
+        ),
+        sliver: SliverToBoxAdapter(
+          child: NooSegmentedControl<_ShareScope>(
+            value: _scope,
+            options: const [
+              NooSegmentOption(value: _ShareScope.withYou, label: 'With you'),
+              NooSegmentOption(value: _ShareScope.byYou, label: 'By you'),
+              NooSegmentOption(value: _ShareScope.links, label: 'Links'),
             ],
-            selected: {sharesController.sharedWithMe},
-            onSelectionChanged: (set) =>
-                sharesController.setSharedWithMe(set.first),
+            onChanged: (scope) => _selectScope(sharesController, scope),
           ),
         ),
       ),
-      const SliverToBoxAdapter(child: SizedBox(height: 8)),
-
+      const SliverToBoxAdapter(child: SizedBox(height: NooSpace.md)),
       if (sharesController.isLoading && shares.isEmpty)
-        const SliverFillRemaining(
-          hasScrollBody: false,
-          child: Center(child: CircularProgressIndicator()),
-        )
+        tabLoadingSliver
       else if (sharesController.errorMessage != null)
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.error_outline_rounded,
-                    size: 64,
-                    color: colorScheme.error,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Could not load shares',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      color: colorScheme.error,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    sharesController.errorMessage!,
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  FilledButton.icon(
-                    onPressed: sharesController.fetchAll,
-                    icon: const Icon(Icons.refresh_rounded),
-                    label: const Text('Retry'),
-                  ),
-                ],
-              ),
-            ),
-          ),
+        tabErrorSliver(
+          context,
+          title: 'Could not load shares',
+          message: sharesController.errorMessage!,
+          onRetry: sharesController.fetchAll,
         )
       else if (shares.isEmpty)
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.groups_rounded,
-                  size: 64,
-                  color: colorScheme.outlineVariant,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  sharesController.sharedWithMe
-                      ? 'Nothing has been shared with you'
-                      : 'You haven\'t shared anything yet',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
+        tabEmptySliver(
+          context,
+          icon: LucideIcons.share2,
+          message: _emptyMessage(),
         )
+      else if (isDesktop)
+        _buildDesktopTable(context, shares)
       else
-        SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          sliver: SliverList(
-            delegate: SliverChildBuilderDelegate((context, index) {
-              final share = shares[index];
-              return _buildShareTile(context, share);
-            }, childCount: shares.length),
-          ),
-        ),
-
-      const SliverToBoxAdapter(child: SizedBox(height: 100)),
-      const SliverFillRemaining(hasScrollBody: false, child: SizedBox()),
+        _buildMobileList(context, shares),
+      ...tabBottomInsetSlivers(context),
     ];
 
-    return SyncedHeaderScaffold(
-      scrollController: widget.scrollController,
-      actions: const [MoreTabsButton(), ProfileAvatarButton()],
-      onRefresh: sharesController.fetchAll,
-      contentSlivers: contentSlivers,
-    );
-  }
-
-  Widget _buildShareTile(BuildContext context, NextcloudShare share) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final iconColor = colorScheme.primary;
-
-    final withWhom = share.sharedWithMe
-        ? 'From ${share.ownerDisplayName}'
-        : (share.sharedWithDisplayName != null
-              ? 'With ${share.sharedWithDisplayName}'
-              : 'Shared link');
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: iconColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  _shareItemIcon(share.itemType),
-                  color: iconColor,
-                  size: 22,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      share.name,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Icon(
-                            _shareTypeIcon(share.shareType),
-                            size: 13,
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            '$withWhom • ${DateFormat.yMMMd().format(share.sharedAt)}',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                icon: Icon(Icons.link_off_rounded, color: colorScheme.error),
-                tooltip: share.sharedWithMe ? 'Remove' : 'Unshare',
-                onPressed: () => _confirmUnshare(context, share),
-              ),
-            ],
+    return ColoredBox(
+      color: colors.bg,
+      child: RefreshIndicator(
+        color: colors.accent,
+        backgroundColor: colors.surface,
+        onRefresh: sharesController.fetchAll,
+        // See files_view.dart's identical fix - without this, the sticky
+        // controls row rides up under the status bar once the floating top
+        // bar above it fully collapses.
+        child: SafeArea(
+          top: true,
+          bottom: false,
+          child: CustomScrollView(
+            controller: widget.scrollController,
+            // See files_view.dart's identical fix - without this, pull-to-
+            // refresh can't be triggered on an empty or single-item list.
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: contentSlivers,
           ),
         ),
       ),
     );
   }
 
-  Future<void> _confirmUnshare(
+  List<NextcloudShare> _visibleShares(SharesController c) {
+    switch (_scope) {
+      case _ShareScope.withYou:
+        return c.shares;
+      case _ShareScope.byYou:
+        return c.shares
+            .where((s) => s.shareType != ShareType.publicLink)
+            .toList();
+      case _ShareScope.links:
+        return c.shares
+            .where((s) => s.shareType == ShareType.publicLink)
+            .toList();
+    }
+  }
+
+  String _emptyMessage() {
+    switch (_scope) {
+      case _ShareScope.withYou:
+        return 'Nothing has been shared with you';
+      case _ShareScope.byYou:
+        return "You haven't shared anything yet";
+      case _ShareScope.links:
+        return 'No share links yet';
+    }
+  }
+
+  void _selectScope(SharesController c, _ShareScope scope) {
+    setState(() => _scope = scope);
+    // No-ops (see `SharesController.setSharedWithMe`) when moving between
+    // `byYou`/`links`, which share the same `sharedWithMe: false` fetch.
+    c.setSharedWithMe(scope == _ShareScope.withYou);
+  }
+
+  // A lazily-built `SliverList`, not `NooGroupedList` (its own `Column`
+  // isn't lazy - see files_view.dart's `_buildMobileRow` doc comment, and
+  // trash_view.dart's `_buildMobileList`, which had the same bug: a heavy
+  // account's full share list built eagerly up front). Each row still
+  // reads as one continuous radius-20 card via per-row corner rounding +
+  // a 1px `line` divider.
+  Widget _buildMobileList(BuildContext context, List<NextcloudShare> shares) {
+    final colors = context.nooColors;
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: NooSpace.sm),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate((context, index) {
+          final share = shares[index];
+          final row = NooFileRow(
+            kind: NooFileKind.from(
+              name: share.name,
+              isDirectory: share.isFolder,
+            ),
+            name: share.name,
+            meta:
+                '${share.ownerDisplayName} · ${_permissionLabel(share.permissions)}',
+            iosStyle: NooLayout.iosStyle(context),
+            onTap: () => _openShareSheet(context, share),
+            trailing: Icon(_shareTypeIcon(share.shareType), size: 16),
+          );
+          final isFirst = index == 0;
+          final isLast = index == shares.length - 1;
+          return Column(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.vertical(
+                  top: isFirst
+                      ? const Radius.circular(NooRadii.card)
+                      : Radius.zero,
+                  bottom: isLast
+                      ? const Radius.circular(NooRadii.card)
+                      : Radius.zero,
+                ),
+                child: row,
+              ),
+              if (!isLast) Container(height: 1, color: colors.line),
+            ],
+          );
+        }, childCount: shares.length),
+      ),
+    );
+  }
+
+  Widget _buildDesktopTable(BuildContext context, List<NextcloudShare> shares) {
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: NooSpace.xl,
+        vertical: NooSpace.xs,
+      ),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate((context, index) {
+          if (index == 0) {
+            return const NooFileTableHeader(
+              col2Label: 'Owner',
+              col3Label: 'Permission',
+            );
+          }
+          final share = shares[index - 1];
+          return NooFileTableRow(
+            kind: NooFileKind.from(
+              name: share.name,
+              isDirectory: share.isFolder,
+            ),
+            name: share.name,
+            col2: share.ownerDisplayName,
+            col3: _permissionLabel(share.permissions),
+            onTap: () => _openShareSheet(context, share),
+          );
+        }, childCount: shares.length + 1),
+      ),
+    );
+  }
+
+  /// Every row's whole-row tap - a share only carries enough metadata for
+  /// its own row, not the size/dates the Share sheet's header needs, so
+  /// this fetches the real item first (see `FilesController.fetchItemAtPath`)
+  /// rather than opening the sheet straight from [share]. Reused by every
+  /// scope (With you/By you/Links) - the Share sheet is the one place that
+  /// already knows how to copy a link or remove access, so there's no
+  /// separate overflow menu here any more.
+  Future<void> _openShareSheet(
     BuildContext context,
     NextcloudShare share,
   ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: Text(share.sharedWithMe ? 'Remove Share' : 'Unshare'),
-          content: Text(
-            share.sharedWithMe
-                ? 'Remove "${share.name}" shared with you by ${share.ownerDisplayName}?'
-                : 'Stop sharing "${share.name}"?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(dialogContext).colorScheme.error,
-              ),
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Remove'),
-            ),
-          ],
-        );
-      },
-    );
-    if (confirmed != true || !context.mounted) return;
-
+    final files = context.read<FilesController>();
     final messenger = ScaffoldMessenger.of(context);
-    final success = await context.read<SharesController>().deleteShare(
-      share,
-    );
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          success
-              ? 'Removed share for ${share.name}'
-              : 'Failed to remove share for ${share.name}',
+    final item = await files.fetchItemAtPath(share.path);
+    if (!context.mounted) return;
+    if (item == null) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Could not find this item - it may have moved'),
+          behavior: SnackBarBehavior.floating,
         ),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+      );
+      return;
+    }
+    await ShareSheet.show(context, item);
+    // The sheet manages shares through `ItemOperations`, not this tab's own
+    // `SharesController` (see its `deleteShare`'s doc comment) - refetch so
+    // a share added/removed from inside it doesn't leave this list stale.
+    if (context.mounted) context.read<SharesController>().fetchAll();
   }
 }

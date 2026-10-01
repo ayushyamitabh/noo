@@ -1,13 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../models/saved_account.dart';
 import '../providers/session_controller.dart';
+import '../theme/design_tokens.dart';
+import '../widgets/noo/core/noo_avatar.dart';
+import '../widgets/noo/core/noo_button.dart';
+import '../widgets/noo/nav/noo_top_bar.dart';
+import '../widgets/noo/noo_layout.dart';
+import '../widgets/noo/overlays/noo_text_field.dart';
+import '../widgets/settings/settings_dialogs.dart';
+import '../widgets/shell/shell_common.dart';
 import 'login_webview_view.dart';
 
 class LoginView extends StatefulWidget {
   /// True when this is pushed from Settings ("Add account") on top of an
   /// already-logged-in session, rather than shown as the app's root screen
-  /// with no account yet. Adds an AppBar/back affordance and auto-pops once
+  /// with no account yet. Adds a top bar/back affordance and auto-pops once
   /// the new account becomes active.
   final bool isAddingAccount;
 
@@ -18,9 +27,9 @@ class LoginView extends StatefulWidget {
 }
 
 class _LoginViewState extends State<LoginView> {
-  final _formKey = GlobalKey<FormState>();
   final _urlController = TextEditingController();
   String? _originalActiveAccountId;
+  String? _localError;
   bool _popped = false;
   bool _webViewPushed = false;
 
@@ -39,12 +48,14 @@ class _LoginViewState extends State<LoginView> {
   }
 
   void _handleContinue() {
-    if (!_formKey.currentState!.validate()) return;
+    final url = _urlController.text.trim();
+    if (url.isEmpty) {
+      setState(() => _localError = 'Please enter your Nextcloud server address');
+      return;
+    }
+    setState(() => _localError = null);
     FocusScope.of(context).unfocus();
-    context.read<SessionController>().startLoginFlow(
-      _urlController.text.trim(),
-      addAccount: widget.isAddingAccount,
-    );
+    context.read<SessionController>().startLoginFlow(url, addAccount: widget.isAddingAccount);
   }
 
   /// Resumes a saved account with one tap (see [SessionController.switchAccount]).
@@ -68,47 +79,25 @@ class _LoginViewState extends State<LoginView> {
       );
   }
 
-  /// Mirrors AccountView's `_AccountsCard._confirmRemove` - same
-  /// destructive-action gate, just reached from the login screen instead of
-  /// Settings.
+  /// Mirrors Settings' own account removal - same confirm/remove gate, just
+  /// reached from the login screen instead of the saved-accounts list.
   Future<void> _confirmRemoveAccount(SavedAccount account) async {
-    final host = Uri.tryParse(account.serverUrl)?.host ?? account.serverUrl;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Remove Account'),
-          content: Text(
-            'Remove ${account.username} ($host)? You can add it again later.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(dialogContext).colorScheme.error,
-              ),
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Remove'),
-            ),
-          ],
-        );
-      },
+    await confirmRemoveAccount(
+      context,
+      context.read<SessionController>(),
+      accountId: account.id,
+      username: account.username,
+      host: serverHost(account.serverUrl),
+      isActive: false,
     );
-    if (confirmed != true || !mounted) return;
-    await context.read<SessionController>().removeAccount(account.id);
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final colors = context.nooColors;
     final session = context.watch<SessionController>();
 
-    final isAwaitingBrowser =
-        session.loginFlowStatus == LoginFlowStatus.awaitingBrowser;
+    final isAwaitingBrowser = session.loginFlowStatus == LoginFlowStatus.awaitingBrowser;
     final isInitiating = session.loginFlowStatus == LoginFlowStatus.initiating;
 
     // A new/refreshed account has just become active - pop back to
@@ -128,9 +117,7 @@ class _LoginViewState extends State<LoginView> {
     // SessionController.startLoginFlow's doc comment for why. Push it the
     // moment there's a URL to show; _webViewPushed resets once that route
     // pops (cancelled or done) so a retry after cancelling pushes it again.
-    if (!_webViewPushed &&
-        isAwaitingBrowser &&
-        session.pendingLoginUrl != null) {
+    if (!_webViewPushed && isAwaitingBrowser && session.pendingLoginUrl != null) {
       _webViewPushed = true;
       final url = session.pendingLoginUrl!;
       WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -154,9 +141,17 @@ class _LoginViewState extends State<LoginView> {
       });
     }
 
+    final errorMessage =
+        _localError ?? (session.loginFlowStatus == LoginFlowStatus.error ? session.errorMessage : null);
+
     final body = Scaffold(
+      backgroundColor: colors.bg,
       appBar: widget.isAddingAccount
-          ? AppBar(title: const Text('Add Account'))
+          ? NooTopBar(
+              style: NooLayout.navStyle(context),
+              title: 'Add account',
+              leading: const NooTopBarBack(),
+            )
           : null,
       body: SafeArea(
         child: Center(
@@ -172,8 +167,7 @@ class _LoginViewState extends State<LoginView> {
                   // deleting it, specifically so it can be resumed
                   // from here with one tap - no need to repeat
                   // Login Flow v2.
-                  if (!widget.isAddingAccount &&
-                      session.accounts.isNotEmpty) ...[
+                  if (!widget.isAddingAccount && session.accounts.isNotEmpty) ...[
                     _SavedAccountsSection(
                       accounts: session.accounts,
                       onSelect: (account) => _continueAsAccount(account),
@@ -182,33 +176,21 @@ class _LoginViewState extends State<LoginView> {
                     const SizedBox(height: 28),
                     Row(
                       children: [
-                        const Expanded(child: Divider()),
+                        Expanded(child: Divider(color: colors.line)),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: Text(
-                            'or',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
+                          child: Text('or', style: NooText.meta.copyWith(color: colors.fg3)),
                         ),
-                        const Expanded(child: Divider()),
+                        Expanded(child: Divider(color: colors.line)),
                       ],
                     ),
                     const SizedBox(height: 28),
                   ],
                   _ServerForm(
-                    formKey: _formKey,
                     urlController: _urlController,
-                    isLoading:
-                        isInitiating || session.isLoading || isAwaitingBrowser,
-                    errorMessage:
-                        session.loginFlowStatus == LoginFlowStatus.error
-                        ? session.errorMessage
-                        : null,
+                    isLoading: isInitiating || session.isLoading || isAwaitingBrowser,
+                    errorMessage: errorMessage,
                     onContinue: _handleContinue,
-                    theme: theme,
-                    colorScheme: colorScheme,
                   ),
                 ],
               ),
@@ -236,157 +218,94 @@ class _LoginViewState extends State<LoginView> {
 }
 
 class _ServerForm extends StatelessWidget {
-  final GlobalKey<FormState> formKey;
   final TextEditingController urlController;
   final bool isLoading;
   final String? errorMessage;
   final VoidCallback onContinue;
-  final ThemeData theme;
-  final ColorScheme colorScheme;
 
   const _ServerForm({
-    required this.formKey,
     required this.urlController,
     required this.isLoading,
     required this.errorMessage,
     required this.onContinue,
-    required this.theme,
-    required this.colorScheme,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Form(
-      key: formKey,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            // Same monochrome-tinted treatment as the splash/lock screens
-            // (see main.dart's _SplashView) - the asset is a plain white
-            // silhouette on transparent, meant to be recolored rather than
-            // shown as-is. Used everywhere the app shows its own icon
-            // in-app, rather than the full-color launcher icon.
-            child: ColorFiltered(
-              colorFilter: ColorFilter.mode(
-                Theme.of(context).colorScheme.onSurface,
-                BlendMode.srcIn,
-              ),
-              child: Image.asset(
-                'assets/icon/app_icon_monochrome.png',
-                width: 80,
-                height: 80,
-              ),
-            ),
+    final colors = context.nooColors;
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Center(
+          // Same monochrome-tinted treatment as the splash/lock screens
+          // (see main.dart's _SplashView) - the asset is a plain white
+          // silhouette on transparent, meant to be recolored rather than
+          // shown as-is. Used everywhere the app shows its own icon
+          // in-app, rather than the full-color launcher icon.
+          child: ColorFiltered(
+            colorFilter: ColorFilter.mode(colors.fg1, BlendMode.srcIn),
+            child: Image.asset('assets/icon/app_icon_monochrome.png', width: 80, height: 80),
           ),
-          const SizedBox(height: 24),
-          Text(
-            'Noo',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.headlineMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.5,
+        ),
+        const SizedBox(height: 24),
+        Text('Noo', textAlign: TextAlign.center, style: NooText.largeTitle.copyWith(color: colors.fg1)),
+        const SizedBox(height: 6),
+        Text(
+          'Connect to your self-hosted server',
+          textAlign: TextAlign.center,
+          style: NooText.body.copyWith(color: colors.fg3),
+        ),
+        const SizedBox(height: 36),
+        if (errorMessage != null)
+          Container(
+            margin: const EdgeInsets.only(bottom: 20),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: colors.dangerSoft,
+              borderRadius: BorderRadius.circular(NooRadii.input),
             ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Connect to your self-hosted server',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 36),
-          if (errorMessage != null)
-            Container(
-              margin: const EdgeInsets.only(bottom: 20),
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: colorScheme.errorContainer,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.error_outline_rounded,
-                    color: colorScheme.onErrorContainer,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      errorMessage!,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onErrorContainer,
-                        fontWeight: FontWeight.w500,
-                      ),
+            child: Row(
+              children: [
+                Icon(LucideIcons.circleAlert, color: colors.danger, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    errorMessage!,
+                    style: NooText.body.copyWith(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: colors.danger,
                     ),
                   ),
-                ],
-              ),
-            ),
-          TextFormField(
-            controller: urlController,
-            keyboardType: TextInputType.url,
-            autofillHints: const [AutofillHints.url],
-            decoration: InputDecoration(
-              labelText: 'Server Address',
-              hintText: 'cloud.example.com',
-              prefixIcon: const Icon(Icons.dns_outlined),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              filled: true,
-              fillColor: colorScheme.surfaceContainerLow,
-            ),
-            validator: (val) {
-              if (val == null || val.trim().isEmpty) {
-                return 'Please enter your Nextcloud server address';
-              }
-              return null;
-            },
-            onFieldSubmitted: (_) => onContinue(),
-          ),
-          const SizedBox(height: 28),
-          SizedBox(
-            height: 54,
-            child: FilledButton(
-              onPressed: isLoading ? null : onContinue,
-              style: FilledButton.styleFrom(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(27),
                 ),
-              ),
-              child: isLoading
-                  ? SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        color: colorScheme.onPrimary,
-                      ),
-                    )
-                  : const Text(
-                      'Continue',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+              ],
             ),
           ),
-          const SizedBox(height: 24),
-          Text(
-            "You'll finish signing in on the page that opens. This app never sees your password.",
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: colorScheme.onSurfaceVariant,
-              fontSize: 11,
-            ),
-          ),
-        ],
-      ),
+        NooTextField(
+          controller: urlController,
+          placeholder: 'cloud.example.com',
+          leadingIcon: LucideIcons.server,
+          keyboardType: TextInputType.url,
+          onSubmitted: (_) => onContinue(),
+        ),
+        const SizedBox(height: 28),
+        NooButton(
+          variant: NooButtonVariant.primary,
+          size: NooButtonSize.cta,
+          fullWidth: true,
+          disabled: isLoading,
+          onTap: onContinue,
+          child: Text(isLoading ? 'Connecting…' : 'Continue'),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          "You'll finish signing in on the page that opens. This app never sees your password.",
+          textAlign: TextAlign.center,
+          style: NooText.meta.copyWith(color: colors.fg3, fontSize: 11),
+        ),
+      ],
     );
   }
 }
@@ -398,44 +317,35 @@ class _SavedAccountsSection extends StatelessWidget {
   final ValueChanged<SavedAccount> onSelect;
   final ValueChanged<SavedAccount> onRemove;
 
-  const _SavedAccountsSection({
-    required this.accounts,
-    required this.onSelect,
-    required this.onRemove,
-  });
+  const _SavedAccountsSection({required this.accounts, required this.onSelect, required this.onRemove});
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final colors = context.nooColors;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
           padding: const EdgeInsets.only(left: 4, bottom: 8),
-          child: Text(
-            'Continue as',
-            style: theme.textTheme.labelLarge?.copyWith(
-              color: colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          child: Text('Continue as', style: NooText.label.copyWith(color: colors.fg2)),
         ),
-        Card(
-          margin: EdgeInsets.zero,
-          child: Column(
-            children: [
-              for (final account in accounts) ...[
-                _SavedAccountRow(
-                  account: account,
-                  onTap: () => onSelect(account),
-                  onRemove: () => onRemove(account),
-                ),
-                if (account != accounts.last)
-                  const Divider(height: 1, indent: 16, endIndent: 16),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(NooRadii.card),
+          child: DecoratedBox(
+            decoration: BoxDecoration(color: colors.line),
+            child: Column(
+              children: [
+                for (var i = 0; i < accounts.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 1),
+                  _SavedAccountRow(
+                    account: accounts[i],
+                    onTap: () => onSelect(accounts[i]),
+                    onRemove: () => onRemove(accounts[i]),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ],
@@ -448,40 +358,60 @@ class _SavedAccountRow extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onRemove;
 
-  const _SavedAccountRow({
-    required this.account,
-    required this.onTap,
-    required this.onRemove,
-  });
+  const _SavedAccountRow({required this.account, required this.onTap, required this.onRemove});
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final host = Uri.tryParse(account.serverUrl)?.host ?? account.serverUrl;
-    final initial = account.username.isNotEmpty
-        ? account.username[0].toUpperCase()
-        : '?';
+    final colors = context.nooColors;
 
-    return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: colorScheme.primary,
-        child: Text(
-          initial,
-          style: TextStyle(
-            color: colorScheme.onPrimary,
-            fontWeight: FontWeight.bold,
+    return Material(
+      color: colors.surface,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: NooSpace.md, vertical: 10),
+          child: Row(
+            spacing: 12,
+            children: [
+              NooAvatar(initials: accountInitial(account.username), size: 36),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  spacing: 2,
+                  children: [
+                    Text(
+                      account.username,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: NooText.bodyL.copyWith(
+                        height: 1.1,
+                        fontWeight: FontWeight.w500,
+                        color: colors.fg1,
+                      ),
+                    ),
+                    Text(
+                      serverHost(account.serverUrl),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: NooText.meta.copyWith(color: colors.fg3),
+                    ),
+                  ],
+                ),
+              ),
+              GestureDetector(
+                onTap: onRemove,
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(color: colors.surface2, shape: BoxShape.circle),
+                  child: Icon(LucideIcons.x, size: 16, color: colors.fg2),
+                ),
+              ),
+            ],
           ),
         ),
       ),
-      title: Text(account.username),
-      subtitle: Text(host),
-      trailing: IconButton(
-        icon: const Icon(Icons.close_rounded),
-        tooltip: 'Remove account',
-        visualDensity: VisualDensity.compact,
-        onPressed: onRemove,
-      ),
-      onTap: onTap,
     );
   }
 }

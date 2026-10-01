@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../providers/session_controller.dart';
+import '../theme/design_tokens.dart';
+import '../widgets/noo/nav/noo_top_bar.dart';
+import '../widgets/noo/noo_layout.dart';
 
 /// Every Login Flow v2 page - first login or an additional account -
 /// rendered in Flutter's own WebView rather than a Chrome Custom Tab or
@@ -63,6 +67,7 @@ class _LoginWebViewViewState extends State<LoginWebViewView> {
   @override
   Widget build(BuildContext context) {
     final session = context.watch<SessionController>();
+    final colors = context.nooColors;
 
     // The login flow finished (success or error) or was cancelled
     // elsewhere - close this screen automatically rather than leaving it
@@ -81,18 +86,24 @@ class _LoginWebViewViewState extends State<LoginWebViewView> {
         if (!didPop) _cancel();
       },
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Sign in'),
-          leading: IconButton(
-            icon: const Icon(Icons.close_rounded),
+        backgroundColor: colors.bg,
+        appBar: NooTopBar(
+          style: NooLayout.navStyle(context),
+          title: 'Log in',
+          leading: NooTopBarButton(
+            icon: LucideIcons.x,
             tooltip: 'Cancel',
-            onPressed: _cancel,
+            onTap: _cancel,
           ),
         ),
         body: Stack(
           children: [
             WebViewWidget(controller: _controller),
-            if (_pageLoading) const LinearProgressIndicator(),
+            if (_pageLoading)
+              LinearProgressIndicator(
+                color: colors.accent,
+                backgroundColor: colors.surface3,
+              ),
           ],
         ),
       ),

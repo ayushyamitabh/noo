@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../providers/session_controller.dart';
+import '../theme/design_tokens.dart';
+import '../widgets/noo/core/noo_button.dart';
 
 /// Shown in place of the main shell whenever [SessionController.needsUnlock] is
 /// true - a fresh app launch with login lock configured, or returning to the
@@ -48,10 +51,10 @@ class _LockScreenViewState extends State<LockScreenView>
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final colors = context.nooColors;
 
     return Scaffold(
+      backgroundColor: colors.bg,
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -63,10 +66,7 @@ class _LockScreenViewState extends State<LockScreenView>
               // silhouette on transparent, meant to be recolored rather
               // than shown as-is.
               ColorFiltered(
-                colorFilter: ColorFilter.mode(
-                  colorScheme.onSurface,
-                  BlendMode.srcIn,
-                ),
+                colorFilter: ColorFilter.mode(colors.fg1, BlendMode.srcIn),
                 child: Image.asset(
                   'assets/icon/app_icon_monochrome.png',
                   width: 80,
@@ -77,35 +77,22 @@ class _LockScreenViewState extends State<LockScreenView>
               Text(
                 'Noo is locked',
                 textAlign: TextAlign.center,
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+                style: NooText.title.copyWith(color: colors.fg1),
               ),
               const SizedBox(height: 8),
               Text(
                 'Unlock with your PIN or biometrics to continue',
                 textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
+                style: NooText.body.copyWith(color: colors.fg3),
               ),
               const SizedBox(height: 32),
-              SizedBox(
-                height: 54,
-                child: FilledButton.icon(
-                  onPressed: _authenticating ? null : _attemptUnlock,
-                  icon: _authenticating
-                      ? SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            color: colorScheme.onPrimary,
-                          ),
-                        )
-                      : const Icon(Icons.lock_open_rounded),
-                  label: Text(_authenticating ? 'Unlocking…' : 'Unlock'),
-                ),
+              NooButton(
+                variant: NooButtonVariant.primary,
+                size: NooButtonSize.cta,
+                icon: LucideIcons.lockOpen,
+                disabled: _authenticating,
+                onTap: _attemptUnlock,
+                child: Text(_authenticating ? 'Unlocking…' : 'Unlock'),
               ),
             ],
           ),

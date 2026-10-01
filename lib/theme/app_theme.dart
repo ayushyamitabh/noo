@@ -1,8 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'design_tokens.dart';
 
 class AppTheme {
   static const Color defaultNextcloudBlue = Color(0xFF0082C9);
+
+  /// The design system's own fixed violet - [NooColors.light]/`.dark`'s
+  /// `accent`, and the accent picker's "Default" swatch. Also
+  /// [SettingsController]'s initial [SettingsController.seedColor], so a
+  /// fresh install (or any device without Material You dynamic color) keeps
+  /// today's violet look rather than picking up the leftover
+  /// [defaultNextcloudBlue] default from before seed colors actually did
+  /// anything to the Noo-styled UI (see [NooColors.fromSeed]).
+  static const Color defaultAccent = Color(0xFF8D0DE3);
 
   // Flutter's Material 3 default (ZoomPageTransitionsBuilder) doesn't
   // implement Android's predictive-back gesture at all. Opting into
@@ -23,12 +33,56 @@ class AppTheme {
   static const _sliderTheme = SliderThemeData(year2023: false);
 
   static const List<Color> seedColors = [
+    defaultAccent, // Default (Noo Violet)
     Color(0xFF0082C9), // Nextcloud Blue
     Color(0xFF009688), // Ocean Teal
     Color(0xFF6750A4), // Deep Purple
     Color(0xFFE65100), // Sunset Amber
     Color(0xFF2E7D32), // Emerald Green
   ];
+
+  // Design-system typefaces (DESIGN_SYSTEM.md 1.3): Schibsted Grotesk for
+  // headings, Instrument Sans for UI/body text. Applied over Flutter's
+  // default TextTheme slots app-wide - screens not yet reworked to the
+  // design system's own named type scale (`NooText`) still benefit from
+  // the new typefaces immediately instead of staying on Inter until their
+  // turn comes.
+  static TextTheme _textTheme(Brightness brightness) {
+    final base = brightness == Brightness.light
+        ? ThemeData.light().textTheme
+        : ThemeData.dark().textTheme;
+    return GoogleFonts.instrumentSansTextTheme(base).copyWith(
+      displayLarge: GoogleFonts.schibstedGrotesk(
+        textStyle: base.displayLarge,
+        fontWeight: FontWeight.w600,
+      ),
+      displayMedium: GoogleFonts.schibstedGrotesk(
+        textStyle: base.displayMedium,
+        fontWeight: FontWeight.w600,
+      ),
+      displaySmall: GoogleFonts.schibstedGrotesk(
+        textStyle: base.displaySmall,
+        fontWeight: FontWeight.w600,
+      ),
+      headlineLarge: GoogleFonts.schibstedGrotesk(
+        textStyle: base.headlineLarge,
+        fontWeight: FontWeight.w600,
+      ),
+      headlineMedium: GoogleFonts.schibstedGrotesk(
+        fontWeight: FontWeight.w600,
+        letterSpacing: -0.5,
+      ),
+      headlineSmall: GoogleFonts.schibstedGrotesk(
+        textStyle: base.headlineSmall,
+        fontWeight: FontWeight.w600,
+      ),
+      titleLarge: GoogleFonts.schibstedGrotesk(
+        fontWeight: FontWeight.w600,
+        letterSpacing: -0.2,
+      ),
+      titleMedium: GoogleFonts.schibstedGrotesk(fontWeight: FontWeight.w500),
+    );
+  }
 
   static ThemeData light(
     Color seedColor, {
@@ -41,26 +95,19 @@ class AppTheme {
             seedColor: seedColor,
             brightness: Brightness.light,
           );
+    final nooColors = (useDynamicColor && dynamicScheme != null)
+        ? NooColors.fromDynamicScheme(dynamicScheme)
+        : NooColors.fromSeed(seedColor, Brightness.light);
 
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
       colorScheme: colorScheme,
+      extensions: [nooColors],
       scaffoldBackgroundColor: colorScheme.surface,
       pageTransitionsTheme: _pageTransitionsTheme,
       sliderTheme: _sliderTheme,
-      textTheme: GoogleFonts.interTextTheme(ThemeData.light().textTheme)
-          .copyWith(
-            headlineMedium: GoogleFonts.inter(
-              fontWeight: FontWeight.w600,
-              letterSpacing: -0.5,
-            ),
-            titleLarge: GoogleFonts.inter(
-              fontWeight: FontWeight.w600,
-              letterSpacing: -0.2,
-            ),
-            titleMedium: GoogleFonts.inter(fontWeight: FontWeight.w500),
-          ),
+      textTheme: _textTheme(Brightness.light),
       cardTheme: CardThemeData(
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -71,7 +118,7 @@ class AppTheme {
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
-        titleTextStyle: GoogleFonts.inter(
+        titleTextStyle: GoogleFonts.schibstedGrotesk(
           fontSize: 22,
           fontWeight: FontWeight.w600,
           color: colorScheme.onSurface,
@@ -92,6 +139,9 @@ class AppTheme {
             seedColor: seedColor,
             brightness: Brightness.dark,
           );
+    var nooColors = (useDynamicColor && dynamicScheme != null)
+        ? NooColors.fromDynamicScheme(dynamicScheme)
+        : NooColors.fromSeed(seedColor, Brightness.dark);
 
     if (amoled) {
       // True OLED black across every surface tone Material 3 hands out -
@@ -106,27 +156,18 @@ class AppTheme {
         surfaceContainerHighest: Colors.black,
         surfaceDim: Colors.black,
       );
+      nooColors = nooColors.withAmoled();
     }
 
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
       colorScheme: colorScheme,
+      extensions: [nooColors],
       scaffoldBackgroundColor: colorScheme.surface,
       pageTransitionsTheme: _pageTransitionsTheme,
       sliderTheme: _sliderTheme,
-      textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme)
-          .copyWith(
-            headlineMedium: GoogleFonts.inter(
-              fontWeight: FontWeight.w600,
-              letterSpacing: -0.5,
-            ),
-            titleLarge: GoogleFonts.inter(
-              fontWeight: FontWeight.w600,
-              letterSpacing: -0.2,
-            ),
-            titleMedium: GoogleFonts.inter(fontWeight: FontWeight.w500),
-          ),
+      textTheme: _textTheme(Brightness.dark),
       cardTheme: CardThemeData(
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -137,7 +178,7 @@ class AppTheme {
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
-        titleTextStyle: GoogleFonts.inter(
+        titleTextStyle: GoogleFonts.schibstedGrotesk(
           fontSize: 22,
           fontWeight: FontWeight.w600,
           color: colorScheme.onSurface,

@@ -27,8 +27,7 @@ enum LoginFlowStatus { idle, initiating, awaitingBrowser, error }
 /// full rationale.
 class SessionController extends ChangeNotifier with WidgetsBindingObserver {
   final ConnectivityController connectivity;
-  final Future<SharedPreferences> prefsFuture =
-      SharedPreferences.getInstance();
+  final Future<SharedPreferences> prefsFuture = SharedPreferences.getInstance();
   final AccountStore accountStore = AccountStore();
 
   // True from the moment a saved session is restored (or a network
@@ -96,10 +95,32 @@ class SessionController extends ChangeNotifier with WidgetsBindingObserver {
   final List<VoidCallback> _accountReadyListeners = [];
   void addAccountClearedListener(VoidCallback cb) =>
       _accountClearedListeners.add(cb);
-  void addAccountActivatedListener(VoidCallback cb) =>
-      _accountActivatedListeners.add(cb);
-  void addAccountReadyListener(VoidCallback cb) =>
-      _accountReadyListeners.add(cb);
+
+  // Both `activated` and `ready` are one-shot, fire-and-forget calls, not a
+  // replayable stream - so a controller isn't guaranteed to be *listening*
+  // yet when the real event fires. Most controllers are registered with
+  // `lazy: false` in main.dart specifically so they exist before that can
+  // happen, but one that isn't (built lazily, on first read, like
+  // FilesController) can lose the race if nothing reads it until after
+  // login already finished verifying - e.g. `ConnectivityController`
+  // misreporting offline right at cold start collapses the bottom nav to
+  // just the Offline tab (see `main.dart`), so Files' tab, and the
+  // `FilesController` it lazily creates, never gets built during that
+  // window. Calling back immediately here if the account is *already* in
+  // the state being subscribed to closes that race for every current and
+  // future subscriber, without each one needing its own view-level
+  // fallback reload - see `.claude/context/architecture.md`'s "State
+  // management" section for the guardrail this exists to enforce.
+  void addAccountActivatedListener(VoidCallback cb) {
+    _accountActivatedListeners.add(cb);
+    if (_isLoggedIn && !_isProvisionalLogin) cb();
+  }
+
+  void addAccountReadyListener(VoidCallback cb) {
+    _accountReadyListeners.add(cb);
+    if (_isLoggedIn) cb();
+  }
+
   void _notifyAccountCleared() {
     for (final cb in _accountClearedListeners) {
       cb();
@@ -141,9 +162,7 @@ class SessionController extends ChangeNotifier with WidgetsBindingObserver {
     // one-time unlock at cold start would give the feature no real
     // security value, since the realistic threat is someone else picking
     // up an already-running, unlocked phone.
-    if (state == AppLifecycleState.paused &&
-        _loginLockEnabled &&
-        _isUnlocked) {
+    if (state == AppLifecycleState.paused && _loginLockEnabled && _isUnlocked) {
       _isUnlocked = false;
       notifyListeners();
     }

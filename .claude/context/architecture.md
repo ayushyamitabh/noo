@@ -13,20 +13,34 @@ lib/
                        # ItemOperations, a plain cross-domain coordinator
   services/             # network/IO: NextcloudService, LoginFlowService,
                          # AccountStore, AppLockService
-  theme/                 # AppTheme (Material 3 ThemeData)
+  theme/                 # AppTheme (Material 3 ThemeData, pre-rework
+                         # screens) + design_tokens.dart (NooColors/NooText/
+                         # NooSpace/NooRadii/NooSizes/NooMotion - see
+                         # styling.md's "Noo design-system components")
   views/                  # one screen each (FilesView, PhotosView, TrashView,
                            # SharesView, RecentView, ActivityView, SearchView,
                            # AccountView, LoginView, FileViewerScreen,
                            # ShareUploadView, LockScreenView)
   widgets/                 # reusable pieces shared across views
+    noo/                    # the Noo design-system component kit - see
+                            # styling.md's catalog
     details/                # the file-details bottom sheet and its tabs
+    shell/                  # pieces shared by the mobile/desktop app shell
+    settings/               # Settings' section widgets
+    tabs/                   # loading/error/empty slivers + grouping helpers
+                            # shared by Recent/Activity/Trash/Shares
+    files/                  # pieces split out of FilesView (e.g. the
+                            # breadcrumb row)
 ```
 
 `views/` files are screens routed to directly (a tab, or pushed via
 `Navigator`). `widgets/` files are building blocks used by more than one
 view (or complex enough to warrant their own file) — nothing in `widgets/`
 owns app state itself; it reads whichever controller(s) it needs via
-`context.watch`/`context.read`.
+`context.watch`/`context.read`. Most tabs, the app shell, and Settings are
+now built from `widgets/noo/` rather than raw Material widgets - see
+`styling.md`'s "Noo design-system components" for the token/component
+catalog and the current rebuild status.
 
 ## State management
 
@@ -100,8 +114,9 @@ new provider instance):
   mirror, not a second view. `offline` only swaps the data source, reads
   images from the local file (`localFileFor`) instead of a server preview,
   and turns off what needs the server: selection and bulk actions, swipe
-  actions, sync badges, "+" (replaced by "Manage synced folders"), pick
-  mode. The two `FilesView`s are keyed in `buildAppTabView` so the
+  actions, per-item sync status icons, "+" (replaced by "Manage synced
+  folders"), pick mode. The two `FilesView`s are keyed in `buildAppTabView`
+  so the
   `IndexedStack` never hands one's State to the other.
 - [`OfflineController`](../../lib/providers/offline_controller.dart) — the
   Files tab's folder listing read from local storage instead of the
@@ -137,6 +152,42 @@ new provider instance):
   Also home to the file-details sheet's per-item pass-throughs
   (shares/activity/versions/restore) — stateless, so they don't need a
   controller of their own.
+
+**Guardrail - the "empty list on first load" failure class.** This bug has
+recurred more than once, always the same shape: a tab's list is empty after
+login even though the account is fine, because the controller behind it
+never ran its initial fetch. The cause is a race, not a network bug:
+`addAccountActivatedListener`/`addAccountReadyListener` fire *once*, at the
+moment login is verified/ready, to whichever listeners are registered at
+that exact instant - and most per-domain controllers (`FilesController`,
+`PhotosController`, `FavoritesController`, `TrashController`,
+`SharesController`, `RecentController`) are lazy `ChangeNotifierProvider`s,
+only constructed (and so only registering their listener) whenever
+something first reads them. If that first read happens to land *after*
+the one-shot event already fired - e.g. `ConnectivityController`
+misreporting offline for its first couple of seconds after a cold Android
+start (see its own doc comment) collapses `main.dart`'s bottom nav to just
+the Offline tab, delaying construction of every other tab's controller
+until connectivity corrects itself and login has already finished
+verifying - that controller's listener registers too late and its initial
+fetch simply never happens. `SessionController.addAccountActivatedListener`/
+`addAccountReadyListener` now close this at the root: registering either
+one calls back **immediately** if the account is already in the state
+being subscribed to, not just on the next fresh event, so a late-registering
+controller always gets its initial fetch regardless of when its lazy
+`Provider` happens to be built. Some views (`FilesView`/`PhotosView`, not
+`FavoritesView` - see `FavoritesController`'s own doc comment) additionally
+carry a build-time fallback (`_requestedInitialLoad` et al.: reload if
+items are empty and not loading, once, after first build) predating this
+fix; they're now redundant but harmless, and not worth touching for
+cleanup alone. **Guardrail for new code:** any new network-fetching
+controller that needs a one-time fetch on login must register through
+`addAccountActivatedListener`/`addAccountReadyListener` in its constructor
+and rely on their catch-up behavior - don't reach for a per-view
+build-time "fetch if empty" fallback as the primary mechanism, since that
+pattern is exactly what let this bug keep recurring silently (three
+near-duplicate, slightly-diverging implementations, none of them fixing
+the actual race).
 
 `sessionGeneration` (on `SessionController`, read by every other
 controller) is incremented on every account switch so an in-flight fetch
@@ -175,15 +226,18 @@ directly, which call `NextcloudService`/`LoginFlowService`/`AccountStore`/
 - else `session.needsUnlock` → `LockScreenView` (login lock — see above)
 - else `MainShellView`
 
-`MainShellView` is a bottom-nav `IndexedStack` over up to 8 tabs — Files,
-Photos, Favorites, Activity, Trash, Shares, Recent, Offline — user-configurable
+`MainShellView` is an `IndexedStack` over up to 8 tabs — Files, Photos,
+Favorites, Activity, Trash, Shares, Recent, Offline — user-configurable
 (order, visibility up to `maxVisibleTabs`, default tab) via
 `AppTab`/`SettingsController` and rendered through `buildAppTabView`
 (`widgets/app_tab_view_builder.dart`). `maxVisibleTabs` (5) is less than the
 total tab count, and `SettingsController._enforceMaxVisibleTabs` already
 auto-hides overflow on load (fresh install, or - as when Favorites was
 added - an existing saved tab order from before a new tab existed), so
-adding a tab to the `AppTab` enum needs no extra migration.
+adding a tab to the `AppTab` enum needs no extra migration. Only the (up
+to) 5 pinned tabs (`settings.visibleTabs`) become bottom-nav/sidebar
+destinations; the rest sit in the "More" section of the drawer (mobile) or
+sidebar (desktop) - see below.
 Each tab keeps its own `ScrollController` (survives tab switches via
 `IndexedStack`'s built-but-hidden trees) and tapping the already-active tab
 scrolls it back to top (`tapTabToScrollTop` setting). `MainShellView` also
@@ -206,40 +260,107 @@ only two that make sense as external "choose a file" sources. The same
 override mechanism restricts the visible tabs to just Offline while
 `ConnectivityController.isOffline` - see `server.md`'s "Working offline"
 section for the full story, including why session restore itself has to
-avoid making a network request in that case. `MoreTabsButton` hides
-entirely in both cases (picking, offline) for the same reason - there's
-nothing it could usefully open.
+avoid making a network request in that case. The drawer/sidebar's "More"
+section is empty in both cases (picking, offline) for the same reason -
+there's nothing useful in it to switch to - and the mobile drawer doesn't
+open at all while picking (`Scaffold.drawer` is null).
 `MainShellView` also fires a one-time notification-permission prompt on
 its first mount (`_maybeRequestNotificationPermission`, gated by a plain
 `shared_preferences` flag so it only ever asks once, not on every
-launch): a plain-language `AlertDialog` explaining why Noo wants it
-(upload/download progress notifications - see `ShareUploadService.kt`/
-`DownloadService.kt`) before the OS's own `permission_handler`-driven
-`Permission.notification.request()`, since the bare system prompt gives
-no context on its own.
+launch): a plain-language dialog (`showNooDialog`, two `NooButton`s)
+explaining why Noo wants it (upload/download progress notifications - see
+`ShareUploadService.kt`/`DownloadService.kt`) before the OS's own
+`permission_handler`-driven `Permission.notification.request()`, since the
+bare system prompt gives no context on its own.
 
-`FloatingBottomNavBar` (`widgets/floating_bottom_bar.dart`) wraps its
-pill's item row in a horizontal `SingleChildScrollView` rather than a
-plain `Row`, so a wide selected-item label plus several icon-only tabs
-scrolls instead of overflowing on narrower screens.
+`MainShellView` builds its chrome from the Noo nav kit
+(`widgets/noo/nav/`) and switches between two layouts on
+`NooLayout.isDesktop`:
 
-All eight tabs, plus `ShareUploadView` (the share-to-upload destination
-picker, pushed rather than a tab - see below), share
-[`SyncedHeaderScaffold`](../../lib/widgets/synced_header_scaffold.dart) — a
+- **Mobile:** `AppTopBar` (`widgets/app_top_bar.dart`) wraps `NooTopBar`
+  for *every* tab (previously only Files had shell-level top chrome, with
+  the rest building their own via `SyncedHeaderScaffold`) - iOS gets a
+  large title, an inline search field, a `plus` action on Files only (no
+  other tab has a create/upload flow), and the account avatar; Android
+  gets a compact title row with `search`/avatar actions, relying on an
+  extended `NooFab` ("Upload", Files/Photos only) instead of a top-bar
+  icon for upload. Rather than one shared instance in `Scaffold.appBar`,
+  `MainShellView` builds a separate `AppTopBar` per tab (labelled for that
+  tab) and each tab plants its own as the first sliver in its own
+  `CustomScrollView` (`topBarSliver` in `widgets/tabs/tab_state_slivers.dart`,
+  wrapping it in the framework's `SliverFloatingHeader`) instead of passing
+  it to `Scaffold.appBar` - see that file's doc comment for why (Material's
+  native "floating" app bar behavior, tied to that tab's own
+  `ScrollController`: scrolls away as the list scrolls down and reappears
+  the moment the drag reverses, not only once scrolled back to the top).
+  `topBar` is null (no top bar rendered) on desktop and while picking,
+  matching `Scaffold.appBar`'s old `pickRequest == null` guard - see
+  `buildAppTabView`'s doc comment. It sits above each tab's own pinned
+  in-content header (the sort/filter controls row, or Files/Photos'
+  selection bar - see below); the two float/scroll independently - each
+  tab also wraps its whole `CustomScrollView` in `SafeArea(top: true,
+  bottom: false, ...)` so that pinned header stays clear of the status bar
+  once the floating top bar above it fully collapses (see
+  `topBarSliver`'s own doc comment for why that reservation can't live
+  inside the top bar itself). `BottomNavBar` (`widgets/bottom_nav_bar.dart`)
+  adapts the pinned `AppTab`s onto `NooBottomBar`. `AppDrawer`
+  (`widgets/app_drawer.dart`) builds a `NooDrawer`: account block, storage
+  meter, a "More" list of the hidden tabs, Settings, and an "Edit tabs"
+  link (opens Settings - there's no in-page anchor to scroll to its Tabs
+  section yet). `SettingsController.navMenuStyle` (Settings → Appearance →
+  "Navigation menu") offers an alternative to the hamburger/drawer pair:
+  the avatar button opens `showAvatarMenu` (`widgets/avatar_menu.dart`)
+  instead, a dropdown holding the same hidden-tabs + Settings content -
+  see `styling.md`'s Gotchas for the wiring.
+- **Desktop:** a `NooSidebar` (account card, pinned tabs, divider,
+  remaining tabs, storage meter, Settings) sits beside a `NooToolbar`
+  (tab title, search, an "Upload" action on Files/Photos) over the same
+  `IndexedStack`, both built inline in `main.dart` rather than as separate
+  widgets.
+
+Both layouts share one detail: tapping a hidden ("More") tab calls
+`SettingsController.requestTab` - the same one-shot request
+`SearchView`/`FavoritesView`/`ShareUploadView` already use to jump the
+shell to a tab from outside it - instead of pushing that tab as its own
+screen. `MainShellView` then shows it as the active tab (still just an
+entry in the `IndexedStack`) with no bottom-bar/sidebar destination
+highlighted, since it isn't one of the pinned five, until the user taps a
+pinned or another "More" tab. `widgets/shell/shell_common.dart` holds the
+pieces both layouts share: account/storage formatting, `openSettings`/
+`openSearch`, `showAccountSwitcher` (the saved-accounts list behind the
+drawer's chevron and the sidebar's account card - a sheet on mobile, a
+dialog on desktop), `ShellAvatarButton` and `ShellSearchLauncher`.
+
+All eight tabs used to share
+[`SyncedHeaderScaffold`](../../lib/widgets/synced_header_scaffold.dart) - a
 `CustomScrollView` with a pull-down "sync status" header (Google
 Photos-style) and a classic Material refresh spinner shown during a
-pull-triggered sync. `ShareUploadView` mirrors the Files tab's own
-controls-row/breadcrumbs sticky header almost exactly, so arriving via
-another app's "Share to..." sheet still lands on the same top chrome
-instead of a plain `AppBar` - its `actions` are `[ProfileAvatarButton()]`
-only (no `MoreTabsButton`: there's nowhere useful for it to go mid-upload,
-since jumping to another tab would abandon the destination picker);
-backing out is the system back gesture/button, not a bespoke close icon in
-the app bar. Its bottom action - "Upload to
-{folder}" - and the uploading-file-name summary above it (single line,
-auto-scrolling via `MarqueeTitle` if it doesn't fit) live together in one
-rounded-top, elevated `Material` bar as `bottomNavigationBar`, reading as a
-sheet peeking up from the bottom edge rather than a plain flat bar.
+pull-triggered sync. Now that every tab is rebuilt on Noo, each renders its
+own content directly in a plain `RefreshIndicator` + `CustomScrollView`
+instead (`ColoredBox(colors.bg)` background, no shared header widget);
+device-sync status shows per-row (`NooFileRow`/`NooFileTableRow`'s
+`NooStatusIcon`s) or in the Offline tab's `NooSummaryCard`, not a shared
+pinned chip. `SyncedHeaderScaffold` is now unused - the last two screens on
+it, `ShareUploadView` (the share-to-upload destination picker, pushed
+rather than a tab - see below) and `MoveCopyDestinationPicker`, are
+rebuilt too: both are a `Scaffold` with a `NooTopBar`+`NooTopBarBack`
+(mobile) / `NooToolbar` (desktop) top bar, a noo-styled
+[`Breadcrumbs`](../../lib/widgets/breadcrumbs.dart) row + folder list
+(`NooFileRow` mobile, `NooFileTableRow` desktop - both pickers only ever
+browse *folders*, so the old dimmed-but-visible file rows are gone; a
+`RefreshIndicator`+`CustomScrollView`) for a body, and a `colors.surface`
+bottom bar with a top `line` (no more rounded-top elevated `Material`
+sheet) holding the primary CTA. `ShareUploadView` is pushed from outside
+`MainShellView` (a cold share-intent launch, or Files' "+" → "Upload
+file"), so it builds its own top bar rather than relying on the shell's -
+its `actions` are `[ShellAvatarButton()]` only (no `MoreTabsButton`:
+there's nowhere useful for it to go mid-upload, since jumping to another
+tab would abandon the destination picker); `ShellAvatarButton` is the same
+tap-to-Settings/swipe-to-cycle-accounts widget the shell itself uses, and a
+straight replacement for the old `ProfileAvatarButton` (now unused
+anywhere, since this was its last call site). Its bottom bar holds the
+uploading-file-name summary (single line, auto-scrolling via
+`MarqueeTitle` if it doesn't fit) above the "Upload to {folder}" CTA.
 [`MarqueeTitle`](../../lib/widgets/marquee_title.dart) (`package:marquee`) is
 shared with `FileViewerScreen`'s title - falls back to a plain ellipsized
 `Text` when the content already fits, so short text never marquees.
@@ -259,16 +380,32 @@ no prior browsing session to preserve. The Move/Copy picker is pushed
 *while the user is actively browsing a specific Files-tab folder*, so
 reusing the shared state would strand that folder's `pathStack` under it;
 its local state means popping back always lands the user exactly where
-they were, untouched.
-`SearchView`, `AccountView` (Settings), the file-details sheet, and the
-share sheet are pushed on top via
-`Navigator`/`showModalBottomSheet`/`showGradualBottomSheet` rather than
-being tabs. `ProfileAvatarButton` (top-right on every tab) opens Settings on
-tap and cycles between saved accounts on a vertical swipe.
+they were, untouched. Unlike `ShareUploadView`, it keeps `MoreTabsButton`
+in its top bar: that button pushes a hidden tab as its own stacked screen
+rather than jumping the shell there, so it doesn't abandon this picker the
+way jumping tabs would. Its bottom bar shows a "Moving/Copying N item(s)"
+summary line (replaced by a danger-colored warning when the current folder
+is an invalid destination) above a "Move here"/"Copy here" CTA - the
+per-item conflict follow-up, if any, is
+[`MoveCopyConflictSheet`](../../lib/widgets/move_copy_conflict_sheet.dart).
+`SearchView`, `AccountView` (Settings), the file-details sheet
+(`DetailsSheet`), and the share sheet (`ShareSheet`) are pushed on top via
+`Navigator`/`showNooSheet`/`showNooDialog` rather than being tabs (the two
+per-item sheets pick between the mobile sheet and the desktop dialog via
+`NooLayout.isDesktop`, same as every other overlay in the app;
+`showGradualBottomSheet`, the custom drag-to-resize sheet they used before,
+has no remaining callers). On mobile, `ShellAvatarButton`
+(`widgets/shell/shell_common.dart`,
+shown in `AppTopBar`'s trailing actions on every tab, and reused directly by
+`ShareUploadView`) opens Settings on tap and cycles between saved accounts
+on a vertical swipe. Desktop has no avatar in the
+toolbar; `NooSidebarAccount`'s account card opens the full switcher instead
+(`showAccountSwitcher`, the same one behind the mobile drawer's chevron).
 
-Files and Photos (the two tabs with multi-select) pass their selection
-toolbar into `SyncedHeaderScaffold`'s `selectionBar` param rather than
-rendering it as a second sliver app bar inside their own content: while
-non-null, it fully takes over the pinned top bar in place of the
-sync-status chip/`actions`/pull-to-reveal quota panel, so selecting reads
-as replacing the whole top chrome rather than adding a strip beneath it.
+Files and Photos (the two tabs with multi-select) render their selection
+bar as a `pinned: true` sliver at the top of their own `CustomScrollView`,
+swapped in for the controls row/type-chips row while `_isSelecting` -
+selecting reads as replacing that row in place, not adding a strip
+beneath it. (An earlier version of this routed the selection bar through
+`SyncedHeaderScaffold`'s `selectionBar` param; that's gone along with the
+scaffold itself in these two tabs.)

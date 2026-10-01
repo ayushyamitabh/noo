@@ -44,6 +44,19 @@ DateTime? _parseDavDate(String? raw) {
   }
 }
 
+/// Nextcloud's WebDAV server has no real per-file creation-time tracking
+/// for most setups, so its `creationdate` property routinely comes back as
+/// a placeholder Unix-epoch date ("Thu, 01 Jan 1970 00:00:00 GMT") instead
+/// of being omitted - [_parseDavDate] parses that "successfully" into a
+/// real (if bogus) `DateTime`, so every item's created date read January
+/// 1970. Treat it as absent instead, the same as a missing/unparseable
+/// value: `NextcloudItem`'s constructor then falls back to `lastModified`.
+DateTime? _parseDavCreationDate(String? raw) {
+  final parsed = _parseDavDate(raw);
+  if (parsed != null && parsed.millisecondsSinceEpoch <= 0) return null;
+  return parsed;
+}
+
 /// The OCS Activity API reports each event's time as an ISO 8601 string in
 /// a `datetime` field (e.g. "2025-09-15T12:34:56+00:00") - there is no
 /// numeric `timestamp` field despite that being a very easy name to guess.
@@ -356,7 +369,7 @@ class NextcloudService {
 
       final size = int.tryParse(sizeStr ?? '0') ?? 0;
       final lastMod = _parseDavDate(lastModStr) ?? DateTime.now();
-      final created = _parseDavDate(createdStr);
+      final created = _parseDavCreationDate(createdStr);
       final itemType = NextcloudItem.deduceType(name, isCollection, mimeType);
       final validId = (fileId != null && fileId.isNotEmpty) ? fileId : name;
 
@@ -671,7 +684,7 @@ class NextcloudService {
 
       final size = int.tryParse(sizeStr ?? '0') ?? 0;
       final lastMod = _parseDavDate(lastModStr) ?? DateTime.now();
-      final created = _parseDavDate(createdStr);
+      final created = _parseDavCreationDate(createdStr);
       final itemType = NextcloudItem.deduceType(name, false, mimeType);
       final validId = (fileId != null && fileId.isNotEmpty) ? fileId : name;
 
@@ -835,7 +848,7 @@ class NextcloudService {
 
       final size = int.tryParse(sizeStr ?? '0') ?? 0;
       final lastMod = _parseDavDate(lastModStr) ?? DateTime.now();
-      final created = _parseDavDate(createdStr);
+      final created = _parseDavCreationDate(createdStr);
       final itemType = NextcloudItem.deduceType(name, isCollection, mimeType);
       final validId = (fileId != null && fileId.isNotEmpty) ? fileId : name;
 
@@ -1000,7 +1013,7 @@ class NextcloudService {
 
       final size = int.tryParse(sizeStr ?? '0') ?? 0;
       final lastMod = _parseDavDate(lastModStr) ?? DateTime.now();
-      final created = _parseDavDate(createdStr);
+      final created = _parseDavCreationDate(createdStr);
       final itemType = NextcloudItem.deduceType(name, false, mimeType);
       final validId = (fileId != null && fileId.isNotEmpty) ? fileId : name;
 
@@ -1458,28 +1471,17 @@ class NextcloudService {
     final rawList = data['ocs']?['data'];
     if (rawList is! List) return [];
 
-    return rawList.map<NextcloudShare>((raw) {
-      final path = (raw['path'] ?? '/').toString();
-      final segments = path.split('/').where((s) => s.isNotEmpty).toList();
-      final name = segments.isNotEmpty ? segments.last : path;
-      final isFolder = (raw['item_type'] ?? '').toString() == 'folder';
-      final mimeType = raw['mimetype'] as String?;
-
-      return NextcloudShare(
-        id: (raw['id'] ?? '').toString(),
-        path: path,
-        name: name,
-        itemType: NextcloudItem.deduceType(name, isFolder, mimeType),
-        shareType: _mapShareType((raw['share_type'] as num?)?.toInt() ?? -1),
-        ownerDisplayName: (raw['displayname_owner'] ?? raw['uid_owner'] ?? '')
-            .toString(),
-        sharedWithDisplayName: raw['share_with_displayname'] as String?,
-        sharedAt: DateTime.fromMillisecondsSinceEpoch(
-          ((raw['stime'] as num?)?.toInt() ?? 0) * 1000,
-        ),
-        sharedWithMe: sharedWithMe,
-      );
-    }).toList();
+    // Shares out to `_shareFromJson` (the same parser `fetchSharesForPath`/
+    // `fetchInheritedShares` use) rather than its own duplicated, thinner
+    // inline parsing - that copy never set `url`/`token`/`permissions`/
+    // `expireDate` at all, so a public-link share always came back with
+    // `url: null` here and the Shares tab's own "Copy link" action could
+    // never show up for it.
+    return rawList
+        .map<NextcloudShare>(
+          (raw) => _shareFromJson(raw, sharedWithMe: sharedWithMe),
+        )
+        .toList();
   }
 
   /// Creates a public link share for [path] and returns its share URL.

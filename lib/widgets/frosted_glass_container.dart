@@ -1,9 +1,18 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../theme/design_tokens.dart';
 
-/// The frosted-glass pill background shared by all floating chrome in the
-/// app (bottom nav bar, media viewer action bar): blurred backdrop, a
-/// translucent tonal fill, a faint outline, and a soft drop shadow.
+/// The blurred/translucent chrome for the media viewer's overlay bars
+/// (`file_viewer_screen.dart`'s top bar, `MediaActionBar`, the video
+/// transport row) - the one deliberate exception to the design system's
+/// flat, no-shadow product UI (DESIGN_SYSTEM.md 1.4), since this chrome
+/// floats over photo/video content rather than over the app's own
+/// surfaces. No shadow, no outline: [color] defaults to the app's own
+/// `surface` token (so this panel reads as light or dark to match the
+/// active theme, like the rest of the media viewer, instead of a fixed
+/// dark tone regardless of theme) at a higher-than-usual [opacity], since
+/// a light tint needs denser coverage than a near-black one did to stay
+/// legible over arbitrary photo/video brightness underneath.
 class FrostedGlassContainer extends StatelessWidget {
   final Widget child;
   final double borderRadius;
@@ -17,39 +26,31 @@ class FrostedGlassContainer extends StatelessWidget {
   /// adjustable.
   final double opacity;
 
+  /// The tint under the blur. Defaults to [NooColors.surface] (resolved at
+  /// build time, so it always matches the active theme) - pass an explicit
+  /// color only to override that, e.g. for a fixed-color panel elsewhere.
+  final Color? color;
+
   const FrostedGlassContainer({
     super.key,
     required this.child,
-    this.borderRadius = 32,
-    this.blurSigma = 28,
-    this.opacity = 0.55,
+    this.borderRadius = 0,
+    this.blurSigma = 20,
+    this.opacity = 0.8,
+    this.color,
   });
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
+    final tint = color ?? context.nooColors.surface;
     return ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
         child: Container(
           decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerHighest.withValues(
-              alpha: opacity,
-            ),
+            color: tint.withValues(alpha: opacity),
             borderRadius: BorderRadius.circular(borderRadius),
-            border: Border.all(
-              color: colorScheme.outlineVariant.withValues(alpha: 0.35),
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.14),
-                blurRadius: 24,
-                offset: const Offset(0, 8),
-              ),
-            ],
           ),
           child: child,
         ),

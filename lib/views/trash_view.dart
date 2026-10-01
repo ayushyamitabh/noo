@@ -1,35 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../models/nextcloud_item.dart';
 import '../providers/trash_controller.dart';
-import '../widgets/more_tabs_button.dart';
-import '../widgets/profile_avatar_button.dart';
-import '../widgets/synced_header_scaffold.dart';
+import '../theme/design_tokens.dart';
+import '../widgets/noo/core/noo_button.dart';
+import '../widgets/noo/files/noo_file_kind.dart';
+import '../widgets/noo/files/noo_file_row.dart';
+import '../widgets/noo/files/noo_file_table.dart';
+import '../widgets/noo/files/noo_file_tile.dart';
+import '../widgets/noo/lists/noo_banner.dart';
+import '../widgets/noo/noo_layout.dart';
+import '../widgets/tabs/tab_location.dart';
+import '../widgets/tabs/tab_state_slivers.dart';
 
-IconData _trashItemIcon(NextcloudItemType type) {
-  switch (type) {
-    case NextcloudItemType.folder:
-      return Icons.folder_rounded;
-    case NextcloudItemType.image:
-      return Icons.image_rounded;
-    case NextcloudItemType.video:
-      return Icons.movie_rounded;
-    case NextcloudItemType.audio:
-      return Icons.audiotrack_rounded;
-    case NextcloudItemType.document:
-      return Icons.description_rounded;
-    case NextcloudItemType.archive:
-      return Icons.folder_zip_rounded;
-    case NextcloudItemType.file:
-      return Icons.insert_drive_file_rounded;
-  }
-}
-
+/// The Trash tab: a retention banner (`NooBanner`, with "Empty trash" as
+/// its danger action) then the trashed-items list, per `DESIGN_SYSTEM.md`
+/// §4. There's no dedicated "empty trash" endpoint anywhere in
+/// [TrashController]/`NextcloudService` - [_emptyTrash] composes it from
+/// the existing per-item [TrashController.deleteForever], the same way
+/// `FavoritesView._confirmDeleteSelected` builds its bulk delete from a
+/// per-item call.
 class TrashView extends StatefulWidget {
   final ScrollController scrollController;
 
-  const TrashView({super.key, required this.scrollController});
+  /// This tab's own shell top bar, planted as its first sliver - see
+  /// `buildAppTabView`'s doc comment. Null on desktop and while picking.
+  final PreferredSizeWidget? topBar;
+
+  const TrashView({super.key, required this.scrollController, this.topBar});
 
   @override
   State<TrashView> createState() => _TrashViewState();
@@ -40,8 +40,7 @@ class _TrashViewState extends State<TrashView> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final colors = context.nooColors;
     final trashController = context.watch<TrashController>();
 
     if (!_requested) {
@@ -52,175 +51,188 @@ class _TrashViewState extends State<TrashView> {
     }
 
     final trash = trashController.items;
+    final isDesktop = NooLayout.isDesktop(context);
 
     final List<Widget> contentSlivers = [
-      const SliverToBoxAdapter(child: SizedBox(height: 16)),
-
-      if (trashController.isLoading && trash.isEmpty)
-        const SliverFillRemaining(
-          hasScrollBody: false,
-          child: Center(child: CircularProgressIndicator()),
-        )
-      else if (trashController.errorMessage != null)
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.error_outline_rounded,
-                    size: 64,
-                    color: colorScheme.error,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Could not load trash',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      color: colorScheme.error,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    trashController.errorMessage!,
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  FilledButton.icon(
-                    onPressed: trashController.fetchAll,
-                    icon: const Icon(Icons.refresh_rounded),
-                    label: const Text('Retry'),
-                  ),
-                ],
-              ),
+      if (widget.topBar != null) topBarSliver(widget.topBar!),
+      SliverPadding(
+        padding: EdgeInsets.fromLTRB(
+          NooLayout.gutter(context),
+          NooSpace.md,
+          NooLayout.gutter(context),
+          0,
+        ),
+        sliver: SliverToBoxAdapter(
+          child: NooBanner(
+            actionLabel: trash.isEmpty ? null : 'Empty trash',
+            onAction: trash.isEmpty
+                ? null
+                : () => _confirmEmptyTrash(context, trash),
+            child: const Text(
+              'Deleted items are kept for 30 days, then removed automatically.',
             ),
-          ),
-        )
-      else if (trash.isEmpty)
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.delete_outline_rounded,
-                  size: 64,
-                  color: colorScheme.outlineVariant,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Trash is empty',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        )
-      else
-        SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          sliver: SliverList(
-            delegate: SliverChildBuilderDelegate((context, index) {
-              final item = trash[index];
-              return _buildTrashTile(context, item);
-            }, childCount: trash.length),
           ),
         ),
-
-      const SliverToBoxAdapter(child: SizedBox(height: 100)),
-      const SliverFillRemaining(hasScrollBody: false, child: SizedBox()),
+      ),
+      const SliverToBoxAdapter(child: SizedBox(height: NooSpace.md)),
+      if (trashController.isLoading && trash.isEmpty)
+        tabLoadingSliver
+      else if (trashController.errorMessage != null)
+        tabErrorSliver(
+          context,
+          title: 'Could not load trash',
+          message: trashController.errorMessage!,
+          onRetry: trashController.fetchAll,
+        )
+      else if (trash.isEmpty)
+        tabEmptySliver(
+          context,
+          icon: LucideIcons.trash2,
+          message: 'Trash is empty',
+        )
+      else if (isDesktop)
+        _buildDesktopTable(context, trash)
+      else
+        _buildMobileList(context, trash),
+      ...tabBottomInsetSlivers(context),
     ];
 
-    return SyncedHeaderScaffold(
-      scrollController: widget.scrollController,
-      actions: const [MoreTabsButton(), ProfileAvatarButton()],
-      onRefresh: trashController.fetchAll,
-      contentSlivers: contentSlivers,
-    );
-  }
-
-  Widget _buildTrashTile(BuildContext context, NextcloudItem item) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final iconColor = colorScheme.outline;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: iconColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  _trashItemIcon(item.type),
-                  color: iconColor,
-                  size: 22,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      item.deletedAt != null
-                          ? 'Deleted ${DateFormat.yMMMd().format(item.deletedAt!)}'
-                          : 'Deleted',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.restore_rounded),
-                tooltip: 'Restore',
-                color: colorScheme.primary,
-                onPressed: () => _restore(context, item),
-              ),
-              IconButton(
-                icon: Icon(
-                  Icons.delete_forever_rounded,
-                  color: colorScheme.error,
-                ),
-                tooltip: 'Delete forever',
-                onPressed: () => _confirmDeleteForever(context, item),
-              ),
-            ],
+    return ColoredBox(
+      color: colors.bg,
+      child: RefreshIndicator(
+        color: colors.accent,
+        backgroundColor: colors.surface,
+        onRefresh: trashController.fetchAll,
+        // See files_view.dart's identical fix - without this, the sticky
+        // controls row rides up under the status bar once the floating top
+        // bar above it fully collapses.
+        child: SafeArea(
+          top: true,
+          bottom: false,
+          child: CustomScrollView(
+            controller: widget.scrollController,
+            // See files_view.dart's identical fix - without this, pull-to-
+            // refresh can't be triggered on an empty or single-item list.
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: contentSlivers,
           ),
         ),
       ),
     );
   }
+
+  // A lazily-built `SliverList`, not `NooGroupedList` (its own `Column`
+  // isn't lazy - see files_view.dart's `_buildMobileRow` doc comment for
+  // the same reasoning): Trash can hold hundreds of items, and building
+  // every row eagerly up front is what made this tab laggy. Each row still
+  // reads as one continuous radius-20 card via per-row corner rounding +
+  // a 1px `line` divider, matching `NooGroupedList`'s look.
+  Widget _buildMobileList(BuildContext context, List<NextcloudItem> trash) {
+    final colors = context.nooColors;
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: NooSpace.sm),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate((context, index) {
+          final item = trash[index];
+          // The overflow menu's only action here is "Delete forever" - a
+          // bare ellipsis obscures that behind an extra tap to discover it,
+          // so this row shows the delete icon directly instead of going
+          // through `NooFileRow.onMore`.
+          final row = NooFileRow(
+            kind: NooFileKind.from(
+              name: item.name,
+              mimeType: item.mimeType,
+              isDirectory: item.isFolder,
+            ),
+            name: item.name,
+            meta: _meta(item),
+            iosStyle: NooLayout.iosStyle(context),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Semantics(
+                  button: true,
+                  label: 'Restore',
+                  child: InkResponse(
+                    onTap: () => _restore(context, item),
+                    radius: 20,
+                    child: const Icon(LucideIcons.rotateCcw),
+                  ),
+                ),
+                const SizedBox(width: NooSpace.xs),
+                Semantics(
+                  button: true,
+                  label: 'Delete forever',
+                  child: InkResponse(
+                    onTap: () => _confirmDeleteForever(context, item),
+                    radius: 20,
+                    child: Icon(LucideIcons.trash2, color: colors.danger),
+                  ),
+                ),
+              ],
+            ),
+          );
+          final isFirst = index == 0;
+          final isLast = index == trash.length - 1;
+          return Column(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.vertical(
+                  top: isFirst
+                      ? const Radius.circular(NooRadii.card)
+                      : Radius.zero,
+                  bottom: isLast
+                      ? const Radius.circular(NooRadii.card)
+                      : Radius.zero,
+                ),
+                child: row,
+              ),
+              if (!isLast) Container(height: 1, color: colors.line),
+            ],
+          );
+        }, childCount: trash.length),
+      ),
+    );
+  }
+
+  Widget _buildDesktopTable(BuildContext context, List<NextcloudItem> trash) {
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: NooSpace.xl,
+        vertical: NooSpace.xs,
+      ),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate((context, index) {
+          if (index == 0) {
+            return const NooFileTableHeader(
+              col2Label: 'Deleted',
+              col3Label: 'Original location',
+            );
+          }
+          final item = trash[index - 1];
+          return _TrashDesktopRow(
+            kind: NooFileKind.from(
+              name: item.name,
+              mimeType: item.mimeType,
+              isDirectory: item.isFolder,
+            ),
+            name: item.name,
+            col2: _deletedLabel(item),
+            col3: item.originalLocation ?? 'Unknown location',
+            onRestore: () => _restore(context, item),
+            onDelete: () => _confirmDeleteForever(context, item),
+          );
+        }, childCount: trash.length + 1),
+      ),
+    );
+  }
+
+  String _meta(NextcloudItem item) =>
+      'Deleted ${_deletedLabel(item)} · ${tabLocationLabel(item.originalLocation ?? item.path, item.name)}';
+
+  String _deletedLabel(NextcloudItem item) => item.deletedAt != null
+      ? DateFormat.yMMMd().format(item.deletedAt!)
+      : 'recently';
 
   Future<void> _restore(BuildContext context, NextcloudItem item) async {
     final messenger = ScaffoldMessenger.of(context);
@@ -243,7 +255,7 @@ class _TrashViewState extends State<TrashView> {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Delete Forever'),
+          title: const Text('Delete forever'),
           content: Text(
             'Permanently delete "${item.name}"? This cannot be undone.',
           ),
@@ -257,7 +269,7 @@ class _TrashViewState extends State<TrashView> {
                 backgroundColor: Theme.of(dialogContext).colorScheme.error,
               ),
               onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Delete Forever'),
+              child: const Text('Delete forever'),
             ),
           ],
         );
@@ -273,6 +285,161 @@ class _TrashViewState extends State<TrashView> {
           success ? 'Deleted ${item.name}' : 'Failed to delete ${item.name}',
         ),
         behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _confirmEmptyTrash(
+    BuildContext context,
+    List<NextcloudItem> trash,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Empty trash'),
+          content: Text(
+            'Permanently delete all ${trash.length} item(s) in trash? This cannot be undone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(dialogContext).colorScheme.error,
+              ),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Empty trash'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    final controller = context.read<TrashController>();
+    final messenger = ScaffoldMessenger.of(context);
+    var succeeded = 0;
+    for (final item in trash) {
+      if (await controller.deleteForever(item)) succeeded++;
+    }
+    if (!context.mounted) return;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Deleted $succeeded of ${trash.length} item(s)'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+}
+
+/// Desktop trash row: like `NooFileTableRow`, but its 120px last column
+/// holds a tonal "Restore" button plus a danger-tonal "Delete" button
+/// (permanent delete) instead of status icons - `NooFileTableRow` has no
+/// slot for screen-specific actions there. A labelled pill, not a bare
+/// overflow icon: it's the row's only destructive action, not a menu of
+/// several, and desktop already prefers labelled buttons to bare icons
+/// (see `NooSelectionBar`'s own desktop actions). Column widths
+/// (180/160/120) are matched by hand to `NooFileTableHeader`'s (private in
+/// `noo_file_table.dart`) so this still lines up under it; promoting an
+/// optional `actions` slot onto `NooFileTableRow` would let this fold back
+/// into the shared component.
+class _TrashDesktopRow extends StatelessWidget {
+  final NooFileKind kind;
+  final String name;
+  final String col2;
+  final String col3;
+  final VoidCallback onRestore;
+  final VoidCallback onDelete;
+
+  const _TrashDesktopRow({
+    required this.kind,
+    required this.name,
+    required this.col2,
+    required this.col3,
+    required this.onRestore,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.nooColors;
+    final metaStyle = NooText.meta.copyWith(color: colors.fg3);
+
+    return SizedBox(
+      height: NooSizes.rowDesktop,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: NooSpace.sm),
+        child: Row(
+          children: [
+            Expanded(
+              child: Row(
+                children: [
+                  NooFileTile(kind: kind, size: NooFileTileSize.desktop),
+                  const SizedBox(width: NooSpace.sm),
+                  Expanded(
+                    child: Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: NooText.body.copyWith(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: colors.fg1,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: NooSpace.md),
+                ],
+              ),
+            ),
+            SizedBox(
+              width: 180,
+              child: Text(
+                col2,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: metaStyle,
+              ),
+            ),
+            SizedBox(
+              width: 160,
+              child: Text(
+                col3,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: metaStyle,
+              ),
+            ),
+            SizedBox(
+              width: 120,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    NooButton(
+                      variant: NooButtonVariant.tonal,
+                      size: NooButtonSize.xs,
+                      onTap: onRestore,
+                      child: const Text('Restore'),
+                    ),
+                    const SizedBox(width: 4),
+                    NooButton(
+                      variant: NooButtonVariant.danger,
+                      size: NooButtonSize.xs,
+                      onTap: onDelete,
+                      child: const Text('Delete'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

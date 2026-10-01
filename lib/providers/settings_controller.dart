@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/app_tab.dart';
+import '../models/selection_action.dart';
 import '../theme/app_theme.dart';
+import '../widgets/noo/nav/noo_nav_style.dart';
 
 /// What swiping a Files list-view item left/right does, user-configurable
 /// in Settings.
@@ -23,13 +25,15 @@ class SettingsController extends ChangeNotifier {
   static const _prefThemeMode = 'ui_theme_mode';
   static const _prefUseDynamicColor = 'ui_use_dynamic_color';
   static const _prefSeedColor = 'ui_seed_color';
-  static const _prefBottomBarOpacity = 'ui_bottom_bar_opacity';
-  static const _prefBottomBarBlur = 'ui_bottom_bar_blur';
   static const _prefTabOrder = 'ui_tab_order';
+  static const _prefSelectionActionOrder = 'ui_selection_action_order';
   static const _prefHiddenTabs = 'ui_hidden_tabs';
   static const _prefDefaultTab = 'ui_default_tab';
   static const _prefSwipeLeftAction = 'ui_swipe_left_action';
   static const _prefSwipeRightAction = 'ui_swipe_right_action';
+  static const _prefBottomBarStyle = 'ui_bottom_bar_style';
+  static const _prefNavMenuStyle = 'ui_nav_menu_style';
+  static const _prefSearchInBottomBar = 'ui_search_in_bottom_bar';
   static const _prefAmoledDark = 'ui_amoled_dark';
   static const _prefMediaProgressBarStyle = 'ui_media_progress_bar_style';
   static const _prefTapTabToScrollTop = 'ui_tap_tab_to_scroll_top';
@@ -37,19 +41,23 @@ class SettingsController extends ChangeNotifier {
   final Future<SharedPreferences> _prefsFuture =
       SharedPreferences.getInstance();
 
-  Color _seedColor = AppTheme.defaultNextcloudBlue;
+  Color _seedColor = AppTheme.defaultAccent;
   ThemeMode _themeMode = ThemeMode.system;
+  NooBottomBarStyle _bottomBarStyle = NooBottomBarStyle.attached;
+  NooNavMenuStyle _navMenuStyle = NooNavMenuStyle.drawer;
+  bool _searchInBottomBar = false;
   bool _useDynamicColor = true;
   bool _amoledDark = false;
   MediaProgressBarStyle _mediaProgressBarStyle = MediaProgressBarStyle.wavy;
 
-  double _bottomBarOpacity = 0.55;
-  double _bottomBarBlur = 28;
   bool _tapTabToScrollTop = true;
 
   List<AppTab> _tabOrder = AppTab.values.toList();
   Set<AppTab> _hiddenTabs = {};
   AppTab _defaultTab = AppTab.files;
+
+  List<SelectionActionKind> _selectionActionOrder = SelectionActionKind.values
+      .toList();
 
   SwipeAction _swipeLeftAction = SwipeAction.delete;
   SwipeAction _swipeRightAction = SwipeAction.favorite;
@@ -79,18 +87,33 @@ class SettingsController extends ChangeNotifier {
 
   Color get seedColor => _seedColor;
   ThemeMode get themeMode => _themeMode;
+  NooBottomBarStyle get bottomBarStyle => _bottomBarStyle;
+  NooNavMenuStyle get navMenuStyle => _navMenuStyle;
+  bool get searchInBottomBar => _searchInBottomBar;
   bool get useDynamicColor => _useDynamicColor;
   bool get amoledDark => _amoledDark;
   MediaProgressBarStyle get mediaProgressBarStyle => _mediaProgressBarStyle;
-  double get bottomBarOpacity => _bottomBarOpacity;
-  double get bottomBarBlur => _bottomBarBlur;
   bool get tapTabToScrollTop => _tapTabToScrollTop;
+
+  /// The cap a screen should actually enforce for the *regular*, user-
+  /// reorderable tabs - one below [defaultMaxVisibleTabs] while
+  /// [searchInBottomBar] is on, since Search then takes that freed-up slot
+  /// itself (the row's last tab when attached, its own satellite circle
+  /// when floating - see `NooBottomBar`) rather than counting against it.
+  int get maxVisibleTabs =>
+      defaultMaxVisibleTabs - (_searchInBottomBar ? 1 : 0);
 
   /// Every tab in the user's configured order, including hidden ones — used
   /// by the reorder/visibility settings UI.
   List<AppTab> get tabOrder => _tabOrder;
   Set<AppTab> get hiddenTabs => _hiddenTabs;
   AppTab get defaultTab => _defaultTab;
+
+  /// The priority order bulk actions (favorite, share, download, ...) show
+  /// in on the multi-select action bar - see [orderSelectionActions]. Every
+  /// [SelectionActionKind] is always present here (nothing is hidden, only
+  /// reordered), so [NooSelectionBar]'s fixed inline slots are always full.
+  List<SelectionActionKind> get selectionActionOrder => _selectionActionOrder;
 
   /// The tabs the bottom nav bar should actually show, in order.
   List<AppTab> get visibleTabs =>
@@ -110,6 +133,22 @@ class SettingsController extends ChangeNotifier {
           orElse: () => ThemeMode.system,
         );
       }
+      final bottomBarStyleName = prefs.getString(_prefBottomBarStyle);
+      if (bottomBarStyleName != null) {
+        _bottomBarStyle = NooBottomBarStyle.values.firstWhere(
+          (s) => s.name == bottomBarStyleName,
+          orElse: () => _bottomBarStyle,
+        );
+      }
+      final navMenuStyleName = prefs.getString(_prefNavMenuStyle);
+      if (navMenuStyleName != null) {
+        _navMenuStyle = NooNavMenuStyle.values.firstWhere(
+          (s) => s.name == navMenuStyleName,
+          orElse: () => _navMenuStyle,
+        );
+      }
+      _searchInBottomBar =
+          prefs.getBool(_prefSearchInBottomBar) ?? _searchInBottomBar;
       _useDynamicColor =
           prefs.getBool(_prefUseDynamicColor) ?? _useDynamicColor;
       _amoledDark = prefs.getBool(_prefAmoledDark) ?? _amoledDark;
@@ -122,9 +161,6 @@ class SettingsController extends ChangeNotifier {
       }
       final seedColorValue = prefs.getInt(_prefSeedColor);
       if (seedColorValue != null) _seedColor = Color(seedColorValue);
-      _bottomBarOpacity =
-          prefs.getDouble(_prefBottomBarOpacity) ?? _bottomBarOpacity;
-      _bottomBarBlur = prefs.getDouble(_prefBottomBarBlur) ?? _bottomBarBlur;
       _tapTabToScrollTop =
           prefs.getBool(_prefTapTabToScrollTop) ?? _tapTabToScrollTop;
 
@@ -141,6 +177,25 @@ class SettingsController extends ChangeNotifier {
           if (!order.contains(tab)) order.add(tab);
         }
         _tabOrder = order;
+      }
+
+      final savedActionOrderNames = prefs.getStringList(
+        _prefSelectionActionOrder,
+      );
+      if (savedActionOrderNames != null) {
+        final order = <SelectionActionKind>[];
+        for (final name in savedActionOrderNames) {
+          final match = SelectionActionKind.values
+              .where((k) => k.name == name)
+              .firstOrNull;
+          if (match != null) order.add(match);
+        }
+        // Forward-compat: a kind added in a later app update won't be in an
+        // older saved order yet, so append anything missing.
+        for (final kind in SelectionActionKind.values) {
+          if (!order.contains(kind)) order.add(kind);
+        }
+        _selectionActionOrder = order;
       }
 
       final savedHiddenNames = prefs.getStringList(_prefHiddenTabs);
@@ -223,18 +278,6 @@ class SettingsController extends ChangeNotifier {
     );
   }
 
-  void setBottomBarOpacity(double value) {
-    _bottomBarOpacity = value;
-    notifyListeners();
-    _prefsFuture.then((p) => p.setDouble(_prefBottomBarOpacity, value));
-  }
-
-  void setBottomBarBlur(double value) {
-    _bottomBarBlur = value;
-    notifyListeners();
-    _prefsFuture.then((p) => p.setDouble(_prefBottomBarBlur, value));
-  }
-
   void setTapTabToScrollTop(bool value) {
     _tapTabToScrollTop = value;
     notifyListeners();
@@ -247,11 +290,48 @@ class SettingsController extends ChangeNotifier {
     _prefsFuture.then((p) => p.setString(_prefThemeMode, mode.name));
   }
 
+  void setBottomBarStyle(NooBottomBarStyle style) {
+    if (_bottomBarStyle == style) return;
+    _bottomBarStyle = style;
+    notifyListeners();
+    _prefsFuture.then((p) => p.setString(_prefBottomBarStyle, style.name));
+  }
+
+  void setNavMenuStyle(NooNavMenuStyle style) {
+    if (_navMenuStyle == style) return;
+    _navMenuStyle = style;
+    notifyListeners();
+    _prefsFuture.then((p) => p.setString(_prefNavMenuStyle, style.name));
+  }
+
+  /// Turning this on lowers [maxVisibleTabs] by one, so re-enforces the cap
+  /// immediately in case the user already has a full 5 regular tabs pinned
+  /// - same cleanup [_enforceMaxVisibleTabs] already does for a fresh
+  /// install/an app update adding a new tab.
+  void setSearchInBottomBar(bool value) {
+    if (_searchInBottomBar == value) return;
+    _searchInBottomBar = value;
+    if (value) _enforceMaxVisibleTabs();
+    notifyListeners();
+    _prefsFuture.then((p) => p.setBool(_prefSearchInBottomBar, value));
+  }
+
   void setTabOrder(List<AppTab> order) {
     _tabOrder = order;
     notifyListeners();
     _prefsFuture.then(
       (p) => p.setStringList(_prefTabOrder, order.map((t) => t.name).toList()),
+    );
+  }
+
+  void setSelectionActionOrder(List<SelectionActionKind> order) {
+    _selectionActionOrder = order;
+    notifyListeners();
+    _prefsFuture.then(
+      (p) => p.setStringList(
+        _prefSelectionActionOrder,
+        order.map((k) => k.name).toList(),
+      ),
     );
   }
 

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../models/app_tab.dart';
 import '../models/nextcloud_item.dart';
@@ -9,24 +8,32 @@ import '../providers/session_controller.dart';
 import '../providers/settings_controller.dart';
 import '../services/share_intent_service.dart';
 import '../services/upload_service.dart';
+import '../theme/design_tokens.dart';
 import '../widgets/breadcrumbs.dart';
-import '../widgets/item_icon.dart';
-import '../widgets/marquee_title.dart';
-import '../widgets/profile_avatar_button.dart';
-import '../widgets/segmented_icon_toggle.dart';
-import '../widgets/sort_menu_button.dart';
-import '../widgets/sticky_header_delegate.dart';
-import '../widgets/synced_header_scaffold.dart';
+import '../widgets/files_controls_row.dart';
+import '../widgets/noo/core/noo_button.dart';
+import '../widgets/noo/files/noo_file_kind.dart';
+import '../widgets/noo/files/noo_file_row.dart';
+import '../widgets/noo/files/noo_file_table.dart';
+import '../widgets/noo/media/noo_grid_card.dart';
+import '../widgets/noo/nav/noo_top_bar.dart';
+import '../widgets/noo/nav/noo_toolbar.dart';
+import '../widgets/noo/noo_layout.dart';
+import '../widgets/shell/shell_common.dart';
+import '../widgets/tabs/tab_state_slivers.dart';
 
 /// Shown when another app shares one or more files to Noo (Android's
 /// "Share to..." sheet). Lets the user browse to a destination folder,
-/// mirroring the Files tab's own controls/filters/listing so this feels
-/// like the same browser rather than a stripped-down picker, then hands the
-/// actual prepare+upload off to [UploadService] - a real Android foreground
+/// reusing `FilesController`'s shared folder-browsing state so this feels
+/// like the same browser Files itself uses, then hands the actual
+/// prepare+upload off to [UploadService] - a real Android foreground
 /// service (see `ShareUploadService.kt`'s doc comment), not something this
 /// screen or even the app needs to stay open for. [files] only ever carry
 /// cheap Uri metadata (see [ShareIntentService]'s doc comment); that
-/// service is the only thing that ever reads their actual bytes.
+/// service is the only thing that ever reads their actual bytes. Pushed
+/// via `Navigator` from outside `MainShellView` (a cold share-intent
+/// launch, or Files' own "+" -> "Upload file"), so - unlike a tab - it
+/// builds its own complete top chrome rather than relying on the shell's.
 class ShareUploadView extends StatefulWidget {
   final List<SharedFileRef> files;
 
@@ -45,7 +52,9 @@ class _ShareUploadViewState extends State<ShareUploadView> {
     // Shared files have no relationship to wherever the user was last
     // browsing, so start the destination picker fresh at the root.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) context.read<FilesController>().navigateToAbsoluteFolder('/');
+      if (mounted) {
+        context.read<FilesController>().navigateToAbsoluteFolder('/');
+      }
     });
   }
 
@@ -86,243 +95,67 @@ class _ShareUploadViewState extends State<ShareUploadView> {
     );
   }
 
-  Widget _buildControlsRow(FilesController files) {
-    return SizedBox(
-      height: 44,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            IconButton(
-              icon: Icon(
-                files.filesSortAscending
-                    ? Icons.arrow_upward_rounded
-                    : Icons.arrow_downward_rounded,
-                size: 20,
-              ),
-              visualDensity: VisualDensity.compact,
-              tooltip: files.filesSortAscending ? 'Ascending' : 'Descending',
-              onPressed: files.toggleFilesSortOrder,
-            ),
-            SizedBox(
-              width: 130,
-              child: SortMenuButton(
-                field: files.filesSortField,
-                onChanged: files.setFilesSortField,
-              ),
-            ),
-            ToggleIconButton(
-              icon: files.showHiddenFiles
-                  ? Icons.visibility_rounded
-                  : Icons.visibility_off_rounded,
-              isSelected: files.showHiddenFiles,
-              onTap: () => files.toggleShowHiddenFiles(),
-              tooltip: 'Show hidden files',
-            ),
-            const SizedBox(width: 4),
-            SegmentedIconGroup(
-              children: [
-                ToggleIconButton(
-                  icon: Symbols.circles_rounded,
-                  isSelected: files.storageScope == StorageScope.cloud,
-                  onTap: () => files.setStorageScope(StorageScope.cloud),
-                  tooltip: 'Cloud storage',
-                ),
-                ToggleIconButton(
-                  icon: Symbols.hard_drive_rounded,
-                  isSelected: files.storageScope == StorageScope.external,
-                  onTap: () => files.setStorageScope(StorageScope.external),
-                  tooltip: 'External storage',
-                ),
-              ],
-            ),
-            const SizedBox(width: 8),
-            SegmentedIconGroup(
-              children: [
-                ToggleIconButton(
-                  icon: Icons.select_all_rounded,
-                  isSelected: files.filesTypeFilter == FilesTypeFilter.all,
-                  onTap: () => files.setFilesTypeFilter(FilesTypeFilter.all),
-                  tooltip: 'Files & folders',
-                ),
-                ToggleIconButton(
-                  icon: Icons.insert_drive_file_outlined,
-                  isSelected:
-                      files.filesTypeFilter == FilesTypeFilter.filesOnly,
-                  onTap: () =>
-                      files.setFilesTypeFilter(FilesTypeFilter.filesOnly),
-                  tooltip: 'Files only',
-                ),
-                ToggleIconButton(
-                  icon: Icons.folder_outlined,
-                  isSelected:
-                      files.filesTypeFilter == FilesTypeFilter.foldersOnly,
-                  onTap: () =>
-                      files.setFilesTypeFilter(FilesTypeFilter.foldersOnly),
-                  tooltip: 'Folders only',
-                ),
-              ],
-            ),
-            const SizedBox(width: 8),
-            SegmentedIconGroup(
-              children: [
-                ToggleIconButton(
-                  icon: Icons.view_list_rounded,
-                  isSelected: !files.isGridView,
-                  onTap: () => files.setGridView(false),
-                  tooltip: 'List view',
-                ),
-                ToggleIconButton(
-                  icon: Icons.grid_view_rounded,
-                  isSelected: files.isGridView,
-                  onTap: () => files.setGridView(true),
-                  tooltip: 'Grid view',
-                ),
-              ],
-            ),
-          ],
+  // Only folders are valid upload destinations, so the listing - unlike
+  // Files' own - never shows plain files at all.
+  Widget _buildRow(
+    BuildContext context,
+    NextcloudItem item,
+    int index,
+    int count,
+  ) {
+    final colors = context.nooColors;
+    final files = context.read<FilesController>();
+    final row = NooFileRow(
+      kind: NooFileKind.folder,
+      name: item.name,
+      meta: 'Folder',
+      iosStyle: NooLayout.iosStyle(context),
+      onTap: () => files.navigateToFolder(item.path),
+    );
+
+    final isFirst = index == 0;
+    final isLast = index == count - 1;
+    return Column(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.vertical(
+            top: isFirst ? const Radius.circular(NooRadii.card) : Radius.zero,
+            bottom: isLast ? const Radius.circular(NooRadii.card) : Radius.zero,
+          ),
+          child: row,
         ),
-      ),
+        if (!isLast) Container(height: 1, color: colors.line),
+      ],
     );
   }
 
-  // Only folders are valid upload destinations - files still show (so the
-  // listing matches what the Files tab itself would show for this folder)
-  // but are visually dimmed and inert rather than hidden outright.
-  Widget _buildListTile(BuildContext context, NextcloudItem item) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+  Widget _buildDesktopRow(BuildContext context, NextcloudItem item) {
     final files = context.read<FilesController>();
-    final session = context.watch<SessionController>();
-    final isFolder = item.isFolder;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Opacity(
-          opacity: isFolder ? 1 : 0.5,
-          child: Material(
-            color: colorScheme.surfaceContainerLow,
-            child: InkWell(
-              onTap: isFolder ? () => files.navigateToFolder(item.path) : null,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                child: Row(
-                  children: [
-                    ItemThumbnail(
-                      item: item,
-                      service: session.service,
-                      size: 44,
-                      borderRadius: 12,
-                      iconSize: 22,
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item.name,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            isFolder
-                                ? 'Folder'
-                                : '${formatBytes(item.size)} • ${DateFormat.yMMMd().format(item.lastModified)}',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (isFolder) const Icon(Icons.chevron_right_rounded),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
+    return NooFileTableRow(
+      kind: NooFileKind.folder,
+      name: item.name,
+      onTap: () => files.navigateToFolder(item.path),
     );
   }
 
   Widget _buildGridCard(BuildContext context, NextcloudItem item) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final colors = context.nooColors;
     final files = context.read<FilesController>();
-    final isFolder = item.isFolder;
-    final iconColor = getIconColor(context, item.type);
-
-    return Opacity(
-      opacity: isFolder ? 1 : 0.5,
-      child: Material(
-        color: colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(20),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: isFolder ? () => files.navigateToFolder(item.path) : null,
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: iconColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    getItemIcon(item.type),
-                    color: iconColor,
-                    size: 24,
-                  ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      isFolder ? 'Folder' : formatBytes(item.size),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return NooGridCard(
+      name: item.name,
+      meta: 'Folder',
+      placeholderColor: colors.accentSoft,
+      icon: LucideIcons.folder,
+      iconColor: colors.accentText,
+      thumbnailHeight: NooLayout.isDesktop(context) ? 118 : 104,
+      onTap: () => files.navigateToFolder(item.path),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final colors = context.nooColors;
+    final desktop = NooLayout.isDesktop(context);
     final files = context.watch<FilesController>();
     final session = context.watch<SessionController>();
     final hasBreadcrumbs = files.pathStack.length > 1;
@@ -330,171 +163,168 @@ class _ShareUploadViewState extends State<ShareUploadView> {
     final currentLabel = currentPath == '/'
         ? 'Home'
         : currentPath.split('/').where((s) => s.isNotEmpty).last;
-    final items = files.items;
+    final folders = files.items.where((item) => item.isFolder).toList();
+    final gutter = NooLayout.gutter(context);
 
-    // Mirrors FilesView's own controls-row + breadcrumbs sticky header
-    // exactly (padding, heights) so this reads as the same browser, just
-    // reached from a share intent instead of the Files tab.
-    final controlsColumn = Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildControlsRow(files),
-          if (hasBreadcrumbs) ...[
-            const SizedBox(height: 10),
-            SizedBox(
-              height: 32,
-              child: Breadcrumbs(
-                pathStack: files.pathStack,
-                onTap: (index) => files.navigateToPathIndex(index),
+    final slivers = <Widget>[
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            gutter,
+            NooSpace.md,
+            gutter,
+            NooSpace.sm,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                height: 44,
+                child: FilesControlsRow(folderPath: currentPath),
               ),
-            ),
-          ],
-        ],
-      ),
-    );
-
-    final contentSlivers = <Widget>[
-      SliverPersistentHeader(
-        pinned: true,
-        delegate: StickyHeaderDelegate(
-          height: hasBreadcrumbs ? 114 : 72,
-          child: controlsColumn,
+              if (hasBreadcrumbs) ...[
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 32,
+                  child: Breadcrumbs(
+                    pathStack: files.pathStack,
+                    onTap: (index) => files.navigateToPathIndex(index),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
       if (files.isLoading)
-        const SliverFillRemaining(
-          hasScrollBody: false,
-          child: Center(child: CircularProgressIndicator()),
-        )
-      else if (items.isEmpty)
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: Center(
-            child: Text(
-              'Folder is empty',
-              style: TextStyle(color: colorScheme.onSurfaceVariant),
-            ),
-          ),
+        tabLoadingSliver
+      else if (folders.isEmpty)
+        tabEmptySliver(
+          context,
+          icon: LucideIcons.folder,
+          message: 'No folders here',
         )
       else if (files.isGridView)
         SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          padding: EdgeInsets.symmetric(horizontal: gutter),
           sliver: SliverGrid(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 1.1,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: desktop ? 5 : 2,
+              childAspectRatio: desktop ? 1.05 : 0.92,
+              crossAxisSpacing: desktop ? 16 : 10,
+              mainAxisSpacing: desktop ? 16 : 10,
             ),
-            delegate: SliverChildBuilderDelegate((context, index) {
-              return _buildGridCard(context, items[index]);
-            }, childCount: items.length),
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => _buildGridCard(context, folders[index]),
+              childCount: folders.length,
+            ),
+          ),
+        )
+      else if (desktop)
+        SliverPadding(
+          padding: EdgeInsets.symmetric(horizontal: gutter),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => _buildDesktopRow(context, folders[index]),
+              childCount: folders.length,
+            ),
           ),
         )
       else
         SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          padding: EdgeInsets.symmetric(horizontal: gutter),
           sliver: SliverList(
-            delegate: SliverChildBuilderDelegate((context, index) {
-              return _buildListTile(context, items[index]);
-            }, childCount: items.length),
+            delegate: SliverChildBuilderDelegate(
+              (context, index) =>
+                  _buildRow(context, folders[index], index, folders.length),
+              childCount: folders.length,
+            ),
           ),
         ),
-      // So the last row isn't hidden behind the bottom "Upload to..." bar.
-      const SliverToBoxAdapter(child: SizedBox(height: 24)),
+      const SliverToBoxAdapter(child: SizedBox(height: NooSpace.xl)),
     ];
 
+    final title = 'Upload to...';
+
     return Scaffold(
-      body: SyncedHeaderScaffold(
-        scrollController: _scrollController,
-        // Same trailing actions as every other tab except "More tabs" -
-        // there's nowhere useful for it to go while mid-upload (jumping to
-        // Trash/Shares/etc. would abandon this destination picker), so the
-        // top chrome is identical to every other tab minus that one entry.
-        // Backing out is still the system back gesture/button, same as any
-        // other pushed screen.
-        actions: const [ProfileAvatarButton()],
-        contentSlivers: contentSlivers,
-      ),
-      // A rounded-top, elevated bar "peeking" up from the bottom edge - the
-      // uploading-file summary (marqueed if it doesn't fit on one line)
-      // sits directly above the destination button, both inside the one
-      // sheet, rather than the summary living up in the scrolling content
-      // far away from the action it describes.
-      bottomNavigationBar: Material(
-        color: colorScheme.surfaceContainerHigh,
-        elevation: 8,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      backgroundColor: colors.bg,
+      appBar: desktop
+          ? NooToolbar(
+              title: title,
+              actions: [
+                NooButton(
+                  variant: NooButtonVariant.secondary,
+                  size: NooButtonSize.toolbar,
+                  onTap: () => Navigator.of(context).maybePop(),
+                  child: const Text('Cancel'),
+                ),
+              ],
+            )
+          : NooTopBar(
+              style: NooLayout.navStyle(context),
+              title: title,
+              leading: const NooTopBarBack(label: 'Cancel'),
+              // Same top-bar access as every tab (avatar -> Settings, swipe
+              // to switch accounts) - nothing else belongs here: jumping to
+              // another tab mid-upload would abandon this destination
+              // picker, so there's no "more tabs" entry.
+              actions: const [ShellAvatarButton()],
+            ),
+      body: SafeArea(
+        top: false,
+        child: RefreshIndicator(
+          color: colors.accent,
+          backgroundColor: colors.surface,
+          onRefresh: files.refreshData,
+          child: CustomScrollView(
+            controller: _scrollController,
+            // See files_view.dart's identical fix - without this, pull-to-
+            // refresh can't be triggered on an empty or single-folder
+            // listing.
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: slivers,
+          ),
         ),
-        clipBehavior: Clip.antiAlias,
+      ),
+      // A flat surface bar with a top line, peeking up from the bottom edge -
+      // a centered item-count meta line sits directly above the destination
+      // button (DESIGN_SYSTEM.md's "Upload / Move / Copy destination
+      // picker" recipe: "a meta line ... above a full-width ... primary
+      // CTA" - matches MoveCopyDestinationPicker's identical bar). A count,
+      // not a filename: this is the one-file case just as much as the
+      // many-files case, and a long filename has no good fixed-width
+      // treatment the way a short count always does.
+      bottomNavigationBar: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.surface,
+          border: Border(top: BorderSide(color: colors.line)),
+        ),
         child: SafeArea(
           top: false,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+            padding: const EdgeInsets.fromLTRB(
+              NooSpace.lg,
+              NooSpace.md,
+              NooSpace.lg,
+              NooSpace.md,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // Same pill/chip look and exact same duller background
-                // color as the filter toggles' shared background
-                // (SegmentedIconGroup's `surfaceContainerHigh`), so it reads
-                // as part of the same visual language rather than a new
-                // accent color. Sized to the text itself (like a real chip)
-                // up to the row's available width - MarqueeTitle needs a
-                // concrete (not just loose) width to know whether/how far
-                // to scroll, so this measures the text once up front rather
-                // than leaving the chip unconstrained.
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final uploadingText = widget.files.length == 1
-                        ? 'Uploading ${widget.files.first.name}'
-                        : 'Uploading ${widget.files.length} files';
-                    final chipTextStyle = theme.textTheme.titleSmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w700,
-                    );
-                    const horizontalPadding = 28.0;
-                    final painter = TextPainter(
-                      text: TextSpan(text: uploadingText, style: chipTextStyle),
-                      maxLines: 1,
-                      textDirection: Directionality.of(context),
-                    )..layout(maxWidth: double.infinity);
-                    final chipWidth = (painter.width + horizontalPadding).clamp(
-                      0.0,
-                      constraints.maxWidth,
-                    );
-
-                    return Container(
-                      width: chipWidth,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: colorScheme.surfaceContainerHigh,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: SizedBox(
-                        height: 20,
-                        child: MarqueeTitle(
-                          text: uploadingText,
-                          style: chipTextStyle,
-                        ),
-                      ),
-                    );
-                  },
+                Text(
+                  'Uploading ${widget.files.length} item${widget.files.length == 1 ? '' : 's'}',
+                  textAlign: TextAlign.center,
+                  style: NooText.meta.copyWith(color: colors.fg3),
                 ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: () => _uploadHere(session),
-                    icon: const Icon(Icons.upload_rounded),
-                    label: Text('Upload to $currentLabel'),
-                  ),
+                const SizedBox(height: NooSpace.sm),
+                NooButton(
+                  variant: NooButtonVariant.primary,
+                  size: NooButtonSize.cta,
+                  fullWidth: true,
+                  icon: LucideIcons.upload,
+                  onTap: () => _uploadHere(session),
+                  child: Text('Upload to $currentLabel'),
                 ),
               ],
             ),

@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../providers/sync_status_controller.dart';
+import '../theme/design_tokens.dart';
+import 'noo/lists/noo_grouped_list.dart';
+import 'noo/lists/noo_settings_row.dart';
+import 'noo/overlays/noo_sheet.dart';
 
 /// The configured sync targets (folders/files) with a "stop syncing"
 /// action per target - what used to be Settings' Device Sync card's own
@@ -14,16 +19,7 @@ class ManageSyncedFoldersSheet extends StatelessWidget {
 
   static void show(BuildContext context) {
     final sync = context.read<SyncStatusController>();
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh,
-      showDragHandle: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      builder: (sheetContext) => ManageSyncedFoldersSheet(sync: sync),
-    );
+    showNooSheet(context, children: [ManageSyncedFoldersSheet(sync: sync)]);
   }
 
   void _remove(BuildContext context, String path) {
@@ -38,69 +34,52 @@ class ManageSyncedFoldersSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.nooColors;
+    // AnimatedBuilder, not a one-shot read: removing a target should update
+    // this list in place without closing the sheet, and showNooSheet's
+    // `children` is built once by the caller - this widget owns its own
+    // rebuild instead.
     return AnimatedBuilder(
       animation: sync,
       builder: (context, _) {
-        final theme = Theme.of(context);
-        final colorScheme = theme.colorScheme;
         final everything = sync.syncEverything;
         final targets = sync.syncedPaths;
 
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Synced to this device',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                if (everything)
-                  Text(
-                    'Every folder in this account is being synced to this '
-                    'device.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                  )
-                else if (targets.isEmpty)
-                  Text(
-                    'Nothing synced yet - select a folder or file in Files '
-                    'and use "Sync to device" to mirror it here for offline '
-                    'access.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                  )
-                else
-                  Flexible(
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: targets.length,
-                      separatorBuilder: (_, _) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final target = targets[index];
-                        return ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.sync_rounded),
-                          title: Text(target),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.close_rounded),
-                            tooltip: 'Stop syncing',
-                            onPressed: () => _remove(context, target),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-              ],
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Synced to this device',
+              style: NooText.cardTitle.copyWith(color: colors.fg1),
             ),
-          ),
+            const SizedBox(height: NooSpace.sm),
+            if (everything)
+              Text(
+                'Every folder in this account is being synced to this device.',
+                style: NooText.body.copyWith(color: colors.fg3),
+              )
+            else if (targets.isEmpty)
+              Text(
+                'Nothing synced yet. Select a folder or file in Files and '
+                'use "Sync to device" to mirror it here for offline access.',
+                style: NooText.body.copyWith(color: colors.fg3),
+              )
+            else
+              NooGroupedList(
+                children: [
+                  for (final target in targets)
+                    NooSettingsRow(
+                      icon: LucideIcons.folderSync,
+                      label: Text(target),
+                      trailing: IconButton(
+                        icon: Icon(LucideIcons.x, size: 18, color: colors.fg3),
+                        tooltip: 'Stop syncing',
+                        onPressed: () => _remove(context, target),
+                      ),
+                    ),
+                ],
+              ),
+          ],
         );
       },
     );

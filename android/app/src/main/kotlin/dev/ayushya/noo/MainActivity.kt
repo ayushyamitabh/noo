@@ -56,6 +56,7 @@ class MainActivity : FlutterFragmentActivity() {
     private val newPickChannelName = "dev.ayushya.noo/pick_intent/new"
     private val syncServiceChannelName = "dev.ayushya.noo/sync_service"
     private val syncStatusChannelName = "dev.ayushya.noo/sync_service/status"
+    private val uploadStatusChannelName = "dev.ayushya.noo/upload_service/status"
     private val notificationPermissionRequestCode = 4202
     // Lazy, not a field initializer - `packageName` reads through the
     // Activity's base Context, which isn't attached yet while this class's
@@ -66,6 +67,7 @@ class MainActivity : FlutterFragmentActivity() {
     private var newShareSink: EventChannel.EventSink? = null
     private var newPickSink: EventChannel.EventSink? = null
     private var syncStatusListener: ((SyncStatusBus.Status) -> Unit)? = null
+    private var uploadCompletedListener: ((UploadEventBus.Completed) -> Unit)? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -155,6 +157,29 @@ class MainActivity : FlutterFragmentActivity() {
                 override fun onCancel(arguments: Any?) {
                     syncStatusListener?.let { SyncStatusBus.unsubscribe(it) }
                     syncStatusListener = null
+                }
+            })
+
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, uploadStatusChannelName)
+            .setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
+                    val listener: (UploadEventBus.Completed) -> Unit = { completed ->
+                        mainHandler.post {
+                            events.success(
+                                mapOf(
+                                    "remoteFolder" to completed.remoteFolder,
+                                    "succeeded" to completed.succeeded,
+                                    "failed" to completed.failed,
+                                ),
+                            )
+                        }
+                    }
+                    uploadCompletedListener = listener
+                    UploadEventBus.subscribe(listener)
+                }
+                override fun onCancel(arguments: Any?) {
+                    uploadCompletedListener?.let { UploadEventBus.unsubscribe(it) }
+                    uploadCompletedListener = null
                 }
             })
     }
