@@ -89,9 +89,9 @@ jobs:
         with:
           files: ${{ env.AAB_PATH }}
 
-      - name: Upload to Google Play (internal track, draft)
-        # Stages the build only; promote it in Play Console, or change
-        # `status` to "completed" (and/or `track`) to roll out automatically.
+      - name: Upload to Google Play (internal track, auto-publish)
+        # Rolls the build out to internal testers automatically
+        # (`status: completed`); promote it to other tracks in Play Console.
         # Needs the PLAY_SERVICE_ACCOUNT_JSON repo secret, and the app's
         # first release must already have been uploaded by hand.
         uses: r0adkll/upload-google-play@v1
@@ -101,5 +101,5 @@ jobs:
           releaseFiles: ${{ env.AAB_PATH }}
           releaseName: ${{ env.VERSION }}
           track: internal
-          status: draft
+          status: completed
           whatsNewDirectory: distribution/whatsnew
