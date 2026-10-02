@@ -109,3 +109,23 @@ it as your own app.
 
 Contributions are welcome under the terms in
 [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+### Why PolyForm Shield?
+
+I want the code to be open to read, learn from, build, and improve, while
+keeping anyone from lifting it and shipping a competing copy of the app.
+Permissive licenses (MIT, Apache) allow exactly that, and copyleft ones
+(GPL) still allow a rebranded fork. PolyForm Shield sits in between: it is
+not an OSI "open source" license, and I'm not claiming it is, but it keeps
+the code available while protecting the project.
+
+## Where development happens
+
+The source of truth is a self-hosted Gitea instance, and this GitHub
+repository is a read-only mirror plus the public issue tracker. I keep it
+that way so that I own my hosting, builds, and release credentials rather
+than depending on a third party for them. You don't have to use Gitea:
+open issues and pull requests here as usual. Open PRs are imported to my
+instance, reviewed and merged there, and `main` is mirrored back here, so a
+merged PR may show as closed with a link to the commit instead of "Merged".
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for details.
