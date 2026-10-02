@@ -144,3 +144,13 @@ release must be uploaded manually). Play rejects a repeated `versionCode`, so
 bump the `+N` in `pubspec.yaml` for every tag - re-tagging the same version
 will fail the upload. Release notes come from
 `distribution/whatsnew/whatsnew-en-US` (max 500 chars) - update per release.
+
+## Community PR flow
+
+Gitea is the source of truth; GitHub is a push mirror (never commit to GitHub
+`main`) and the public issue tracker. `scripts/sync-github-prs.sh` (cron on the
+home server) imports open GitHub PRs into Gitea via Agit
+(`refs/for/main`, topic `gh-pr-N`), where `.gitea/workflows/pr.yml` runs
+analyze + tests. That workflow must never use secrets; signing and Play
+credentials stay on the tag-triggered `build.yml`/`release.yml`. Issue
+templates are in `.github/ISSUE_TEMPLATE/`.

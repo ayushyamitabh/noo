@@ -1,0 +1,26 @@
+name: Check PR
+
+# Runs analyze + tests on pull requests. Deliberately uses no secrets, so it
+# is safe against imported contributor code. Keep it that way: signing keys
+# and the Play credentials are only available to the tag-triggered workflows.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test

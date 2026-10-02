@@ -40,6 +40,18 @@ for testing anything destructive (delete, move, trash).
    standards, update the matching file in `.claude/context/` in the same PR.
 6. Open a pull request and fill in the template.
 
+## How PRs and issues are handled
+
+Issues and pull requests live on GitHub. The maintainer's source of truth is
+a self-hosted Gitea instance: open PRs are imported there, reviewed, and
+merged there, and `main` is then mirrored back to GitHub. Two things follow:
+
+- Keep discussion on the GitHub PR; that is where I'll reply.
+- A merged change may show up on GitHub as the PR being closed with a link to
+  the commit rather than as "Merged". Your authorship is preserved.
+- Imported PRs run `flutter analyze` and `flutter test` on my server, so
+  please run both locally first.
+
 ## Commit messages
 
 Use the repository's template so history stays consistent:
