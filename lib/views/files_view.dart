@@ -245,9 +245,19 @@ class _FilesViewState extends State<FilesView> {
   /// The folder data source for this tab. Watches the concrete controller
   /// (that's what's registered as a provider), then hands it back as the
   /// [FolderBrowser] the rest of the view actually needs.
-  FolderBrowser _browserOf(BuildContext context) => _offline
-      ? context.watch<OfflineController>()
-      : context.watch<FilesController>();
+  ///
+  /// Pass `listen: false` from tap/gesture callbacks: `context.watch` outside
+  /// of `build` asserts in debug builds (silently swallowing the tap).
+  FolderBrowser _browserOf(BuildContext context, {bool listen = true}) {
+    if (listen) {
+      return _offline
+          ? context.watch<OfflineController>()
+          : context.watch<FilesController>();
+    }
+    return _offline
+        ? context.read<OfflineController>()
+        : context.read<FilesController>();
+  }
 
   /// The on-device copy of [item] for the Offline tab; null online, where
   /// thumbnails come from server previews instead.
@@ -287,7 +297,7 @@ class _FilesViewState extends State<FilesView> {
     NextcloudItem item, {
     required bool picking,
   }) {
-    final browser = _browserOf(context);
+    final browser = _browserOf(context, listen: false);
     if (picking) {
       _handlePickTap(context, item);
     } else if (_isSelecting) {
