@@ -231,7 +231,9 @@ blocks are noted where they matter:
   don't confuse the two: this one is still non-blurred, just inset with a
   `line` border and `nooDialogShadow` (the app's one other shadow user - see
   that constant's doc comment) instead of edge to edge (no opacity/blur knob
-  either). The host `Scaffold` needs `extendBody: true` while it's active
+  either). `floating` ignores `NooNavStyle` and always uses the Android row
+  (icon-only idle tabs, sliding pill, 64px), so iOS matches Android there;
+  only the attached bar still has a distinct iOS row. The host `Scaffold` needs `extendBody: true` while it's active
   (`main.dart` already wires this off `SettingsController.bottomBarStyle`),
   which also means every tab's own scrollable list has to reserve enough
   bottom padding to clear the bar - nothing does that automatically once the
