@@ -80,22 +80,21 @@ enum NativeServices {
 
   // MARK: - Account for the Share Extension
 
-  /// `share_account`: Dart tells native which account is active so the Share
-  /// Extension - a separate process with no Flutter engine - can list folders
-  /// and upload as it. Stored in the shared Keychain group.
+  /// `share_account`: Dart hands native every account that can upload, which
+  /// one is active, and the app-lock settings, so the Share Extension - a
+  /// separate process with no Flutter engine - can list folders and upload as
+  /// them. Stored in the shared Keychain group.
   private static func registerShareAccount(messenger: FlutterBinaryMessenger) {
     FlutterMethodChannel(name: "dev.ayushya.noo/share_account", binaryMessenger: messenger)
       .setMethodCallHandler { call, result in
         switch call.method {
-        case "setAccount":
+        case "setAccounts":
           handle(call, result) { args in
-            try SharedAccountStore.save(
-              SharedAccount(
-                serverUrl: try string(args, "serverUrl"),
-                username: try string(args, "username"),
-                authHeader: try string(args, "authHeader"),
-                displayName: (args["displayName"] as? String) ?? ""
-              ))
+            guard let json = args["accounts"] as? String,
+              let data = json.data(using: .utf8),
+              let accounts = try? JSONDecoder().decode(SharedAccounts.self, from: data)
+            else { throw TransferError(message: "Bad accounts payload.") }
+            try SharedAccountStore.save(accounts)
           }
         case "clearAccount":
           SharedAccountStore.clear()

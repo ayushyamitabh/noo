@@ -1,30 +1,175 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/services.dart';
+import '../providers/files_controller.dart';
 import '../providers/session_controller.dart';
 import 'native_channel.dart';
 
-/// Tells the native side which account is active, so iOS's Share Extension -
-/// a separate process with no Flutter engine - can list folders and upload as
-/// it without opening the app (`ios/Runner/Native/NativeServices.swift`'s
+/// One account as the iOS Share Extension needs it - plain data, so the
+/// payload builder is testable without a session.
+class ShareAccountEntry {
+  final String id;
+  final String serverUrl;
+  final String username;
+  final String password;
+
+  /// The account's Files "hidden files" filter: `hide`, `only` or `include`.
+  final String hiddenFilter;
+
+  const ShareAccountEntry({
+    required this.id,
+    required this.serverUrl,
+    required this.username,
+    required this.password,
+    required this.hiddenFilter,
+  });
+}
+
+/// Tells the native side which accounts can upload, which one is active, and
+/// the app-lock settings, so iOS's Share Extension - a separate process with
+/// no Flutter engine - can offer an account picker, list folders and upload
+/// as them without opening the app (`ios/Runner/Native/NativeServices.swift`'s
 /// `share_account`, stored in a Keychain group shared with the extension).
-/// Android has no equivalent (its share intent opens the app itself), so
-/// there the channel simply doesn't exist and both calls are no-ops.
+/// Android has no equivalent (its share intent opens the app itself), so there
+/// the channel simply doesn't exist and everything here is a no-op.
 class ShareAccountService {
   static const _channel = MethodChannel('dev.ayushya.noo/share_account');
 
-  /// Publishes the active account (call whenever one becomes active).
-  static Future<void> publish(SessionController session) async {
-    final authHeader = session.service?.authHeaders['Authorization'];
-    if (authHeader == null || session.serverUrl.isEmpty) return;
-    final host = Uri.tryParse(session.serverUrl)?.host ?? session.serverUrl;
-    await invokeIfAvailable(_channel, 'setAccount', {
-      'serverUrl': session.serverUrl,
-      'username': session.username,
-      'authHeader': authHeader,
-      'displayName': '${session.username}@$host',
+  static String basicAuth(String username, String password) =>
+      'Basic ${base64Encode(utf8.encode('$username:$password'))}';
+
+  /// The JSON `SharedAccounts` (`ios/Shared/SharedAccount.swift`) decodes.
+  static String buildPayload({
+    required List<ShareAccountEntry> accounts,
+    required String? activeId,
+    required bool loginLockEnabled,
+    required bool lockAccountSwitching,
+    required bool lockHiddenFiles,
+  }) {
+    return jsonEncode({
+      'accounts': [
+        for (final a in accounts)
+          {
+            'id': a.id,
+            'serverUrl': a.serverUrl,
+            'username': a.username,
+            'authHeader': basicAuth(a.username, a.password),
+            'displayName':
+                '${a.username}@${Uri.tryParse(a.serverUrl)?.host ?? a.serverUrl}',
+            'hiddenFilter': a.hiddenFilter,
+          },
+      ],
+      'activeId': activeId,
+      'loginLockEnabled': loginLockEnabled,
+      'lockAccountSwitching': lockAccountSwitching,
+      'lockHiddenFiles': lockHiddenFiles,
     });
   }
 
-  /// Forgets it (sign-out / switching away) so the extension stops offering
-  /// uploads to an account that's no longer signed in.
+  /// Publishes every saved account that can actually upload (has a stored
+  /// password and isn't signed out), with the active one's hidden-files
+  /// filter taken live from [files] - its saved pref is written
+  /// asynchronously, so it can lag a change that just happened.
+  static Future<void> publish(
+    SessionController session,
+    FilesController files,
+  ) async {
+    final activeId = session.activeAccountId;
+    if (activeId == null) return clear();
+
+    final prefs = await session.prefsFuture;
+    final store = session.accountStore;
+    final signedOut = store.loadSignedOut(prefs);
+    final entries = <ShareAccountEntry>[];
+    for (final account in session.accounts) {
+      if (signedOut.contains(account.id)) continue;
+      final password = await store.readPassword(account.id);
+      if (password == null) continue;
+      final filter = account.id == activeId
+          ? files.hiddenFilter
+          : FilesController.savedHiddenFilter(
+              prefs,
+              store.accountPrefKey,
+              account.id,
+            );
+      entries.add(
+        ShareAccountEntry(
+          id: account.id,
+          serverUrl: account.serverUrl,
+          username: account.username,
+          password: password,
+          hiddenFilter: filter.name,
+        ),
+      );
+    }
+    if (entries.isEmpty) return clear();
+
+    await invokeIfAvailable(_channel, 'setAccounts', {
+      'accounts': buildPayload(
+        accounts: entries,
+        activeId: activeId,
+        loginLockEnabled: session.loginLockEnabled,
+        lockAccountSwitching: session.lockAccountSwitching,
+        lockHiddenFiles: session.lockHiddenFiles,
+      ),
+    });
+  }
+
+  /// Forgets everything (sign-out) so the extension stops offering uploads.
   static Future<void> clear() => invokeIfAvailable(_channel, 'clearAccount');
+}
+
+/// Keeps [ShareAccountService]'s published data current while the app is
+/// running: republishes when an account becomes ready or when anything the
+/// extension depends on changes - the account list or active account, the
+/// lock settings, or the active account's hidden-files filter.
+class ShareAccountSync {
+  final SessionController session;
+  final FilesController files;
+
+  String? _lastSignature;
+  bool _disposed = false;
+  Future<void> _queue = Future.value();
+
+  ShareAccountSync(this.session, this.files);
+
+  void start() {
+    session.addAccountReadyListener(_publish);
+    session.addListener(_onChange);
+    files.addListener(_onChange);
+  }
+
+  void dispose() {
+    _disposed = true;
+    session.removeListener(_onChange);
+    files.removeListener(_onChange);
+  }
+
+  String _signature() => [
+    session.activeAccountId,
+    session.accounts.map((a) => a.id).join(','),
+    session.loginLockEnabled,
+    session.lockAccountSwitching,
+    session.lockHiddenFiles,
+    files.hiddenFilter.name,
+  ].join('|');
+
+  void _onChange() {
+    if (_signature() != _lastSignature) _publish();
+  }
+
+  /// Runs one at a time, in order, so a slow publish can't land after a
+  /// newer one and leave the extension with stale data.
+  void _publish() {
+    if (_disposed) return;
+    _lastSignature = _signature();
+    _queue = _queue.then((_) async {
+      if (_disposed) return;
+      try {
+        await ShareAccountService.publish(session, files);
+      } catch (_) {
+        // Best effort: the extension just keeps the previous data.
+      }
+    });
+  }
 }

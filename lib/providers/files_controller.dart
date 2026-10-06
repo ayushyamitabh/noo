@@ -677,6 +677,19 @@ class FilesController extends ChangeNotifier
     );
   }
 
+  /// The hidden-files filter saved for [accountId] - not just the active
+  /// account's, which is all [hiddenFilter] holds. For iOS's Share Extension,
+  /// which follows each account's own setting.
+  static HiddenFilesFilter savedHiddenFilter(
+    SharedPreferences prefs,
+    String Function(String accountId, String baseKey) accountPrefKey,
+    String accountId,
+  ) => loadHiddenFilter(
+    prefs,
+    accountPrefKey(accountId, _prefHiddenFilter),
+    accountPrefKey(accountId, _prefShowHiddenFiles),
+  );
+
   /// Reads a persisted [HiddenFilesFilter], falling back to the old
   /// show-hidden bool (`true` meant everything incl. hidden) so a pref
   /// saved before the three-way filter keeps its meaning. [key]s are

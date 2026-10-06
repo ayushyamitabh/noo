@@ -885,13 +885,34 @@ Reminders/Notes - the destination is picked *inside* the sheet:
    loadFileRepresentation`, public.item) into the App Group container
    (`group.dev.ayushya.noo`, `SharedInbox/<batch>/`) and hosts the SwiftUI
    `SharePickerView` (`ShareModel` holds its state).
-2. It reads the signed-in account from the shared Keychain
-   (`SharedAccountStore`) and lists folders over WebDAV (`DavClient`
-   `PROPFIND` Depth 1, parsed by `DavFolderParser`; dot-folders hidden).
-   The Dart side keeps that account current: `ShareAccountService.publish`
-   (`lib/services/share_account_service.dart`) runs on every account-ready
-   event and `clear` on account-cleared, through the native `share_account`
-   channel - both wired where `SessionController` is created in `main.dart`.
+2. It reads the accounts from the shared Keychain (`SharedAccountStore` ->
+   `SharedAccounts`) and lists folders over WebDAV (`DavClient` `PROPFIND`
+   Depth 1, parsed by `DavFolderParser`). With **several accounts an account
+   list comes first** (the app's active one is marked "Active"; "Change
+   account" returns to it); with one it goes straight to its folders. The
+   Dart side keeps the keychain data current: `ShareAccountSync`
+   (`lib/services/share_account_service.dart`, started from the shell's
+   `initState`) republishes - through the native `share_account` channel's
+   `setAccounts` - when an account becomes ready or when its change
+   signature moves: the account list/active account, the three lock
+   settings, or the active account's hidden-files filter; sign-out calls
+   `clearAccount`. It publishes every saved account that has a stored
+   password and isn't signed out, each with its **own Files hidden-files
+   filter** (`FilesController.savedHiddenFilter`).
+   - **Hidden folders** follow that app setting - there is no share-sheet
+     setting of their own. `hide` (default) drops dot-folders, `only` lists
+     just them, `include` lists everything; a folder is hidden when it *or
+     any ancestor* starts with a dot (`HiddenFilter`, same rule as the app).
+     When the filter isn't `hide` and the app has login lock + "lock hidden
+     files" on, the sheet asks for Face ID/passcode first (`DeviceAuth`, the
+     `.deviceOwnerAuthentication` policy - biometrics with passcode fallback,
+     like `local_auth` with `biometricOnly: false`); cancelling falls back to
+     hiding them, with a note.
+   - **Account switching**: choosing any account other than the app's
+     active one asks for the same unlock when login lock + "lock account
+     switching" are on. One successful unlock covers the rest of that sheet.
+   - Opening the sheet itself is not gated - only these two actions are
+     (as in the app, where login lock guards launch and these toggles).
 3. **Upload** calls `ShareUpload.enqueue`: one `PUT` per file on a *background*
    `URLSession` (`dev.ayushya.noo.transfers.share`, with
    `sharedContainerIdentifier`) that outlives the extension, and posts
@@ -919,7 +940,7 @@ Reminders/Notes - the destination is picked *inside* the sheet:
 The keychain group is `$(AppIdentifierPrefix)dev.ayushya.noo.shared`
 (`keychain-access-groups` in both `.entitlements`); both Info.plists also
 carry it as `NooKeychainAccessGroup`, which `SharedAccountStore` reads, so the
-two processes always agree on the team-prefixed id. The account is stored as
+two processes always agree on the team-prefixed id. Everything is stored as
 JSON in one generic-password item (`kSecAttrAccessibleAfterFirstUnlock`).
 
 `ios/Shared/` (compiled into both targets): `SharedInbox`, `SharedAccount`,

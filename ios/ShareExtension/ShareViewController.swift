@@ -8,8 +8,10 @@ import UserNotifications
 /// shows a folder picker, then starts a background upload and closes:
 ///
 /// 1. Copies whatever was shared into the App Group (`SharedInbox`).
-/// 2. Reads the signed-in account the app left in the shared Keychain
-///    (`SharedAccountStore`) and lists folders over WebDAV (`DavClient`).
+/// 2. Reads the accounts the app left in the shared Keychain
+///    (`SharedAccountStore`) - asking which one first if there are several -
+///    and lists folders over WebDAV (`DavClient`), honouring the app's
+///    hidden-files filter and its unlock settings (`ShareModel`).
 /// 3. "Upload" queues the files on a background session that outlives this
 ///    process (`ShareUpload`); the app is relaunched to finish and notify.
 ///
@@ -22,7 +24,7 @@ final class ShareViewController: UIViewController {
 
   override func viewDidLoad() {
     super.viewDidLoad()
-    model = ShareModel(account: SharedAccountStore.load())
+    model = ShareModel(shared: SharedAccountStore.load())
     model.onUpload = { [weak self] in self?.upload() }
     model.onSaveForLater = { [weak self] in self?.saveForLater() }
     model.onCancel = { [weak self] in self?.cancel() }
@@ -68,12 +70,7 @@ final class ShareViewController: UIViewController {
       model.stage = .failed("Noo can only receive files and photos.")
       return
     }
-    guard model.account != nil else {
-      model.stage = .noAccount
-      return
-    }
-    model.stage = .picking
-    await model.open("/")
+    await model.start()
   }
 
   /// `loadFileRepresentation`'s URL only lives for the duration of its
@@ -102,7 +99,7 @@ final class ShareViewController: UIViewController {
   // MARK: - Actions
 
   private func upload() {
-    guard let account = model.account else { return }
+    guard let account = model.selected else { return }
     do {
       try ShareUpload.enqueue(items: model.items, account: account, remoteFolder: model.path)
       model.stage = .uploading
