@@ -47,6 +47,27 @@ enum TransferBatchStore {
     if let data = try? JSONEncoder().encode(batch) { defaults.set(data, forKey: key(id)) }
   }
 
+  private static let finishedFoldersKey = "transfer.finishedUploadFolders"
+
+  /// The Share Extension finished an upload into [folder] while the app
+  /// wasn't running; the app reads this on its next activation so its file
+  /// list can refresh.
+  static func noteFinishedUpload(folder: String) {
+    lock.lock()
+    defer { lock.unlock() }
+    var folders = defaults.stringArray(forKey: finishedFoldersKey) ?? []
+    if !folders.contains(folder) { folders.append(folder) }
+    defaults.set(folders, forKey: finishedFoldersKey)
+  }
+
+  static func consumeFinishedUploadFolders() -> [String] {
+    lock.lock()
+    defer { lock.unlock() }
+    let folders = defaults.stringArray(forKey: finishedFoldersKey) ?? []
+    defaults.removeObject(forKey: finishedFoldersKey)
+    return folders
+  }
+
   /// Counts one file's outcome. Returns the batch when that was its last
   /// file (and forgets it), nil while others are still running.
   static func record(_ info: TransferTaskInfo, success: Bool) -> TransferBatch? {

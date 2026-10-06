@@ -106,6 +106,7 @@ final class TransferManager: NSObject {
       TransferBatch(kind: .upload, remoteFolder: remoteFolder, total: tasks.count, succeeded: 0, failed: 0),
       id: batch
     )
+    TransferNotifications.started(kind: .upload, batch: batch, count: tasks.count)
     tasks.forEach { $0.resume() }
   }
 
@@ -134,6 +135,7 @@ final class TransferManager: NSObject {
       TransferBatch(kind: .download, remoteFolder: nil, total: tasks.count, succeeded: 0, failed: 0),
       id: batch
     )
+    TransferNotifications.started(kind: .download, batch: batch, count: tasks.count)
     tasks.forEach { $0.resume() }
   }
 
@@ -169,38 +171,28 @@ final class TransferManager: NSObject {
 
   /// Counts one file's outcome; fires the batch summary when it was the last.
   private func record(_ info: TransferTaskInfo, success: Bool) {
-    if let batch = TransferBatchStore.record(info, success: success) { finish(batch) }
+    if let batch = TransferBatchStore.record(info, success: success) { finish(batch, id: info.batch) }
   }
 
-  private func finish(_ batch: TransferBatch) {
-    let verb = batch.kind == .upload ? "upload" : "download"
-    let past = batch.kind == .upload ? "Uploaded" : "Downloaded"
-    let body: String
-    if batch.failed == 0 {
-      body = "\(past) \(Self.files(batch.succeeded))"
-    } else if batch.succeeded == 0 {
-      body = "Couldn't \(verb) \(Self.files(batch.failed))"
-    } else {
-      body = "\(past) \(Self.files(batch.succeeded)), \(batch.failed) failed"
-    }
-    notify(body)
+  private func finish(_ batch: TransferBatch, id: String) {
+    TransferNotifications.finished(batch, id: id)
+    reportToDart(batch)
+  }
+
+  /// Tells Dart (so `FilesController` can refresh the folder) once an upload
+  /// batch has landed at least one file.
+  private func reportToDart(_ batch: TransferBatch) {
     if batch.kind == .upload, batch.succeeded > 0, let folder = batch.remoteFolder {
       DispatchQueue.main.async { self.onUploadBatchFinished?(folder, batch.succeeded, batch.failed) }
     }
   }
 
-  private static func files(_ count: Int) -> String {
-    count == 1 ? "1 file" : "\(count) files"
-  }
-
-  private func notify(_ body: String) {
-    let content = UNMutableNotificationContent()
-    content.title = "Noo"
-    content.body = body
-    content.sound = .default
-    UNUserNotificationCenter.current().add(
-      UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-    )
+  /// Folders the Share Extension finished uploading into while the app wasn't
+  /// running - call when the app becomes active.
+  func deliverExtensionUploads() {
+    for folder in TransferBatchStore.consumeFinishedUploadFolders() {
+      DispatchQueue.main.async { self.onUploadBatchFinished?(folder, 1, 0) }
+    }
   }
 }
 
@@ -229,9 +221,9 @@ extension TransferManager: URLSessionDownloadDelegate {
     guard let info = Self.info(for: task) else { return }
     switch info.kind {
     case .upload:
-      if let staged = info.stagedPath { try? FileManager.default.removeItem(atPath: staged) }
-      let status = (task.response as? HTTPURLResponse)?.statusCode ?? 0
-      record(info, success: error == nil && (200..<300).contains(status))
+      if let result = UploadResults.handle(task, error: error), let batch = result.batch {
+        reportToDart(batch)
+      }
     case .download:
       // A finished download was already counted in didFinishDownloadingTo;
       // only a transport failure arrives here.

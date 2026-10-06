@@ -43,8 +43,10 @@ enum ShareUpload {
   static func enqueue(items: [SharedItem], account: SharedAccount, remoteFolder: String) throws {
     guard !items.isEmpty else { return }
     let batch = UUID().uuidString
-    // No delegate here: the extension is gone before the results arrive.
-    let session = URLSession(configuration: configuration())
+    // Small files can finish while the extension is still on screen; for
+    // those this delegate counts them. Whatever outlives the extension is
+    // reported to the app instead (see `TransferManager`).
+    let session = URLSession(configuration: configuration(), delegate: ShareUploadDelegate(), delegateQueue: nil)
 
     var tasks: [URLSessionUploadTask] = []
     for item in items {
@@ -62,6 +64,7 @@ enum ShareUpload {
     TransferBatchStore.save(
       TransferBatch(kind: .upload, remoteFolder: remoteFolder, total: tasks.count, succeeded: 0, failed: 0),
       id: batch)
+    TransferNotifications.started(kind: .upload, batch: batch, count: tasks.count)
     tasks.forEach { $0.resume() }
     session.finishTasksAndInvalidate()
   }

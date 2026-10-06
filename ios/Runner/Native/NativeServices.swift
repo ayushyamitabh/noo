@@ -125,6 +125,7 @@ enum NativeServices {
     NotificationCenter.default.addObserver(
       forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
     ) { _ in
+      TransferManager.shared.deliverExtensionUploads()
       guard let sink = shareEvents.sink else { return }
       let items = consumeShared()
       if !items.isEmpty { sink(items.map(encode)) }

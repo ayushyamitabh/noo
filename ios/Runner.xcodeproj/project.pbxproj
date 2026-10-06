@@ -17,6 +17,7 @@
 		3C1A0DAA5F9B37FEA4C604BE /* DavFolders.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51604DEE43E937A5FDCA7A58 /* DavFolders.swift */; };
 		3DEDE94F2A4C921407EF4382 /* ShareUpload.swift in Sources */ = {isa = PBXBuildFile; fileRef = B93DB1F595F44E2F2057BB2A /* ShareUpload.swift */; };
 		43DB9AB631DD359AEC613A1D /* WebDAV.swift in Sources */ = {isa = PBXBuildFile; fileRef = 871EDB5791D5B3DA0ECF3D4E /* WebDAV.swift */; };
+		44078FC9474337A0E102B524 /* TransferNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3247AAA4B65FE0F1A7279FA1 /* TransferNotifications.swift */; };
 		5694337ECF8D3ADD3695CBCD /* NativeServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 901C0CDB4FB819302E2A7563 /* NativeServices.swift */; };
 		62028E64976F15B4FDEDA9F1 /* ShareUpload.swift in Sources */ = {isa = PBXBuildFile; fileRef = B93DB1F595F44E2F2057BB2A /* ShareUpload.swift */; };
 		63229CACE4281880037D33E6 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27BDF61F5197F9B8F648E8AE /* ShareViewController.swift */; };
@@ -29,6 +30,7 @@
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
+		A16680889B3A9D8672FA29C1 /* TransferNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3247AAA4B65FE0F1A7279FA1 /* TransferNotifications.swift */; };
 		A3B3AB501C29516E20455F23 /* DavFolders.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51604DEE43E937A5FDCA7A58 /* DavFolders.swift */; };
 		E295E45196E3973A5F7E1D8E /* SharedAccount.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F2C956C98F58A97B5595307 /* SharedAccount.swift */; };
 		F598B112F4D33953984FEFF4 /* WebDAV.swift in Sources */ = {isa = PBXBuildFile; fileRef = 871EDB5791D5B3DA0ECF3D4E /* WebDAV.swift */; };
@@ -84,6 +86,7 @@
 		1F2C956C98F58A97B5595307 /* SharedAccount.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedAccount.swift; sourceTree = "<group>"; };
 		20B0C3085FA6467C1A4A2947 /* TransferTypes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TransferTypes.swift; sourceTree = "<group>"; };
 		27BDF61F5197F9B8F648E8AE /* ShareViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
+		3247AAA4B65FE0F1A7279FA1 /* TransferNotifications.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TransferNotifications.swift; sourceTree = "<group>"; };
 		331C807B294A618700263BE5 /* RunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTests.swift; sourceTree = "<group>"; };
 		331C8081294A63A400263BE5 /* RunnerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunnerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = AppFrameworkInfo.plist; path = Flutter/AppFrameworkInfo.plist; sourceTree = "<group>"; };
@@ -179,6 +182,7 @@
 				1F2C956C98F58A97B5595307 /* SharedAccount.swift */,
 				B93DB1F595F44E2F2057BB2A /* ShareUpload.swift */,
 				51604DEE43E937A5FDCA7A58 /* DavFolders.swift */,
+				3247AAA4B65FE0F1A7279FA1 /* TransferNotifications.swift */,
 			);
 			name = Shared;
 			path = Shared;
@@ -433,6 +437,7 @@
 				3DEDE94F2A4C921407EF4382 /* ShareUpload.swift in Sources */,
 				3C1A0DAA5F9B37FEA4C604BE /* DavFolders.swift in Sources */,
 				66AFC246E251554A80B2476F /* SharePickerView.swift in Sources */,
+				A16680889B3A9D8672FA29C1 /* TransferNotifications.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -451,6 +456,7 @@
 				E295E45196E3973A5F7E1D8E /* SharedAccount.swift in Sources */,
 				62028E64976F15B4FDEDA9F1 /* ShareUpload.swift in Sources */,
 				A3B3AB501C29516E20455F23 /* DavFolders.swift in Sources */,
+				44078FC9474337A0E102B524 /* TransferNotifications.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
