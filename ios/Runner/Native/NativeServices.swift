@@ -1,8 +1,10 @@
 import Flutter
 import Foundation
+import UIKit
 
-/// Pushes upload-batch completions to Dart's `UploadService.completions`.
-final class UploadStatusStreamHandler: NSObject, FlutterStreamHandler {
+/// Holds the one native-side listener of an `EventChannel` so Swift code can
+/// push events to Dart whenever they happen.
+final class SinkStreamHandler: NSObject, FlutterStreamHandler {
   var sink: FlutterEventSink?
 
   func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink)
@@ -19,12 +21,12 @@ final class UploadStatusStreamHandler: NSObject, FlutterStreamHandler {
 }
 
 /// The iOS side of the `dev.ayushya.noo/*` channels `lib/services/` talks to
-/// (Android's lives in `MainActivity.kt`). Only the upload and download
-/// services are implemented so far; the rest still throw
-/// `MissingPluginException`, which the Dart side treats as "unavailable"
-/// (`lib/services/native_channel.dart`).
+/// (Android's lives in `MainActivity.kt`). Upload, download and share (the
+/// receiving half of the Share Extension) are implemented so far; the rest
+/// still throw `MissingPluginException`, which the Dart side treats as
+/// "unavailable" (`lib/services/native_channel.dart`).
 enum NativeServices {
-  private static let uploadStatus = UploadStatusStreamHandler()
+  private static let uploadStatus = SinkStreamHandler()
 
   static func register(messenger: FlutterBinaryMessenger) {
     FlutterMethodChannel(name: "dev.ayushya.noo/upload_service", binaryMessenger: messenger)
@@ -72,6 +74,46 @@ enum NativeServices {
       uploadStatus.sink?(["remoteFolder": folder, "succeeded": succeeded, "failed": failed])
     }
     TransferManager.shared.reconnect()
+    registerShare(messenger: messenger)
+  }
+
+  // MARK: - Share Extension inbox
+
+  private static let shareEvents = SinkStreamHandler()
+
+  /// `share_intent`: files the Share Extension left in the App Group inbox.
+  /// Cold start asks once (`getInitialShare`); a share that arrives while the
+  /// app is running is pushed when it next becomes active (the extension
+  /// can't signal the app any other way).
+  private static func registerShare(messenger: FlutterBinaryMessenger) {
+    FlutterMethodChannel(name: "dev.ayushya.noo/share_intent", binaryMessenger: messenger)
+      .setMethodCallHandler { call, result in
+        guard call.method == "getInitialShare" else { return result(FlutterMethodNotImplemented) }
+        result(consumeShared().map(encode))
+      }
+    FlutterEventChannel(name: "dev.ayushya.noo/share_intent/new", binaryMessenger: messenger)
+      .setStreamHandler(shareEvents)
+    NotificationCenter.default.addObserver(
+      forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+    ) { _ in
+      guard let sink = shareEvents.sink else { return }
+      let items = consumeShared()
+      if !items.isEmpty { sink(items.map(encode)) }
+    }
+  }
+
+  private static func consumeShared() -> [SharedItem] {
+    guard let root = AppGroup.containerURL else { return [] }
+    return SharedInbox.consume(in: root)
+  }
+
+  private static func encode(_ item: SharedItem) -> [String: Any] {
+    [
+      "uri": URL(fileURLWithPath: item.path).absoluteString,
+      "name": item.name,
+      "mimeType": item.mimeType ?? NSNull(),
+      "size": item.size,
+    ]
   }
 
   // MARK: - Argument helpers

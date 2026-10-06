@@ -817,9 +817,10 @@ files, 15 for folders), keeping the existing reshare bit, plus Remove access.
 The five `dev.ayushya.noo/*` channels (`share_intent`, `pick_intent`,
 `upload_service`, `download_service`, `sync_service`, plus their status
 `EventChannel`s) were written for Android in Kotlin. iOS implements
-`upload_service` (+ its status stream) and `download_service` so far
-(`ios/Runner/Native/`, see below); for the other three there's no handler, so
-calls throw `MissingPluginException`. `lib/services/native_channel.dart`
+`upload_service` (+ its status stream), `download_service` and
+`share_intent` so far (`ios/Runner/Native/` + `ios/ShareExtension/`, see
+below); for `pick_intent` and `sync_service` there's no handler, so calls
+throw `MissingPluginException`. `lib/services/native_channel.dart`
 makes that safe until each one is built in Swift:
 
 - `invokeIfAvailable` - a missing implementation returns null. For cold-start
@@ -871,5 +872,39 @@ iOS. `OfflineController` and `localSyncedFilePath` both go through it.
   ios/Runner.xcworkspace -scheme Runner -destination 'platform=iOS
   Simulator,id=<udid>'`).
 
-Not built on iOS yet: Share Extension (needs an App Group), the picker
-(File Provider), and sync (`BGTaskScheduler`) - see the iOS handoff notes.
+### iOS Share Extension (`ios/ShareExtension/`, `ios/Shared/`)
+
+"Share to Noo" from any app's share sheet. An extension can't pick a
+destination, hold a session, or launch its host app, so it only *hands off*:
+
+1. `ShareViewController` (extension) copies each shared file
+   (`NSItemProvider.loadFileRepresentation`, public.item) into the App Group
+   container (`group.dev.ayushya.noo`) under `SharedInbox/<batch>/`, appends
+   them to `SharedInbox/pending.json`, and posts a local notification ("Open
+   Noo to choose where to upload N files") since it can't open the app.
+2. The app reads that manifest through `SharedInbox.consume` - once on cold
+   start via `share_intent.getInitialShare`, and whenever it becomes active
+   (`UIApplication.didBecomeActiveNotification`) via the `share_intent/new`
+   event stream - and from there it's the same Dart flow as an Android
+   share: `main.dart`'s `_handleSharedFiles` -> `ShareUploadView` ->
+   `UploadService`. The `file://` URI points into the App Group container;
+   `TransferManager.startUpload` deletes that copy once it has staged it.
+3. `ios/Shared/SharedInbox.swift` is compiled into both targets (manifest
+   read/append/consume under an `NSFileCoordinator`, entries whose file is
+   gone are dropped, each share is delivered once) and unit-tested in
+   `RunnerTests`.
+
+Both targets carry `group.dev.ayushya.noo` in their `.entitlements`
+(`Runner/Runner.entitlements`, `ShareExtension/ShareExtension.entitlements`);
+the extension's bundle id is `dev.ayushya.noo.ShareExtension`, and its
+version/build come from the same `FLUTTER_BUILD_NAME`/`FLUTTER_BUILD_NUMBER`
+xcconfig as the app (iOS rejects a mismatch). The extension is embedded via an
+"Embed Foundation Extensions" phase placed *before* Flutter's script phases
+(after them Xcode reports a dependency cycle). The simulator honours the App
+Group without a signing team; a real device needs a team that owns the group
+id and both bundle ids registered. To try it without the share sheet, put a
+file and a `pending.json` in the simulator's group container
+(`xcrun simctl get_app_container <udid> dev.ayushya.noo groups`) and launch.
+
+Not built on iOS yet: the picker (File Provider) and sync
+(`BGTaskScheduler`) - see the iOS handoff notes.
