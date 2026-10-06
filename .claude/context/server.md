@@ -811,3 +811,34 @@ rather than relying on this async path throwing naturally.
 bitmask (1 read, 2 update, 4 create, 8 delete, 16 reshare). The share
 sheet's per-person pill opens a menu with Can view (1) / Can edit (3 for
 files, 15 for folders), keeping the existing reshare bit, plus Remove access.
+
+## Native services on iOS (in progress)
+
+The five `dev.ayushya.noo/*` channels (`share_intent`, `pick_intent`,
+`upload_service`, `download_service`, `sync_service`, plus their status
+`EventChannel`s) are implemented in Kotlin only; iOS has no handler for any
+of them yet, so every call there throws `MissingPluginException`.
+`lib/services/native_channel.dart` makes that safe until each one is built
+in Swift:
+
+- `invokeIfAvailable` - a missing implementation returns null. For cold-start
+  checks (`getInitialShare`, `getPickRequest`, `getSyncStatus`) and
+  scheduling/cleanup (`reschedule`, `cancel`, `removeLocalSync`,
+  `finishPick`/`cancelPick`).
+- `invokeOrExplain` - throws `NativeServiceUnavailable("<Feature>")`, whose
+  message callers already show in a snackbar ("Uploading isn't available on
+  this platform yet."). For things the user just asked for: `startUpload`,
+  `startDownload`, `syncNow`, `resolveConflict`.
+- `quietEvents` - wraps an `EventChannel` so the missing-implementation error
+  is dropped instead of surfacing as an unhandled stream error.
+
+When a channel gets a real iOS implementation nothing changes on the Dart
+side - the helpers only act on `MissingPluginException`.
+
+`SyncService.baseDirectory()` is where the `sync/<accountId>/...` mirror
+lives: `getExternalStorageDirectory()` on Android (what `SyncEngine.kt`
+writes), the app support directory elsewhere, because that call throws on
+iOS. `OfflineController` and `localSyncedFilePath` both go through it.
+Not built on iOS yet: Share Extension (needs an App Group), the picker
+(File Provider), background uploads/downloads (`URLSession`), and sync
+(`BGTaskScheduler`) - see the iOS handoff notes.
