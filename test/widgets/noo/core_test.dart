@@ -10,6 +10,7 @@ import 'package:noo/widgets/noo/core/noo_chip.dart';
 import 'package:noo/widgets/noo/core/noo_fab.dart';
 import 'package:noo/widgets/noo/core/noo_progress_bar.dart';
 import 'package:noo/widgets/noo/core/noo_search_field.dart';
+import 'package:noo/widgets/noo/core/noo_slider.dart';
 import 'package:noo/widgets/noo/core/noo_segmented_control.dart';
 import 'package:noo/widgets/noo/core/noo_toggle.dart';
 import 'package:noo/widgets/noo/nav/noo_nav_style.dart';
@@ -96,6 +97,35 @@ void main() {
         expect((hi + 0.05) / (lo + 0.05), greaterThan(1.04));
       });
     }
+  });
+
+  group('NooSlider', () {
+    testNooWidgets('dragging reports a value within min..max', (
+      tester,
+      theme,
+      c,
+    ) async {
+      var value = 10.0;
+      await pumpNoo(
+        tester,
+        StatefulBuilder(
+          builder: (context, setState) => SizedBox(
+            width: 300,
+            child: NooSlider(
+              value: value,
+              min: 0,
+              max: 40,
+              onChanged: (v) => setState(() => value = v),
+            ),
+          ),
+        ),
+        theme: theme,
+      );
+      await tester.drag(find.byType(Slider), const Offset(150, 0));
+      await tester.pump();
+      expect(value, greaterThan(10));
+      expect(value, lessThanOrEqualTo(40));
+    });
   });
 
   group('NooAvatar', () {

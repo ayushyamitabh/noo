@@ -5,6 +5,7 @@ import '../../providers/settings_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/design_tokens.dart';
 import '../noo/core/noo_segmented_control.dart';
+import '../noo/core/noo_slider.dart';
 import '../noo/core/noo_toggle.dart';
 import '../noo/lists/noo_settings_row.dart';
 import '../noo/nav/noo_nav_style.dart';
@@ -64,6 +65,7 @@ class SettingsAppearanceSection extends StatelessWidget {
                 onChanged: settings.setBottomBarFrosted,
               ),
             ),
+            if (settings.bottomBarFrosted) _FrostedGlassRow(settings: settings),
             _NavMenuStyleRow(settings: settings),
             NooSettingsRow(
               icon: LucideIcons.search,
@@ -247,6 +249,117 @@ class _BottomBarStyleRow extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// How strong the frosted-glass bottom bar looks: three presets for a quick
+/// pick, and the blur / opacity sliders they set, for anything in between.
+/// Only shown while frosted glass is on.
+class _FrostedGlassRow extends StatelessWidget {
+  final SettingsController settings;
+
+  const _FrostedGlassRow({required this.settings});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.nooColors;
+    return Material(
+      color: colors.surface,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: NooSpace.md,
+          vertical: 12,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(LucideIcons.sparkles, size: 20, color: colors.fg2),
+                const SizedBox(width: 14),
+                Text(
+                  'Frost strength',
+                  style: NooText.bodyL.copyWith(color: colors.fg1),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            NooSegmentedControl<FrostedGlassPreset?>(
+              fill: true,
+              // No segment selected once the sliders no longer match a preset.
+              value: settings.frostedPreset,
+              onChanged: (preset) {
+                if (preset != null) settings.setFrostedPreset(preset);
+              },
+              options: [
+                for (final preset in FrostedGlassPreset.values)
+                  NooSegmentOption<FrostedGlassPreset?>(
+                    value: preset,
+                    label: preset.label,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            _SliderLine(
+              label: 'Blur',
+              readout: settings.bottomBarFrostedBlur.round().toString(),
+              slider: NooSlider(
+                value: settings.bottomBarFrostedBlur,
+                min: minFrostedBlur,
+                max: maxFrostedBlur,
+                semanticLabel: 'Blur',
+                onChanged: settings.setFrostedBlur,
+              ),
+            ),
+            _SliderLine(
+              label: 'Opacity',
+              readout: '${(settings.bottomBarFrostedOpacity * 100).round()}%',
+              slider: NooSlider(
+                value: settings.bottomBarFrostedOpacity,
+                min: minFrostedOpacity,
+                max: maxFrostedOpacity,
+                semanticLabel: 'Opacity',
+                onChanged: settings.setFrostedOpacity,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SliderLine extends StatelessWidget {
+  final String label;
+  final String readout;
+  final Widget slider;
+
+  const _SliderLine({
+    required this.label,
+    required this.readout,
+    required this.slider,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.nooColors;
+    return Row(
+      children: [
+        SizedBox(
+          width: 64,
+          child: Text(label, style: NooText.body.copyWith(color: colors.fg2)),
+        ),
+        Expanded(child: slider),
+        SizedBox(
+          width: 44,
+          child: Text(
+            readout,
+            textAlign: TextAlign.end,
+            style: NooText.body.copyWith(color: colors.fg3),
+          ),
+        ),
+      ],
     );
   }
 }

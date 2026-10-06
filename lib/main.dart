@@ -564,6 +564,8 @@ class _MainShellViewState extends State<MainShellView> {
           style: navStyle,
           barStyle: bottomBarStyle,
           frosted: settings.bottomBarFrosted,
+          frostedBlur: settings.bottomBarFrostedBlur,
+          frostedOpacity: settings.bottomBarFrostedOpacity,
           tabs: pinnedTabs,
           selectedIndex: pinnedIndex,
           onSearchTap: showBottomBarSearch ? () => openSearch(context) : null,

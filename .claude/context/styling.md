@@ -86,7 +86,7 @@ Catalog:
 
 | Folder | Components |
 |---|---|
-| `core/` | `NooButton`, `NooFab`, `NooChip`, `NooSegmentedControl`, `NooToggle`, `NooSearchField`, `NooAvatar`, `NooBadge`, `NooProgressBar` |
+| `core/` | `NooButton`, `NooFab`, `NooChip`, `NooSegmentedControl`, `NooToggle`, `NooSlider`, `NooSearchField`, `NooAvatar`, `NooBadge`, `NooProgressBar` |
 | `lists/` | `NooGroupedList`, `NooSettingsRow`, `NooTabOrderRow`, `NooBanner`, `NooInfoNote` (tinted info callout; `SettingsSection(notice:)`), `NooSummaryCard`, `NooSelectionBar` |
 | `files/` | `NooFileKind` (spec §1.2 tiles; `NooFileKind.from(name:, mimeType:, isDirectory:)`), `NooFileTile`, `NooStatusIcon`/`NooSyncStatus`, `NooFileRow` (mobile 64px), `NooFileTableHeader`/`NooFileTableRow` (desktop), `NooSwipeAction` |
 | `media/` | `NooGridCard`, `NooPhotoTile` (video badge, selection), `NooPhotoGroupHeader`/`NooPhotoGrid` (sliver, or `.box`), `NooActivityItem`, `NooStatCard` |
@@ -255,9 +255,16 @@ blocks are noted where they matter:
   only the attached bar still has a distinct iOS row. A separate, orthogonal
   `SettingsController.bottomBarFrosted` toggle (Settings → Appearance →
   "Frosted glass bottom bar", off by default, both platforms and both bar
-  styles) swaps the bar's solid `surface` for a 0.72-alpha one over a
-  20-sigma `BackdropFilter` (same sigma as `FrostedGlassContainer`) and drops
-  `nooDialogShadow` (it would show through the glass). A frosted bar only
+  styles) swaps the bar's solid `surface` for a translucent one over a
+  `BackdropFilter` blur and drops
+  `nooDialogShadow` (it would show through the glass). Strength is user-set:
+  `FrostedGlassPreset` Less (blur 10 / opacity 0.88), Default (20 / 0.72, the
+  old fixed values) and More (32 / 0.55), plus Blur (0-40) and Opacity
+  (0.3-1.0) sliders (`NooSlider`, `core/`) in Settings -> Appearance, shown
+  only while frosted glass is on; both persist
+  (`ui_bottom_bar_frosted_blur`/`_opacity`) and reach the bar as
+  `NooBottomBar.frostedBlur`/`frostedOpacity`. No preset is highlighted once
+  the sliders are moved off all three. A frosted bar only
   reads as glass with content behind it, so the shell uses
   `NooBottomBar.drawsBehindBody(barStyle, frosted)` for `extendBody`, and
   `bottomBarClearance` (and Files' own trailing sliver) reserve the bar's
