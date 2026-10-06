@@ -1,0 +1,292 @@
+import Foundation
+import UserNotifications
+
+/// What a background upload/download task is, stored in the task's
+/// `taskDescription` so it's still known if the app was relaunched by the
+/// system to deliver the result.
+struct TransferTaskInfo: Codable {
+  enum Kind: String, Codable { case upload, download }
+
+  let kind: Kind
+  let batch: String
+  let name: String
+  let remoteFolder: String?
+  let stagedPath: String?
+}
+
+/// Running totals for one "upload these 3 files" / "download these 2 files"
+/// request, persisted so the one summary notification (and the Dart-side
+/// "folder changed" event) fires exactly once, on the last file, even across
+/// an app relaunch.
+struct TransferBatch: Codable {
+  let kind: TransferTaskInfo.Kind
+  let remoteFolder: String?
+  let total: Int
+  var succeeded: Int
+  var failed: Int
+
+  var finished: Int { succeeded + failed }
+}
+
+struct UploadFile {
+  let uri: String
+  let name: String
+}
+
+struct TransferError: LocalizedError {
+  let message: String
+  var errorDescription: String? { message }
+}
+
+/// Uploads and downloads on a background `URLSession`, so a transfer keeps
+/// going - and finishes - after the app is suspended or closed. The iOS
+/// counterpart of Android's `ShareUploadService`/`DownloadService`
+/// foreground services, behind the same Dart channels (`NativeServices`).
+///
+/// Uploads are one `PUT` per file straight to the account's WebDAV root
+/// (no chunking), from a staged copy in Caches - a background upload task
+/// needs a file that stays put, and the picker's temp file may not. Downloads
+/// land in `Documents/Downloads`, which is visible in the Files app
+/// (`UIFileSharingEnabled` + `LSSupportsOpeningDocumentsInPlace`).
+final class TransferManager: NSObject {
+  static let shared = TransferManager()
+  static let sessionIdentifier = "dev.ayushya.noo.transfers"
+
+  /// Called on the main thread when an upload batch ends with at least one
+  /// file uploaded: (remote folder, succeeded, failed).
+  var onUploadBatchFinished: ((String, Int, Int) -> Void)?
+
+  /// The system's completion handler from
+  /// `application(_:handleEventsForBackgroundURLSession:)`, called once the
+  /// session has delivered every pending event.
+  var backgroundCompletionHandler: (() -> Void)?
+
+  private let defaults = UserDefaults.standard
+  private let lock = NSLock()
+
+  private lazy var session: URLSession = {
+    let config = URLSessionConfiguration.background(withIdentifier: Self.sessionIdentifier)
+    config.sessionSendsLaunchEvents = true
+    config.isDiscretionary = false
+    config.waitsForConnectivity = true
+    return URLSession(configuration: config, delegate: self, delegateQueue: nil)
+  }()
+
+  /// Touch the session at launch so a system relaunch for finished
+  /// background transfers reconnects to them.
+  func reconnect() {
+    _ = session
+  }
+
+  // MARK: - Starting transfers
+
+  func startUpload(
+    serverUrl: String,
+    username: String,
+    authHeader: String,
+    files: [UploadFile],
+    remoteFolder: String
+  ) throws {
+    guard !files.isEmpty else { throw TransferError(message: "No files to upload.") }
+    let batch = UUID().uuidString
+    let stageDir = try Self.stagingDirectory().appendingPathComponent(batch, isDirectory: true)
+    try FileManager.default.createDirectory(at: stageDir, withIntermediateDirectories: true)
+
+    var tasks: [URLSessionUploadTask] = []
+    for (index, file) in files.enumerated() {
+      guard let source = URL(string: file.uri), source.isFileURL else {
+        throw TransferError(message: "Can't read \(file.name).")
+      }
+      let staged = stageDir.appendingPathComponent("\(index)-\(file.name)")
+      do {
+        try FileManager.default.copyItem(at: source, to: staged)
+      } catch {
+        throw TransferError(message: "Can't read \(file.name): \(error.localizedDescription)")
+      }
+      guard let url = WebDAV.fileURL(
+        serverUrl: serverUrl,
+        username: username,
+        remotePath: WebDAV.join(remoteFolder, file.name)
+      ) else {
+        throw TransferError(message: "Invalid server address.")
+      }
+      var request = URLRequest(url: url)
+      request.httpMethod = "PUT"
+      request.setValue(authHeader, forHTTPHeaderField: "Authorization")
+      if let modified = (try? FileManager.default.attributesOfItem(atPath: staged.path))?[.modificationDate] as? Date {
+        request.setValue(String(Int(modified.timeIntervalSince1970)), forHTTPHeaderField: "X-OC-Mtime")
+      }
+      let task = session.uploadTask(with: request, fromFile: staged)
+      task.taskDescription = Self.encode(
+        TransferTaskInfo(
+          kind: .upload, batch: batch, name: file.name,
+          remoteFolder: remoteFolder, stagedPath: staged.path
+        )
+      )
+      tasks.append(task)
+    }
+    saveBatch(
+      TransferBatch(kind: .upload, remoteFolder: remoteFolder, total: tasks.count, succeeded: 0, failed: 0),
+      id: batch
+    )
+    tasks.forEach { $0.resume() }
+  }
+
+  func startDownload(
+    serverUrl: String,
+    username: String,
+    authHeader: String,
+    items: [(path: String, name: String)]
+  ) throws {
+    guard !items.isEmpty else { throw TransferError(message: "No files to download.") }
+    let batch = UUID().uuidString
+    var tasks: [URLSessionDownloadTask] = []
+    for item in items {
+      guard let url = WebDAV.fileURL(serverUrl: serverUrl, username: username, remotePath: item.path) else {
+        throw TransferError(message: "Invalid server address.")
+      }
+      var request = URLRequest(url: url)
+      request.setValue(authHeader, forHTTPHeaderField: "Authorization")
+      let task = session.downloadTask(with: request)
+      task.taskDescription = Self.encode(
+        TransferTaskInfo(kind: .download, batch: batch, name: item.name, remoteFolder: nil, stagedPath: nil)
+      )
+      tasks.append(task)
+    }
+    saveBatch(
+      TransferBatch(kind: .download, remoteFolder: nil, total: tasks.count, succeeded: 0, failed: 0),
+      id: batch
+    )
+    tasks.forEach { $0.resume() }
+  }
+
+  // MARK: - Locations
+
+  private static func stagingDirectory() throws -> URL {
+    let caches = try FileManager.default.url(
+      for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true
+    )
+    return caches.appendingPathComponent("uploads", isDirectory: true)
+  }
+
+  static func downloadsDirectory() throws -> URL {
+    let documents = try FileManager.default.url(
+      for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true
+    )
+    let dir = documents.appendingPathComponent("Downloads", isDirectory: true)
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    return dir
+  }
+
+  // MARK: - Batch bookkeeping
+
+  private static func encode(_ info: TransferTaskInfo) -> String? {
+    (try? JSONEncoder().encode(info)).flatMap { String(data: $0, encoding: .utf8) }
+  }
+
+  private static func info(for task: URLSessionTask) -> TransferTaskInfo? {
+    task.taskDescription
+      .flatMap { $0.data(using: .utf8) }
+      .flatMap { try? JSONDecoder().decode(TransferTaskInfo.self, from: $0) }
+  }
+
+  private func key(_ id: String) -> String { "transfer.batch.\(id)" }
+
+  private func saveBatch(_ batch: TransferBatch, id: String) {
+    lock.lock()
+    defer { lock.unlock() }
+    if let data = try? JSONEncoder().encode(batch) { defaults.set(data, forKey: key(id)) }
+  }
+
+  /// Counts one file's outcome; fires the batch summary when it was the last.
+  private func record(_ info: TransferTaskInfo, success: Bool) {
+    lock.lock()
+    let storageKey = key(info.batch)
+    var batch =
+      (defaults.data(forKey: storageKey).flatMap { try? JSONDecoder().decode(TransferBatch.self, from: $0) })
+      ?? TransferBatch(kind: info.kind, remoteFolder: info.remoteFolder, total: 1, succeeded: 0, failed: 0)
+    if success { batch.succeeded += 1 } else { batch.failed += 1 }
+    let done = batch.finished >= batch.total
+    if done {
+      defaults.removeObject(forKey: storageKey)
+    } else if let data = try? JSONEncoder().encode(batch) {
+      defaults.set(data, forKey: storageKey)
+    }
+    lock.unlock()
+    if done { finish(batch) }
+  }
+
+  private func finish(_ batch: TransferBatch) {
+    let verb = batch.kind == .upload ? "upload" : "download"
+    let past = batch.kind == .upload ? "Uploaded" : "Downloaded"
+    let body: String
+    if batch.failed == 0 {
+      body = "\(past) \(Self.files(batch.succeeded))"
+    } else if batch.succeeded == 0 {
+      body = "Couldn't \(verb) \(Self.files(batch.failed))"
+    } else {
+      body = "\(past) \(Self.files(batch.succeeded)), \(batch.failed) failed"
+    }
+    notify(body)
+    if batch.kind == .upload, batch.succeeded > 0, let folder = batch.remoteFolder {
+      DispatchQueue.main.async { self.onUploadBatchFinished?(folder, batch.succeeded, batch.failed) }
+    }
+  }
+
+  private static func files(_ count: Int) -> String {
+    count == 1 ? "1 file" : "\(count) files"
+  }
+
+  private func notify(_ body: String) {
+    let content = UNMutableNotificationContent()
+    content.title = "Noo"
+    content.body = body
+    content.sound = .default
+    UNUserNotificationCenter.current().add(
+      UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+    )
+  }
+}
+
+// MARK: - URLSession delegates
+
+extension TransferManager: URLSessionDownloadDelegate {
+  func urlSession(
+    _ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL
+  ) {
+    guard let info = Self.info(for: downloadTask) else { return }
+    let status = (downloadTask.response as? HTTPURLResponse)?.statusCode ?? 0
+    guard (200..<300).contains(status) else {
+      record(info, success: false)
+      return
+    }
+    do {
+      let destination = LocalFiles.uniqueURL(in: try Self.downloadsDirectory(), name: info.name)
+      try FileManager.default.moveItem(at: location, to: destination)
+      record(info, success: true)
+    } catch {
+      record(info, success: false)
+    }
+  }
+
+  func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+    guard let info = Self.info(for: task) else { return }
+    switch info.kind {
+    case .upload:
+      if let staged = info.stagedPath { try? FileManager.default.removeItem(atPath: staged) }
+      let status = (task.response as? HTTPURLResponse)?.statusCode ?? 0
+      record(info, success: error == nil && (200..<300).contains(status))
+    case .download:
+      // A finished download was already counted in didFinishDownloadingTo;
+      // only a transport failure arrives here.
+      if error != nil { record(info, success: false) }
+    }
+  }
+
+  func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
+    DispatchQueue.main.async {
+      self.backgroundCompletionHandler?()
+      self.backgroundCompletionHandler = nil
+    }
+  }
+}

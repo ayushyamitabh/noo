@@ -53,6 +53,10 @@
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Noo uses Face ID to unlock the app and to protect hidden files.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

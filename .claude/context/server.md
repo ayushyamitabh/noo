@@ -816,10 +816,11 @@ files, 15 for folders), keeping the existing reshare bit, plus Remove access.
 
 The five `dev.ayushya.noo/*` channels (`share_intent`, `pick_intent`,
 `upload_service`, `download_service`, `sync_service`, plus their status
-`EventChannel`s) are implemented in Kotlin only; iOS has no handler for any
-of them yet, so every call there throws `MissingPluginException`.
-`lib/services/native_channel.dart` makes that safe until each one is built
-in Swift:
+`EventChannel`s) were written for Android in Kotlin. iOS implements
+`upload_service` (+ its status stream) and `download_service` so far
+(`ios/Runner/Native/`, see below); for the other three there's no handler, so
+calls throw `MissingPluginException`. `lib/services/native_channel.dart`
+makes that safe until each one is built in Swift:
 
 - `invokeIfAvailable` - a missing implementation returns null. For cold-start
   checks (`getInitialShare`, `getPickRequest`, `getSyncStatus`) and
@@ -839,6 +840,36 @@ side - the helpers only act on `MissingPluginException`.
 lives: `getExternalStorageDirectory()` on Android (what `SyncEngine.kt`
 writes), the app support directory elsewhere, because that call throws on
 iOS. `OfflineController` and `localSyncedFilePath` both go through it.
+### iOS upload/download (`ios/Runner/Native/`)
+
+- `NativeServices.swift` registers the channels from
+  `AppDelegate.didInitializeImplicitFlutterEngine` (via
+  `engineBridge.applicationRegistrar.messenger()`) and forwards
+  `startUpload`/`startDownload` to `TransferManager`; a batch's completion
+  goes back over `upload_service/status` so `FilesController` refreshes the
+  folder like on Android.
+- `TransferManager.swift` runs everything on one *background* `URLSession`
+  (`dev.ayushya.noo.transfers`, `sessionSendsLaunchEvents`), so transfers
+  finish after the app is suspended/closed; `AppDelegate` hands the system's
+  `handleEventsForBackgroundURLSession` completion handler to it and calls
+  `reconnect()` at launch. Each task carries its info in `taskDescription`
+  and its batch's running totals live in `UserDefaults`, so the one summary
+  local notification ("Uploaded 3 files") still fires after a relaunch.
+- Uploads: one `PUT` per file to `<server>/remote.php/dav/files/<user>/...`
+  from a staged copy in Caches (no chunking, so very large files are bound by
+  the server's single-request limit; an existing file with the same name is
+  overwritten). Sends `X-OC-Mtime`. Downloads: `GET` into
+  `Documents/Downloads`, with `UIFileSharingEnabled` +
+  `LSSupportsOpeningDocumentsInPlace` set so it shows in the Files app under
+  "On My iPhone > Noo"; a name clash becomes `a (1).txt`.
+- No progress notification (iOS can't update one from a background session
+  the way Android's foreground service does) and no cancel yet - only the
+  final summary. The Dart snackbar text still says "see the notification for
+  progress".
+- `WebDAV.swift` (URL building) and `LocalFiles.uniqueURL` are pure and
+  covered by `ios/RunnerTests` (`xcodebuild test -workspace
+  ios/Runner.xcworkspace -scheme Runner -destination 'platform=iOS
+  Simulator,id=<udid>'`).
+
 Not built on iOS yet: Share Extension (needs an App Group), the picker
-(File Provider), background uploads/downloads (`URLSession`), and sync
-(`BGTaskScheduler`) - see the iOS handoff notes.
+(File Provider), and sync (`BGTaskScheduler`) - see the iOS handoff notes.
