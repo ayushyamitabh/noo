@@ -1,3 +1,4 @@
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import '../../../theme/design_tokens.dart';
 import 'noo_nav_style.dart';
@@ -12,6 +13,11 @@ const double _kAttachedPillTop = 14;
 const double _kFloatingPillTop = 8;
 const double _kAndroidPillWidth = 56;
 const double _kAndroidPillHeight = 32;
+
+/// Frosted glass: the surface fill's opacity and the backdrop blur sigma -
+/// the same sigma [FrostedGlassContainer] uses for the media viewer chrome.
+const double _kFrostedAlpha = 0.72;
+const double _kFrostedSigma = 20;
 
 /// The mobile bottom bar (DESIGN_SYSTEM.md 3, "Mobile"; `iNav`/`aNav` in
 /// `Mobile Screen.dc.html`). Shows the 5 pinned tabs - which ones, and in
@@ -48,6 +54,13 @@ const double _kAndroidPillHeight = 32;
 /// body draws behind it - see `tab_state_slivers.dart`'s
 /// `bottomBarClearance`.
 ///
+/// [frosted] (Settings, Appearance) swaps the solid `surface` fill for a
+/// translucent one over a backdrop blur, on both bar styles and both nav
+/// styles, and drops [nooDialogShadow] (a shadow would show through the
+/// glass). It only reads as glass if content draws behind the bar, so the
+/// host `Scaffold` needs `extendBody: true` and each scrollable body needs
+/// the same trailing clearance floating does - see [drawsBehindBody].
+///
 /// [searchDestination]/[onSearchTap] (set together, from Settings'
 /// "Search in bottom bar" - see `DESIGN_SYSTEM.md`'s floating bottom bar
 /// entry) add a Search entry that's never highlighted (tapping it pushes
@@ -57,6 +70,7 @@ const double _kAndroidPillHeight = 32;
 class NooBottomBar extends StatelessWidget {
   final NooNavStyle style;
   final NooBottomBarStyle barStyle;
+  final bool frosted;
   final List<NooNavDestination> destinations;
   final int selectedIndex;
   final ValueChanged<int> onSelected;
@@ -67,6 +81,7 @@ class NooBottomBar extends StatelessWidget {
     super.key,
     required this.style,
     this.barStyle = NooBottomBarStyle.attached,
+    this.frosted = false,
     required this.destinations,
     required this.selectedIndex,
     required this.onSelected,
@@ -83,6 +98,12 @@ class NooBottomBar extends StatelessWidget {
     }
     return barStyle == NooBottomBarStyle.floating ? 64 : 80;
   }
+
+  /// Whether the host `Scaffold` must draw its body behind the bar
+  /// (`extendBody`) - true for floating (its transparent margin) and for any
+  /// frosted bar (there's nothing to blur otherwise).
+  static bool drawsBehindBody(NooBottomBarStyle barStyle, bool frosted) =>
+      frosted || barStyle == NooBottomBarStyle.floating;
 
   /// Gap between the floating bar's bottom edge and the safe area below it
   /// (itself inside the [SafeArea] that consumes the actual device inset).
@@ -111,17 +132,19 @@ class NooBottomBar extends StatelessWidget {
     final barHeight = NooBottomBar.rowHeight(style, barStyle);
 
     if (floating) {
-      final pill = Container(
+      final pillRadius = BorderRadius.circular(28);
+      final pillBox = Container(
         height: barHeight,
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          color: colors.surface,
+          color: _fill(colors),
           border: Border.all(color: colors.line),
-          borderRadius: BorderRadius.circular(28),
-          boxShadow: const [nooDialogShadow],
+          borderRadius: pillRadius,
+          boxShadow: frosted ? null : const [nooDialogShadow],
         ),
         child: row,
       );
+      final pill = frosted ? _blurred(pillBox, pillRadius) : pillBox;
       return SafeArea(
         top: false,
         child: Padding(
@@ -152,6 +175,7 @@ class NooBottomBar extends StatelessWidget {
                         destination: searchDestination!,
                         onTap: onSearchTap!,
                         size: barHeight,
+                        frosted: frosted,
                       ),
                     ],
                   ),
@@ -161,9 +185,9 @@ class NooBottomBar extends StatelessWidget {
       );
     }
 
-    return Container(
+    final bar = Container(
       decoration: BoxDecoration(
-        color: colors.surface,
+        color: _fill(colors),
         border: ios ? Border(top: BorderSide(color: colors.line)) : null,
       ),
       child: SafeArea(
@@ -171,7 +195,12 @@ class NooBottomBar extends StatelessWidget {
         child: SizedBox(height: barHeight, child: row),
       ),
     );
+    return frosted ? _blurred(bar, BorderRadius.zero) : bar;
   }
+
+  Color _fill(NooColors colors) => frosted
+      ? colors.surface.withValues(alpha: _kFrostedAlpha)
+      : colors.surface;
 
   Widget _buildIosRow({NooNavDestination? trailingSearch}) {
     return Row(
@@ -255,6 +284,16 @@ class NooBottomBar extends StatelessWidget {
   }
 }
 
+/// Clips [child] to [radius] and blurs whatever is drawn behind it - the
+/// frosted bar's backdrop. [child] supplies the translucent fill on top.
+Widget _blurred(Widget child, BorderRadius radius) => ClipRRect(
+  borderRadius: radius,
+  child: BackdropFilter(
+    filter: ImageFilter.blur(sigmaX: _kFrostedSigma, sigmaY: _kFrostedSigma),
+    child: child,
+  ),
+);
+
 /// The floating bar's own Search entry point, next to the pill rather than
 /// inside it - always fully round (see [NooBottomBar]'s doc comment),
 /// same fill/border as the pill so the two still read as one family.
@@ -262,11 +301,13 @@ class _SearchSatellite extends StatelessWidget {
   final NooNavDestination destination;
   final VoidCallback onTap;
   final double size;
+  final bool frosted;
 
   const _SearchSatellite({
     required this.destination,
     required this.onTap,
     required this.size,
+    required this.frosted,
   });
 
   @override
@@ -278,20 +319,27 @@ class _SearchSatellite extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: Container(
-          width: size,
-          height: size,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: colors.surface,
-            border: Border.all(color: colors.line),
-            shape: BoxShape.circle,
-            boxShadow: const [nooDialogShadow],
-          ),
-          child: Icon(destination.icon, size: 24, color: colors.fg1),
-        ),
+        child: _satelliteBody(colors),
       ),
     );
+  }
+
+  Widget _satelliteBody(NooColors colors) {
+    final disc = Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: frosted
+            ? colors.surface.withValues(alpha: _kFrostedAlpha)
+            : colors.surface,
+        border: Border.all(color: colors.line),
+        shape: BoxShape.circle,
+        boxShadow: frosted ? null : const [nooDialogShadow],
+      ),
+      child: Icon(destination.icon, size: 24, color: colors.fg1),
+    );
+    return frosted ? _blurred(disc, BorderRadius.circular(size / 2)) : disc;
   }
 }
 

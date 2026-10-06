@@ -25,6 +25,69 @@ void main() {
   setUpNooTests();
 
   group('NooBottomBar', () {
+    for (final style in NooNavStyle.values) {
+      for (final barStyle in NooBottomBarStyle.values) {
+        testNooWidgets(
+          '$style/$barStyle: frosted draws a backdrop blur, solid does not',
+          (tester, theme, c) async {
+            for (final frosted in [false, true]) {
+              await pumpNoo(
+                tester,
+                SizedBox(
+                  width: 360,
+                  height: 120,
+                  child: NooBottomBar(
+                    style: style,
+                    barStyle: barStyle,
+                    frosted: frosted,
+                    destinations: _destinations,
+                    selectedIndex: 0,
+                    onSelected: (_) {},
+                    searchDestination: const NooNavDestination(
+                      icon: LucideIcons.search,
+                      label: 'Search',
+                    ),
+                    onSearchTap: () {},
+                  ),
+                ),
+                theme: theme,
+              );
+              expect(
+                find.byType(BackdropFilter),
+                frosted ? findsWidgets : findsNothing,
+              );
+            }
+          },
+        );
+      }
+    }
+
+    test('drawsBehindBody: floating or frosted', () {
+      expect(
+        NooBottomBar.drawsBehindBody(NooBottomBarStyle.attached, false),
+        isFalse,
+      );
+      expect(
+        NooBottomBar.drawsBehindBody(NooBottomBarStyle.attached, true),
+        isTrue,
+      );
+      expect(
+        NooBottomBar.drawsBehindBody(NooBottomBarStyle.floating, false),
+        isTrue,
+      );
+    });
+
+    test('floating row height is the Android one on both nav styles', () {
+      expect(
+        NooBottomBar.rowHeight(NooNavStyle.ios, NooBottomBarStyle.floating),
+        64,
+      );
+      expect(
+        NooBottomBar.rowHeight(NooNavStyle.ios, NooBottomBarStyle.attached),
+        50,
+      );
+    });
+
     testNooWidgets('android: label sits below the icon, not beside it', (
       tester,
       theme,

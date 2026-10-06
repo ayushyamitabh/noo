@@ -97,19 +97,26 @@ Widget tabEmptySliver(
 /// attached] bars aren't drawn behind (no `Scaffold.extendBody`), so
 /// Scaffold already shrinks the body above them - this is then pure
 /// breathing room, not overlap prevention. [NooBottomBarStyle.floating]
-/// bars draw over an extended body instead, so nothing reserves space for
+/// and frosted bars (see [NooBottomBar.drawsBehindBody]) draw over an
+/// extended body instead, so nothing reserves space for
 /// them automatically: the clearance has to cover the bar's own footprint
 /// (see [NooBottomBar.rowHeight]/[NooBottomBar.floatingBottomMargin]) plus
 /// the safe-area inset below it, or the last row ends up hidden under it.
 double bottomBarClearance(BuildContext context) {
   final settings = context.watch<SettingsController>();
-  if (settings.bottomBarStyle == NooBottomBarStyle.attached) return 100;
+  final barStyle = settings.bottomBarStyle;
+  if (!NooBottomBar.drawsBehindBody(barStyle, settings.bottomBarFrosted)) {
+    return 100;
+  }
   final barHeight = NooBottomBar.rowHeight(
     NooLayout.navStyle(context),
-    NooBottomBarStyle.floating,
+    barStyle,
   );
+  final margin = barStyle == NooBottomBarStyle.floating
+      ? NooBottomBar.floatingBottomMargin
+      : 0;
   final safeBottom = MediaQuery.paddingOf(context).bottom;
-  return barHeight + NooBottomBar.floatingBottomMargin + safeBottom + 24;
+  return barHeight + margin + safeBottom + 24;
 }
 
 /// Bottom padding sliver so the last row/card clears the bottom nav/FAB -

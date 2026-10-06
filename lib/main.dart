@@ -36,7 +36,7 @@ import 'widgets/create_menu.dart';
 import 'widgets/noo/core/noo_avatar.dart';
 import 'widgets/noo/core/noo_button.dart';
 import 'widgets/noo/core/noo_fab.dart';
-import 'widgets/noo/nav/noo_nav_style.dart';
+import 'widgets/noo/nav/noo_bottom_bar.dart';
 import 'widgets/noo/nav/noo_sidebar.dart';
 import 'widgets/noo/nav/noo_toolbar.dart';
 import 'widgets/noo/noo_layout.dart';
@@ -526,8 +526,12 @@ class _MainShellViewState extends State<MainShellView> {
             settings.navMenuStyle == NooNavMenuStyle.drawer,
         // Floating needs the body to draw behind the bar's own transparent
         // margin (see NooBottomBarStyle's doc comment) instead of stopping
-        // short of it like attached does.
-        extendBody: bottomBarStyle == NooBottomBarStyle.floating,
+        // short of it like attached does; a frosted bar needs it too, or
+        // there'd be nothing behind it to blur.
+        extendBody: NooBottomBar.drawsBehindBody(
+          bottomBarStyle,
+          settings.bottomBarFrosted,
+        ),
         // Android-only extended Upload FAB - iOS uses the top bar's `plus`
         // instead (see AppTopBar). Stays mounted across every tab (picking
         // aside) and collapses to an icon-only circle off Files/Photos,
@@ -549,6 +553,7 @@ class _MainShellViewState extends State<MainShellView> {
         bottomNavigationBar: BottomNavBar(
           style: navStyle,
           barStyle: bottomBarStyle,
+          frosted: settings.bottomBarFrosted,
           tabs: pinnedTabs,
           selectedIndex: pinnedIndex,
           onSearchTap: showBottomBarSearch ? () => openSearch(context) : null,

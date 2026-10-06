@@ -38,6 +38,7 @@ class SettingsController extends ChangeNotifier {
   static const _prefSwipeRightAction = 'ui_swipe_right_action';
   static const _prefFabStyle = 'ui_fab_style';
   static const _prefBottomBarStyle = 'ui_bottom_bar_style';
+  static const _prefBottomBarFrosted = 'ui_bottom_bar_frosted';
   static const _prefNavMenuStyle = 'ui_nav_menu_style';
   static const _prefSearchInBottomBar = 'ui_search_in_bottom_bar';
   static const _prefAmoledDark = 'ui_amoled_dark';
@@ -51,6 +52,7 @@ class SettingsController extends ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.system;
   NooBottomBarStyle _bottomBarStyle = NooBottomBarStyle.attached;
   NooNavMenuStyle _navMenuStyle = NooNavMenuStyle.drawer;
+  bool _bottomBarFrosted = false;
   bool _searchInBottomBar = false;
   bool _useDynamicColor = true;
   bool _amoledDark = false;
@@ -95,6 +97,7 @@ class SettingsController extends ChangeNotifier {
   Color get seedColor => _seedColor;
   ThemeMode get themeMode => _themeMode;
   NooBottomBarStyle get bottomBarStyle => _bottomBarStyle;
+  bool get bottomBarFrosted => _bottomBarFrosted;
   NooNavMenuStyle get navMenuStyle => _navMenuStyle;
   bool get searchInBottomBar => _searchInBottomBar;
   bool get useDynamicColor => _useDynamicColor;
@@ -155,6 +158,8 @@ class SettingsController extends ChangeNotifier {
           orElse: () => _navMenuStyle,
         );
       }
+      _bottomBarFrosted =
+          prefs.getBool(_prefBottomBarFrosted) ?? _bottomBarFrosted;
       _searchInBottomBar =
           prefs.getBool(_prefSearchInBottomBar) ?? _searchInBottomBar;
       _useDynamicColor =
@@ -311,6 +316,13 @@ class SettingsController extends ChangeNotifier {
     _bottomBarStyle = style;
     notifyListeners();
     _prefsFuture.then((p) => p.setString(_prefBottomBarStyle, style.name));
+  }
+
+  void setBottomBarFrosted(bool value) {
+    if (_bottomBarFrosted == value) return;
+    _bottomBarFrosted = value;
+    notifyListeners();
+    _prefsFuture.then((p) => p.setBool(_prefBottomBarFrosted, value));
   }
 
   void setNavMenuStyle(NooNavMenuStyle style) {

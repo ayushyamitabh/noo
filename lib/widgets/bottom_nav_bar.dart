@@ -16,6 +16,7 @@ import 'noo/nav/noo_bottom_bar.dart';
 class BottomNavBar extends StatelessWidget {
   final NooNavStyle style;
   final NooBottomBarStyle barStyle;
+  final bool frosted;
   final List<AppTab> tabs;
   final int selectedIndex;
   final ValueChanged<int> onDestinationSelected;
@@ -25,6 +26,7 @@ class BottomNavBar extends StatelessWidget {
     super.key,
     required this.style,
     this.barStyle = NooBottomBarStyle.attached,
+    this.frosted = false,
     required this.tabs,
     required this.selectedIndex,
     required this.onDestinationSelected,
@@ -36,6 +38,7 @@ class BottomNavBar extends StatelessWidget {
     return NooBottomBar(
       style: style,
       barStyle: barStyle,
+      frosted: frosted,
       destinations: [
         for (final tab in tabs)
           NooNavDestination(icon: tab.icon, label: tab.label),
