@@ -53,6 +53,17 @@ class SettingsAppearanceSection extends StatelessWidget {
           children: [
             _ThemeRow(settings: settings),
             _BottomBarStyleRow(settings: settings),
+            NooSettingsRow(
+              icon: LucideIcons.glassWater,
+              label: const Text('Frosted glass bottom bar'),
+              subtitle: const Text(
+                'A translucent, blurred bottom bar - content scrolls behind it',
+              ),
+              trailing: NooToggle(
+                checked: settings.bottomBarFrosted,
+                onChanged: settings.setBottomBarFrosted,
+              ),
+            ),
             _NavMenuStyleRow(settings: settings),
             NooSettingsRow(
               icon: LucideIcons.search,

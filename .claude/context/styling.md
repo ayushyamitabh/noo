@@ -233,7 +233,16 @@ blocks are noted where they matter:
   that constant's doc comment) instead of edge to edge (no opacity/blur knob
   either). `floating` ignores `NooNavStyle` and always uses the Android row
   (icon-only idle tabs, sliding pill, 64px), so iOS matches Android there;
-  only the attached bar still has a distinct iOS row. The host `Scaffold` needs `extendBody: true` while it's active
+  only the attached bar still has a distinct iOS row. A separate, orthogonal
+  `SettingsController.bottomBarFrosted` toggle (Settings → Appearance →
+  "Frosted glass bottom bar", off by default, both platforms and both bar
+  styles) swaps the bar's solid `surface` for a 0.72-alpha one over a
+  20-sigma `BackdropFilter` (same sigma as `FrostedGlassContainer`) and drops
+  `nooDialogShadow` (it would show through the glass). A frosted bar only
+  reads as glass with content behind it, so the shell uses
+  `NooBottomBar.drawsBehindBody(barStyle, frosted)` for `extendBody`, and
+  `bottomBarClearance` (and Files' own trailing sliver) reserve the bar's
+  footprint for attached+frosted too, not just floating. The host `Scaffold` needs `extendBody: true` while it's active
   (`main.dart` already wires this off `SettingsController.bottomBarStyle`),
   which also means every tab's own scrollable list has to reserve enough
   bottom padding to clear the bar - nothing does that automatically once the

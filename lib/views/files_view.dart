@@ -837,10 +837,13 @@ class _FilesViewState extends State<FilesView> {
         ),
       // List/grid/table above only pad NooSpace.lg at the bottom - plenty
       // once Scaffold shrinks the body above an attached bar, but floating
-      // draws the body behind the bar instead, so it needs the bar's own
-      // footprint added on top or the last row ends up under it.
-      if (context.watch<SettingsController>().bottomBarStyle ==
-          NooBottomBarStyle.floating)
+      // draws the body behind the bar instead (as does a frosted bar), so it
+      // needs the bar's own footprint added on top or the last row ends up
+      // under it.
+      if (NooBottomBar.drawsBehindBody(
+        context.watch<SettingsController>().bottomBarStyle,
+        context.watch<SettingsController>().bottomBarFrosted,
+      ))
         SliverToBoxAdapter(
           child: SizedBox(height: bottomBarClearance(context)),
         ),
