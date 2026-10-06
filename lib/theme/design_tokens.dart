@@ -139,11 +139,20 @@ class NooColors extends ThemeExtension<NooColors> {
   /// paints it, not painted directly - using it as-is for a sheet/dialog's
   /// `barrierColor` hid the screen behind completely instead of dimming it,
   /// so this uses the fixed palette's already-translucent scrim instead.
+  ///
+  /// `surface` (cards, bars, rows) has to read as lighter than `bg`, like
+  /// the fixed palettes' white-on-beige / lifted-on-near-black. In light
+  /// mode `surfaceContainerLow` is a hair *darker* than the OS-provided
+  /// `surface` that [bg] uses, so cards (the selection bar, list rows)
+  /// vanished into the page; `surfaceContainerLowest` (white) doesn't. Dark
+  /// mode uses `surfaceContainer` rather than `...Low` for a bigger step
+  /// off the page.
   factory NooColors.fromDynamicScheme(ColorScheme cs) {
-    final fixed = cs.brightness == Brightness.dark ? dark : light;
+    final dark = cs.brightness == Brightness.dark;
+    final fixed = dark ? NooColors.dark : NooColors.light;
     return NooColors(
       bg: cs.surface,
-      surface: cs.surfaceContainerLow,
+      surface: dark ? cs.surfaceContainer : cs.surfaceContainerLowest,
       surface2: cs.surfaceContainerHigh,
       surface3: cs.surfaceContainerHighest,
       line: cs.outlineVariant,

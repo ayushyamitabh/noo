@@ -74,6 +74,30 @@ void main() {
     });
   });
 
+  group('NooColors.fromDynamicScheme surfaces', () {
+    for (final brightness in Brightness.values) {
+      test('cards are clearly lighter than the page (${brightness.name})', () {
+        // The OS palette overrides `surface` (what `bg` maps to) but not the
+        // seeded container roles - mimic that mismatch.
+        final seeded = ColorScheme.fromSeed(
+          seedColor: const Color(0xFF3F6B8F),
+          brightness: brightness,
+        );
+        final os = seeded.copyWith(
+          surface: brightness == Brightness.light
+              ? const Color(0xFFF7F9FC)
+              : const Color(0xFF101417),
+        );
+        final c = NooColors.fromDynamicScheme(os);
+        // WCAG-style contrast ratio between the card and the page.
+        final hi = c.surface.computeLuminance();
+        final lo = c.bg.computeLuminance();
+        expect(hi, greaterThan(lo));
+        expect((hi + 0.05) / (lo + 0.05), greaterThan(1.04));
+      });
+    }
+  });
+
   group('NooAvatar', () {
     testNooWidgets('current user uses accent-soft/accent-text', (
       tester,
