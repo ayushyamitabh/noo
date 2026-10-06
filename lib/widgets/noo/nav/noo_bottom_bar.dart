@@ -26,6 +26,9 @@ const double _kAndroidPillHeight = 32;
 ///   56x32 accent-soft pill that slides between tabs as selection moves,
 ///   rather than popping in/out on the destination item itself.
 ///
+/// [NooBottomBarStyle.floating] ignores [style] and always uses the Android
+/// row below, so iOS gets the same icon-only idle tabs.
+///
 /// [barStyle] (user-configurable in Settings, Appearance) picks between
 /// that edge-to-edge [NooBottomBarStyle.attached] bar and
 /// [NooBottomBarStyle.floating] - inset 16px from both side edges, 28px
@@ -75,7 +78,9 @@ class NooBottomBar extends StatelessWidget {
   /// scrollable body sharing the same `Scaffold` can reserve exactly this
   /// much clearance (see the class doc comment) instead of guessing.
   static double rowHeight(NooNavStyle style, NooBottomBarStyle barStyle) {
-    if (style == NooNavStyle.ios) return 50;
+    if (style == NooNavStyle.ios && barStyle != NooBottomBarStyle.floating) {
+      return 50;
+    }
     return barStyle == NooBottomBarStyle.floating ? 64 : 80;
   }
 
@@ -86,8 +91,10 @@ class NooBottomBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.nooColors;
-    final ios = style == NooNavStyle.ios;
     final floating = barStyle == NooBottomBarStyle.floating;
+    // Floating always gets the Android row (icon-only idle tabs, sliding
+    // pill) - iOS's icon-over-label row doesn't fit a pill that short.
+    final ios = style == NooNavStyle.ios && !floating;
     final hasSearch = searchDestination != null && onSearchTap != null;
     // Attached folds Search into the row itself (last item); floating
     // gives it a separate satellite circle instead (built below), so the
