@@ -10,6 +10,7 @@ import '../models/saved_account.dart';
 import '../providers/files_controller.dart';
 import '../providers/session_controller.dart';
 import '../providers/sync_status_controller.dart';
+import 'native_channel.dart';
 
 /// A snapshot of native device-sync status - see `SyncStatusBus.kt` (the
 /// in-process pub/sub it mirrors) and `MainActivity.kt`'s `syncStatusMap`.
@@ -110,7 +111,7 @@ class SyncService {
           await cancelAccount(account.id);
           continue;
         }
-        await _channel.invokeMethod('reschedule', {
+        await invokeIfAvailable(_channel, 'reschedule', {
           'accountId': account.id,
           'serverUrl': account.serverUrl,
           'username': account.username,
@@ -132,7 +133,7 @@ class SyncService {
   /// Stops [accountId]'s periodic job (the account was removed, or has
   /// nothing left to sync).
   static Future<void> cancelAccount(String accountId) async {
-    await _channel.invokeMethod('cancel', {'accountId': accountId});
+    await invokeIfAvailable(_channel, 'cancel', {'accountId': accountId});
   }
 
   /// Runs a one-off sync pass immediately, independent of the periodic
@@ -158,7 +159,7 @@ class SyncService {
     }
 
     final paths = sync.syncEverything ? ['/'] : sync.syncedPaths;
-    await _channel.invokeMethod('syncNow', {
+    await invokeOrExplain(_channel, 'syncNow', 'Syncing', {
       'accountId': accountId,
       'serverUrl': session.serverUrl,
       'username': session.username,
@@ -178,7 +179,8 @@ class SyncService {
   /// app start - the native bus only knows an account once a sync pass has
   /// run in this process.
   static Future<SyncStatusSnapshot> getStatus(String? accountId) async {
-    final result = await _channel.invokeMethod<Map<dynamic, dynamic>>(
+    final result = await invokeIfAvailable<Map<dynamic, dynamic>>(
+      _channel,
       'getSyncStatus',
       {'accountId': accountId},
     );
@@ -196,11 +198,10 @@ class SyncService {
   /// (`SyncStatusController`), so sync badges stopped updating until the app
   /// was restarted. This is a broadcast stream, so any number of Dart
   /// listeners share the one native subscription.
-  static final Stream<SyncStatusSnapshot> statusStream = _statusChannel
-      .receiveBroadcastStream()
-      .map(
-        (event) => SyncStatusSnapshot.fromMap(event as Map<dynamic, dynamic>),
-      );
+  static final Stream<SyncStatusSnapshot> statusStream = quietEvents(
+    _statusChannel,
+    (event) => SyncStatusSnapshot.fromMap(event as Map<dynamic, dynamic>),
+  );
 
   /// In-app conflict resolution (the header's "Keep local"/"Use server"
   /// buttons) - shares the exact same native `ConflictResolveWorker`
@@ -213,7 +214,7 @@ class SyncService {
   ) async {
     final authHeader = session.service?.authHeaders['Authorization'];
     if (authHeader == null) throw Exception('Not logged in.');
-    await _channel.invokeMethod('resolveConflict', {
+    await invokeOrExplain(_channel, 'resolveConflict', 'Resolving conflicts', {
       'accountId': conflict.accountId,
       'serverUrl': session.serverUrl,
       'username': session.username,
@@ -236,10 +237,21 @@ class SyncService {
   ) async {
     final accountId = session.activeAccountId;
     if (accountId == null) return;
-    await _channel.invokeMethod('removeLocalSync', {
+    await invokeIfAvailable(_channel, 'removeLocalSync', {
       'accountId': accountId,
       'path': path,
     });
+  }
+
+  /// Where the `sync/<accountId>/...` mirror lives: Android's app-specific
+  /// external files dir (what `SyncEngine.kt` writes to); everywhere else -
+  /// iOS has no external storage, `getExternalStorageDirectory` throws
+  /// there - the app's private support directory.
+  static Future<Directory?> baseDirectory() async {
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return getExternalStorageDirectory();
+    }
+    return getApplicationSupportDirectory();
   }
 
   /// The deterministic local mirror path for [remoteItemPath] under
@@ -251,7 +263,7 @@ class SyncService {
     String accountId,
     String remoteItemPath,
   ) async {
-    final base = await getExternalStorageDirectory();
+    final base = await baseDirectory();
     if (base == null) return null;
     final relPath = remoteItemPath.startsWith('/')
         ? remoteItemPath.substring(1)

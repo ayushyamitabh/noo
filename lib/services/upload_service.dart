@@ -56,7 +56,7 @@ class UploadService {
           .toList(),
     );
 
-    await _channel.invokeMethod('startUpload', {
+    await invokeOrExplain(_channel, 'startUpload', 'Uploading', {
       ...args,
       'files': filesJson,
       'remoteFolder': files.currentFolderPath,
@@ -70,7 +70,8 @@ class UploadService {
   /// deliberately: see `SyncService.statusStream`'s identical doc comment -
   /// `EventChannel.receiveBroadcastStream()` opens its own native
   /// subscription per call, and the native side only keeps the latest one.
-  static final Stream<UploadCompletion> completions = _statusChannel
-      .receiveBroadcastStream()
-      .map((event) => UploadCompletion.fromMap(event as Map<dynamic, dynamic>));
+  static final Stream<UploadCompletion> completions = quietEvents(
+    _statusChannel,
+    (event) => UploadCompletion.fromMap(event as Map<dynamic, dynamic>),
+  );
 }

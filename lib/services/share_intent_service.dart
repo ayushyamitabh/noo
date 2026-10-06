@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'native_channel.dart';
 
 /// A file shared to Noo from another app's "Share to..." sheet, before its
 /// bytes have been touched - just the `content://` Uri and whatever cheap
@@ -40,7 +41,8 @@ class ShareIntentService {
   /// Whatever was shared to launch the app cold (empty if it was launched
   /// normally, not via a share).
   static Future<List<SharedFileRef>> getInitialShare() async {
-    final result = await _methodChannel.invokeMethod<List<dynamic>>(
+    final result = await invokeIfAvailable<List<dynamic>>(
+      _methodChannel,
       'getInitialShare',
     );
     return (result ?? [])
@@ -51,7 +53,7 @@ class ShareIntentService {
 
   /// Emits whenever another share arrives while the app is already running.
   static Stream<List<SharedFileRef>> get onNewShare {
-    return _newShareChannel.receiveBroadcastStream().map((event) {
+    return quietEvents(_newShareChannel, (event) {
       return (event as List<dynamic>)
           .cast<Map<dynamic, dynamic>>()
           .map(SharedFileRef.fromMap)
