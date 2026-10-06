@@ -34,13 +34,13 @@ void main() {
         await tester.tap(find.byIcon(LucideIcons.layers));
         await tester.pumpAndSettle();
         expect(value, HiddenFilesFilter.include);
-        expect(find.text('All + hidden'), findsOneWidget);
+        expect(find.text('All'), findsOneWidget);
       },
     );
   });
 
   group('StorageScopeRow', () {
-    testNooWidgets('offers cloud only / only external / all + external', (
+    testNooWidgets('offers cloud only / only external / all', (
       tester,
       theme,
       c,
@@ -70,7 +70,7 @@ void main() {
       await tester.tap(find.byIcon(LucideIcons.layers));
       await tester.pumpAndSettle();
       expect(value, StorageScope.all);
-      expect(find.text('All + external'), findsOneWidget);
+      expect(find.text('All'), findsOneWidget);
     });
   });
 }
