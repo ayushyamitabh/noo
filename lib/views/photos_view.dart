@@ -15,6 +15,7 @@ import '../providers/settings_controller.dart';
 import '../services/download_service.dart';
 import '../theme/design_tokens.dart';
 import '../widgets/details/details_sheet.dart';
+import '../widgets/filter_mode_rows.dart';
 import '../widgets/noo/core/noo_button.dart';
 import '../widgets/noo/core/noo_chip.dart';
 import '../widgets/noo/core/noo_segmented_control.dart';
@@ -404,7 +405,7 @@ class _PhotosViewState extends State<PhotosView> {
     final filtersActive =
         _typeFilter != _PhotoTypeFilter.all ||
         photos.showFavoritesOnly ||
-        photos.showHidden ||
+        photos.hiddenFilter != HiddenFilesFilter.hide ||
         files.storageScope != StorageScope.cloud;
 
     // A plain Row, not a horizontally-scrolling one - see
@@ -559,25 +560,17 @@ class _PhotosViewState extends State<PhotosView> {
                         onChanged: (_) => photos.toggleFavoritesFilter(),
                       ),
                     ),
-                    NooSettingsRow(
-                      icon: LucideIcons.eye,
-                      label: const Text('Show hidden files'),
-                      trailing: NooToggle(
-                        checked: photos.showHidden,
-                        onChanged: (_) => photos.toggleShowHidden(),
-                      ),
-                    ),
-                    NooSettingsRow(
-                      icon: LucideIcons.hardDrive,
-                      label: const Text('External storage'),
-                      trailing: NooToggle(
-                        checked: files.storageScope == StorageScope.external,
-                        onChanged: (external) => files.setStorageScope(
-                          external ? StorageScope.external : StorageScope.cloud,
-                        ),
-                      ),
-                    ),
                   ],
+                ),
+                const SizedBox(height: 22),
+                HiddenFilesFilterRow(
+                  value: photos.hiddenFilter,
+                  onChanged: photos.setHiddenFilter,
+                ),
+                const SizedBox(height: 22),
+                StorageScopeRow(
+                  value: files.storageScope,
+                  onChanged: files.setStorageScope,
                 ),
               ],
             ),

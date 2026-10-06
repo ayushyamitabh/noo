@@ -5,7 +5,7 @@ import '../providers/files_controller.dart';
 import '../theme/design_tokens.dart';
 import 'noo/core/noo_chip.dart';
 import 'noo/core/noo_segmented_control.dart';
-import 'noo/core/noo_toggle.dart';
+import 'filter_mode_rows.dart';
 import 'noo/lists/noo_grouped_list.dart';
 import 'noo/lists/noo_settings_row.dart';
 import 'noo/overlays/noo_sheet.dart';
@@ -54,7 +54,7 @@ class FilesControlsRow extends StatelessWidget {
     final files = context.watch<FilesController>();
     final filtersActive =
         files.filesTypeFilter != FilesTypeFilter.all ||
-        files.showHiddenFiles ||
+        files.hiddenFilter != HiddenFilesFilter.hide ||
         (showStorageScope && files.storageScope != StorageScope.cloud);
 
     return SizedBox(
@@ -196,29 +196,17 @@ class FilesControlsRow extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 22),
-              NooGroupedList(
-                children: [
-                  NooSettingsRow(
-                    icon: LucideIcons.eye,
-                    label: const Text('Show hidden files'),
-                    trailing: NooToggle(
-                      checked: files.showHiddenFiles,
-                      onChanged: (_) => files.toggleShowHiddenFiles(),
-                    ),
-                  ),
-                  if (showStorageScope)
-                    NooSettingsRow(
-                      icon: LucideIcons.hardDrive,
-                      label: const Text('External storage'),
-                      trailing: NooToggle(
-                        checked: files.storageScope == StorageScope.external,
-                        onChanged: (external) => files.setStorageScope(
-                          external ? StorageScope.external : StorageScope.cloud,
-                        ),
-                      ),
-                    ),
-                ],
+              HiddenFilesFilterRow(
+                value: files.hiddenFilter,
+                onChanged: files.setHiddenFilter,
               ),
+              if (showStorageScope) ...[
+                const SizedBox(height: 22),
+                StorageScopeRow(
+                  value: files.storageScope,
+                  onChanged: files.setStorageScope,
+                ),
+              ],
             ],
           ),
         ),
