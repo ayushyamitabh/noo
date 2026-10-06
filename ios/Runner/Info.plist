@@ -57,6 +57,8 @@
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
+	<key>NooKeychainAccessGroup</key>
+	<string>$(AppIdentifierPrefix)dev.ayushya.noo.shared</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Noo uses Face ID to unlock the app and to protect hidden files.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

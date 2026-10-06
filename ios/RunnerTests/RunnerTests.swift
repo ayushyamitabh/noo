@@ -97,4 +97,92 @@ class RunnerTests: XCTestCase {
     try SharedInbox.append([], in: root)
     XCTAssertEqual(SharedInbox.consume(in: root), [])
   }
+
+  // MARK: - DavFolderParser (Share Extension folder picker)
+
+  private func multistatus(_ responses: [(href: String, collection: Bool)]) -> Data {
+    let body = responses.map { r in
+      """
+      <d:response><d:href>\(r.href)</d:href><d:propstat><d:prop>\
+      <d:resourcetype>\(r.collection ? "<d:collection/>" : "")</d:resourcetype>\
+      </d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+      """
+    }.joined()
+    return Data(
+      "<?xml version=\"1.0\"?><d:multistatus xmlns:d=\"DAV:\">\(body)</d:multistatus>".utf8)
+  }
+
+  func testFoldersListsOnlyChildFoldersSortedWithoutHidden() {
+    let xml = multistatus([
+      ("/remote.php/dav/files/alice/Docs/", true),
+      ("/remote.php/dav/files/alice/Docs/zeta/", true),
+      ("/remote.php/dav/files/alice/Docs/Tax%20Forms/", true),
+      ("/remote.php/dav/files/alice/Docs/note.txt", false),
+      ("/remote.php/dav/files/alice/Docs/.git/", true),
+    ])
+    XCTAssertEqual(
+      DavFolderParser.folders(from: xml, excluding: "/Docs"),
+      [DavFolder(name: "Tax Forms", path: "/Docs/Tax Forms"), DavFolder(name: "zeta", path: "/Docs/zeta")])
+    XCTAssertEqual(
+      DavFolderParser.folders(from: xml, excluding: "/Docs", includeHidden: true).map(\.name),
+      [".git", "Tax Forms", "zeta"])
+  }
+
+  func testFoldersAtRootAndUnderServerSubPath() {
+    let xml = multistatus([
+      ("/nextcloud/remote.php/dav/files/bob/", true),
+      ("/nextcloud/remote.php/dav/files/bob/Photos/", true),
+    ])
+    XCTAssertEqual(
+      DavFolderParser.folders(from: xml, excluding: "/"),
+      [DavFolder(name: "Photos", path: "/Photos")])
+  }
+
+  func testRelativePath() {
+    XCTAssertEqual(DavFolderParser.relativePath(fromHref: "/remote.php/dav/files/a/B%20C/D/"), "/B C/D")
+    XCTAssertEqual(DavFolderParser.relativePath(fromHref: "/remote.php/dav/files/a/"), "/")
+    XCTAssertNil(DavFolderParser.relativePath(fromHref: "/somewhere/else"))
+  }
+
+  func testFoldersIgnoresGarbage() {
+    XCTAssertEqual(DavFolderParser.folders(from: Data("not xml".utf8), excluding: "/"), [])
+  }
+
+  // MARK: - Shared account (Keychain group shared with the extension)
+
+  func testSharedAccountRoundTripsThroughTheKeychain() throws {
+    let account = SharedAccount(
+      serverUrl: "https://cloud.example.com", username: "alice",
+      authHeader: "Basic YWxpY2U6c2VjcmV0", displayName: "alice@cloud.example.com")
+    addTeardownBlock { SharedAccountStore.clear() }
+
+    SharedAccountStore.clear()
+    XCTAssertNil(SharedAccountStore.load())
+    try SharedAccountStore.save(account)
+    XCTAssertEqual(SharedAccountStore.load(), account)
+
+    let replacement = SharedAccount(
+      serverUrl: "https://other.example.org", username: "bob", authHeader: "Basic Ym9i", displayName: "bob")
+    try SharedAccountStore.save(replacement)
+    XCTAssertEqual(SharedAccountStore.load(), replacement, "saving replaces, never duplicates")
+
+    SharedAccountStore.clear()
+    XCTAssertNil(SharedAccountStore.load())
+  }
+
+  // MARK: - TransferBatchStore
+
+  func testBatchSummaryFiresOnlyOnTheLastFile() {
+    let batchId = UUID().uuidString
+    TransferBatchStore.save(
+      TransferBatch(kind: .upload, remoteFolder: "/Docs", total: 3, succeeded: 0, failed: 0), id: batchId)
+    let info = TransferTaskInfo(kind: .upload, batch: batchId, name: "a", remoteFolder: "/Docs", stagedPath: nil)
+
+    XCTAssertNil(TransferBatchStore.record(info, success: true))
+    XCTAssertNil(TransferBatchStore.record(info, success: false))
+    let finished = TransferBatchStore.record(info, success: true)
+    XCTAssertEqual(finished?.succeeded, 2)
+    XCTAssertEqual(finished?.failed, 1)
+    XCTAssertEqual(finished?.remoteFolder, "/Docs")
+  }
 }

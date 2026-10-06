@@ -1,66 +1,79 @@
+import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 import UserNotifications
 
-/// "Share to Noo": copies whatever was shared into the App Group container
-/// (`SharedInbox`) and finishes. The extension can't pick a destination or
-/// upload - it has no session and a tight memory/time budget - so the app
-/// does that when it next opens, through its existing destination picker. A
-/// notification tells the user to open it, because an extension can't launch
-/// its host app.
+/// "Share to Noo". Like Reminders' or Notes' share sheet, the destination is
+/// chosen *inside* the sheet - an extension can't open its host app - so this
+/// shows a folder picker, then starts a background upload and closes:
+///
+/// 1. Copies whatever was shared into the App Group (`SharedInbox`).
+/// 2. Reads the signed-in account the app left in the shared Keychain
+///    (`SharedAccountStore`) and lists folders over WebDAV (`DavClient`).
+/// 3. "Upload" queues the files on a background session that outlives this
+///    process (`ShareUpload`); the app is relaunched to finish and notify.
+///
+/// With no account, or if the user prefers, the files are instead left in the
+/// inbox for the app to offer its own destination picker next time it opens
+/// (with a notification saying so).
 final class ShareViewController: UIViewController {
-  private let label = UILabel()
-  private let spinner = UIActivityIndicatorView(style: .large)
+  private var model: ShareModel!
+  private var batchDirectory: URL?
 
   override func viewDidLoad() {
     super.viewDidLoad()
-    view.backgroundColor = .systemBackground
-    label.text = "Saving to Noo…"
-    label.font = .preferredFont(forTextStyle: .headline)
-    label.textAlignment = .center
-    label.numberOfLines = 0
-    spinner.startAnimating()
+    model = ShareModel(account: SharedAccountStore.load())
+    model.onUpload = { [weak self] in self?.upload() }
+    model.onSaveForLater = { [weak self] in self?.saveForLater() }
+    model.onCancel = { [weak self] in self?.cancel() }
 
-    let stack = UIStackView(arrangedSubviews: [spinner, label])
-    stack.axis = .vertical
-    stack.spacing = 16
-    stack.alignment = .center
-    stack.translatesAutoresizingMaskIntoConstraints = false
-    view.addSubview(stack)
+    let host = UIHostingController(rootView: SharePickerView(model: model))
+    addChild(host)
+    host.view.translatesAutoresizingMaskIntoConstraints = false
+    view.addSubview(host.view)
     NSLayoutConstraint.activate([
-      stack.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-      stack.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-      stack.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 24),
-      stack.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -24),
+      host.view.topAnchor.constraint(equalTo: view.topAnchor),
+      host.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+      host.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+      host.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
     ])
+    host.didMove(toParent: self)
 
-    Task { await importSharedItems() }
+    Task { await prepare() }
   }
 
-  private func importSharedItems() async {
-    guard let root = AppGroup.containerURL else {
-      return finish(message: "Noo isn't set up to receive files yet.", saved: 0)
-    }
-    let providers = (extensionContext?.inputItems as? [NSExtensionItem])?
-      .flatMap { $0.attachments ?? [] } ?? []
+  // MARK: - Importing
 
-    var saved: [SharedItem] = []
+  @MainActor
+  private func prepare() async {
+    guard let root = AppGroup.containerURL else {
+      model.stage = .failed("Noo isn't set up to receive files yet.")
+      return
+    }
+    let providers =
+      (extensionContext?.inputItems as? [NSExtensionItem])?.flatMap { $0.attachments ?? [] } ?? []
+
     do {
       let batch = try SharedInbox.makeBatchDirectory(in: root)
+      batchDirectory = batch
       for provider in providers where provider.hasItemConformingToTypeIdentifier(UTType.item.identifier) {
-        if let item = try? await copy(provider, into: batch) { saved.append(item) }
+        if let item = try? await copy(provider, into: batch) { model.items.append(item) }
       }
-      try SharedInbox.append(saved, in: root)
     } catch {
-      return finish(message: "Couldn't save to Noo: \(error.localizedDescription)", saved: 0)
+      model.stage = .failed("Couldn't save to Noo: \(error.localizedDescription)")
+      return
     }
 
-    if saved.isEmpty {
-      finish(message: "Noo can only receive files and photos.", saved: 0)
-    } else {
-      notify(count: saved.count)
-      finish(message: saved.count == 1 ? "Saved 1 file to Noo" : "Saved \(saved.count) files to Noo", saved: saved.count)
+    guard !model.items.isEmpty else {
+      model.stage = .failed("Noo can only receive files and photos.")
+      return
     }
+    guard model.account != nil else {
+      model.stage = .noAccount
+      return
+    }
+    model.stage = .picking
+    await model.open("/")
   }
 
   /// `loadFileRepresentation`'s URL only lives for the duration of its
@@ -72,7 +85,7 @@ final class ShareViewController: UIViewController {
           return continuation.resume(throwing: error ?? CocoaError(.fileReadUnknown))
         }
         do {
-          let destination = Self.uniqueURL(in: directory, name: url.lastPathComponent)
+          let destination = LocalFiles.uniqueURL(in: directory, name: url.lastPathComponent)
           try FileManager.default.copyItem(at: url, to: destination)
           let size = (try? FileManager.default.attributesOfItem(atPath: destination.path))?[.size] as? Int64 ?? 0
           let mime = UTType(filenameExtension: destination.pathExtension)?.preferredMIMEType
@@ -86,19 +99,42 @@ final class ShareViewController: UIViewController {
     }
   }
 
-  private static func uniqueURL(in directory: URL, name: String) -> URL {
-    var candidate = directory.appendingPathComponent(name)
-    var index = 1
-    while FileManager.default.fileExists(atPath: candidate.path) {
-      let ext = (name as NSString).pathExtension
-      let stem = (name as NSString).deletingPathExtension
-      candidate = directory.appendingPathComponent(ext.isEmpty ? "\(stem) (\(index))" : "\(stem) (\(index)).\(ext)")
-      index += 1
+  // MARK: - Actions
+
+  private func upload() {
+    guard let account = model.account else { return }
+    do {
+      try ShareUpload.enqueue(items: model.items, account: account, remoteFolder: model.path)
+      model.stage = .uploading
+      complete(after: 1.2)
+    } catch {
+      model.stage = .failed("Couldn't start the upload: \(error.localizedDescription)")
     }
-    return candidate
   }
 
-  private func notify(count: Int) {
+  private func saveForLater() {
+    guard let root = AppGroup.containerURL else { return cancel() }
+    do {
+      try SharedInbox.append(model.items, in: root)
+      notifyOpenNoo(count: model.items.count)
+      complete(after: 0)
+    } catch {
+      model.stage = .failed("Couldn't save to Noo: \(error.localizedDescription)")
+    }
+  }
+
+  private func cancel() {
+    if let batchDirectory { try? FileManager.default.removeItem(at: batchDirectory) }
+    extensionContext?.cancelRequest(withError: CocoaError(.userCancelled))
+  }
+
+  private func complete(after delay: TimeInterval) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+      self.extensionContext?.completeRequest(returningItems: nil)
+    }
+  }
+
+  private func notifyOpenNoo(count: Int) {
     let content = UNMutableNotificationContent()
     content.title = "Noo"
     content.body =
@@ -108,15 +144,5 @@ final class ShareViewController: UIViewController {
     content.sound = .default
     UNUserNotificationCenter.current().add(
       UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
-  }
-
-  private func finish(message: String, saved: Int) {
-    DispatchQueue.main.async {
-      self.spinner.stopAnimating()
-      self.label.text = message
-      DispatchQueue.main.asyncAfter(deadline: .now() + (saved > 0 ? 1.2 : 2.5)) {
-        self.extensionContext?.completeRequest(returningItems: nil)
-      }
-    }
   }
 }

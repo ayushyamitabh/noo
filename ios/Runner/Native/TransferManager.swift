@@ -1,41 +1,9 @@
 import Foundation
 import UserNotifications
 
-/// What a background upload/download task is, stored in the task's
-/// `taskDescription` so it's still known if the app was relaunched by the
-/// system to deliver the result.
-struct TransferTaskInfo: Codable {
-  enum Kind: String, Codable { case upload, download }
-
-  let kind: Kind
-  let batch: String
-  let name: String
-  let remoteFolder: String?
-  let stagedPath: String?
-}
-
-/// Running totals for one "upload these 3 files" / "download these 2 files"
-/// request, persisted so the one summary notification (and the Dart-side
-/// "folder changed" event) fires exactly once, on the last file, even across
-/// an app relaunch.
-struct TransferBatch: Codable {
-  let kind: TransferTaskInfo.Kind
-  let remoteFolder: String?
-  let total: Int
-  var succeeded: Int
-  var failed: Int
-
-  var finished: Int { succeeded + failed }
-}
-
 struct UploadFile {
   let uri: String
   let name: String
-}
-
-struct TransferError: LocalizedError {
-  let message: String
-  var errorDescription: String? { message }
 }
 
 /// Uploads and downloads on a background `URLSession`, so a transfer keeps
@@ -61,9 +29,6 @@ final class TransferManager: NSObject {
   /// session has delivered every pending event.
   var backgroundCompletionHandler: (() -> Void)?
 
-  private let defaults = UserDefaults.standard
-  private let lock = NSLock()
-
   private lazy var session: URLSession = {
     let config = URLSessionConfiguration.background(withIdentifier: Self.sessionIdentifier)
     config.sessionSendsLaunchEvents = true
@@ -72,10 +37,17 @@ final class TransferManager: NSObject {
     return URLSession(configuration: config, delegate: self, delegateQueue: nil)
   }()
 
-  /// Touch the session at launch so a system relaunch for finished
+  /// The session the Share Extension's uploads run on (see `ShareUpload`).
+  /// The extension is gone by the time they finish, so the app recreates it -
+  /// same identifier and shared container - to receive the results.
+  private lazy var shareSession = URLSession(
+    configuration: ShareUpload.configuration(), delegate: self, delegateQueue: nil)
+
+  /// Touch both sessions at launch so a system relaunch for finished
   /// background transfers reconnects to them.
   func reconnect() {
     _ = session
+    _ = shareSession
   }
 
   // MARK: - Starting transfers
@@ -130,7 +102,7 @@ final class TransferManager: NSObject {
       )
       tasks.append(task)
     }
-    saveBatch(
+    TransferBatchStore.save(
       TransferBatch(kind: .upload, remoteFolder: remoteFolder, total: tasks.count, succeeded: 0, failed: 0),
       id: batch
     )
@@ -158,7 +130,7 @@ final class TransferManager: NSObject {
       )
       tasks.append(task)
     }
-    saveBatch(
+    TransferBatchStore.save(
       TransferBatch(kind: .download, remoteFolder: nil, total: tasks.count, succeeded: 0, failed: 0),
       id: batch
     )
@@ -195,30 +167,9 @@ final class TransferManager: NSObject {
       .flatMap { try? JSONDecoder().decode(TransferTaskInfo.self, from: $0) }
   }
 
-  private func key(_ id: String) -> String { "transfer.batch.\(id)" }
-
-  private func saveBatch(_ batch: TransferBatch, id: String) {
-    lock.lock()
-    defer { lock.unlock() }
-    if let data = try? JSONEncoder().encode(batch) { defaults.set(data, forKey: key(id)) }
-  }
-
   /// Counts one file's outcome; fires the batch summary when it was the last.
   private func record(_ info: TransferTaskInfo, success: Bool) {
-    lock.lock()
-    let storageKey = key(info.batch)
-    var batch =
-      (defaults.data(forKey: storageKey).flatMap { try? JSONDecoder().decode(TransferBatch.self, from: $0) })
-      ?? TransferBatch(kind: info.kind, remoteFolder: info.remoteFolder, total: 1, succeeded: 0, failed: 0)
-    if success { batch.succeeded += 1 } else { batch.failed += 1 }
-    let done = batch.finished >= batch.total
-    if done {
-      defaults.removeObject(forKey: storageKey)
-    } else if let data = try? JSONEncoder().encode(batch) {
-      defaults.set(data, forKey: storageKey)
-    }
-    lock.unlock()
-    if done { finish(batch) }
+    if let batch = TransferBatchStore.record(info, success: success) { finish(batch) }
   }
 
   private func finish(_ batch: TransferBatch) {

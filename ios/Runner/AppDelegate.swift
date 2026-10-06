@@ -30,7 +30,7 @@ import UserNotifications
     handleEventsForBackgroundURLSession identifier: String,
     completionHandler: @escaping () -> Void
   ) {
-    if identifier == TransferManager.sessionIdentifier {
+    if identifier == TransferManager.sessionIdentifier || identifier == ShareUpload.sessionIdentifier {
       TransferManager.shared.backgroundCompletionHandler = completionHandler
     } else {
       super.application(

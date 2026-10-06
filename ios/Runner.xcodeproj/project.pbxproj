@@ -7,21 +7,31 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		134157C4C8F53C9997FF265C /* TransferTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20B0C3085FA6467C1A4A2947 /* TransferTypes.swift */; };
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
+		167672C5B1FBD70656C2FEED /* TransferTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20B0C3085FA6467C1A4A2947 /* TransferTypes.swift */; };
 		223784E5DAE5A653F0F61771 /* ShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 405A5408F4071B4D12F08B21 /* ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C807B294A618700263BE5 /* RunnerTests.swift */; };
 		33B3C3BED4C1F26439DD6825 /* SharedInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = 836D37F2376AFCE0EFDD30A7 /* SharedInbox.swift */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
+		3C1A0DAA5F9B37FEA4C604BE /* DavFolders.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51604DEE43E937A5FDCA7A58 /* DavFolders.swift */; };
+		3DEDE94F2A4C921407EF4382 /* ShareUpload.swift in Sources */ = {isa = PBXBuildFile; fileRef = B93DB1F595F44E2F2057BB2A /* ShareUpload.swift */; };
+		43DB9AB631DD359AEC613A1D /* WebDAV.swift in Sources */ = {isa = PBXBuildFile; fileRef = 871EDB5791D5B3DA0ECF3D4E /* WebDAV.swift */; };
 		5694337ECF8D3ADD3695CBCD /* NativeServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 901C0CDB4FB819302E2A7563 /* NativeServices.swift */; };
+		62028E64976F15B4FDEDA9F1 /* ShareUpload.swift in Sources */ = {isa = PBXBuildFile; fileRef = B93DB1F595F44E2F2057BB2A /* ShareUpload.swift */; };
 		63229CACE4281880037D33E6 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27BDF61F5197F9B8F648E8AE /* ShareViewController.swift */; };
-		66D3CBDE6B3CD3DC578CECBE /* WebDAV.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F798220CB598B611CA03EFC /* WebDAV.swift */; };
+		66AFC246E251554A80B2476F /* SharePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BE7B8C31FF78E212BD71DFC /* SharePickerView.swift */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */; };
 		78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */ = {isa = PBXBuildFile; productRef = 78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */; };
+		852C0C8EBA96CB6389DF6917 /* SharedAccount.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F2C956C98F58A97B5595307 /* SharedAccount.swift */; };
 		91C1658DC7467CACB2AAC7FF /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0AE6F681A3100A461B4A5318 /* Foundation.framework */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
+		A3B3AB501C29516E20455F23 /* DavFolders.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51604DEE43E937A5FDCA7A58 /* DavFolders.swift */; };
+		E295E45196E3973A5F7E1D8E /* SharedAccount.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F2C956C98F58A97B5595307 /* SharedAccount.swift */; };
+		F598B112F4D33953984FEFF4 /* WebDAV.swift in Sources */ = {isa = PBXBuildFile; fileRef = 871EDB5791D5B3DA0ECF3D4E /* WebDAV.swift */; };
 		F8D51B4045340275FBD12D16 /* SharedInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = 836D37F2376AFCE0EFDD30A7 /* SharedInbox.swift */; };
 		FDFA55C4921747A9CBCBBEEC /* TransferManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8064CC1652B8F0A44E371638 /* TransferManager.swift */; };
 /* End PBXBuildFile section */
@@ -71,14 +81,17 @@
 		0AE6F681A3100A461B4A5318 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GeneratedPluginRegistrant.h; sourceTree = "<group>"; };
 		1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GeneratedPluginRegistrant.m; sourceTree = "<group>"; };
+		1F2C956C98F58A97B5595307 /* SharedAccount.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedAccount.swift; sourceTree = "<group>"; };
+		20B0C3085FA6467C1A4A2947 /* TransferTypes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TransferTypes.swift; sourceTree = "<group>"; };
 		27BDF61F5197F9B8F648E8AE /* ShareViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
 		331C807B294A618700263BE5 /* RunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTests.swift; sourceTree = "<group>"; };
 		331C8081294A63A400263BE5 /* RunnerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunnerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = AppFrameworkInfo.plist; path = Flutter/AppFrameworkInfo.plist; sourceTree = "<group>"; };
 		405A5408F4071B4D12F08B21 /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		49213989F0FA1B83B0B8A523 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		51604DEE43E937A5FDCA7A58 /* DavFolders.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DavFolders.swift; sourceTree = "<group>"; };
+		5BE7B8C31FF78E212BD71DFC /* SharePickerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharePickerView.swift; sourceTree = "<group>"; };
 		65F57A1EB0C62774E561860D /* ShareExtension.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = ShareExtension.entitlements; sourceTree = "<group>"; };
-		6F798220CB598B611CA03EFC /* WebDAV.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WebDAV.swift; sourceTree = "<group>"; };
 		74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Runner-Bridging-Header.h"; sourceTree = "<group>"; };
 		74858FAE1ED2DC5600515810 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
@@ -87,6 +100,7 @@
 		8064CC1652B8F0A44E371638 /* TransferManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TransferManager.swift; sourceTree = "<group>"; };
 		836D37F2376AFCE0EFDD30A7 /* SharedInbox.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedInbox.swift; sourceTree = "<group>"; };
 		857A0E7637776A71AFBB0614 /* Runner.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
+		871EDB5791D5B3DA0ECF3D4E /* WebDAV.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WebDAV.swift; sourceTree = "<group>"; };
 		901C0CDB4FB819302E2A7563 /* NativeServices.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeServices.swift; sourceTree = "<group>"; };
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Debug.xcconfig; path = Flutter/Debug.xcconfig; sourceTree = "<group>"; };
 		9740EEB31CF90195004384FC /* Generated.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Generated.xcconfig; path = Flutter/Generated.xcconfig; sourceTree = "<group>"; };
@@ -95,6 +109,7 @@
 		97C146FD1CF9000F007C117D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B93DB1F595F44E2F2057BB2A /* ShareUpload.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShareUpload.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -139,6 +154,7 @@
 				27BDF61F5197F9B8F648E8AE /* ShareViewController.swift */,
 				49213989F0FA1B83B0B8A523 /* Info.plist */,
 				65F57A1EB0C62774E561860D /* ShareExtension.entitlements */,
+				5BE7B8C31FF78E212BD71DFC /* SharePickerView.swift */,
 			);
 			name = ShareExtension;
 			path = ShareExtension;
@@ -147,7 +163,6 @@
 		5055E53DC55C0BCABD5F04F4 /* Native */ = {
 			isa = PBXGroup;
 			children = (
-				6F798220CB598B611CA03EFC /* WebDAV.swift */,
 				8064CC1652B8F0A44E371638 /* TransferManager.swift */,
 				901C0CDB4FB819302E2A7563 /* NativeServices.swift */,
 			);
@@ -159,6 +174,11 @@
 			isa = PBXGroup;
 			children = (
 				836D37F2376AFCE0EFDD30A7 /* SharedInbox.swift */,
+				871EDB5791D5B3DA0ECF3D4E /* WebDAV.swift */,
+				20B0C3085FA6467C1A4A2947 /* TransferTypes.swift */,
+				1F2C956C98F58A97B5595307 /* SharedAccount.swift */,
+				B93DB1F595F44E2F2057BB2A /* ShareUpload.swift */,
+				51604DEE43E937A5FDCA7A58 /* DavFolders.swift */,
 			);
 			name = Shared;
 			path = Shared;
@@ -407,6 +427,12 @@
 			files = (
 				63229CACE4281880037D33E6 /* ShareViewController.swift in Sources */,
 				33B3C3BED4C1F26439DD6825 /* SharedInbox.swift in Sources */,
+				F598B112F4D33953984FEFF4 /* WebDAV.swift in Sources */,
+				167672C5B1FBD70656C2FEED /* TransferTypes.swift in Sources */,
+				852C0C8EBA96CB6389DF6917 /* SharedAccount.swift in Sources */,
+				3DEDE94F2A4C921407EF4382 /* ShareUpload.swift in Sources */,
+				3C1A0DAA5F9B37FEA4C604BE /* DavFolders.swift in Sources */,
+				66AFC246E251554A80B2476F /* SharePickerView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -417,10 +443,14 @@
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
-				66D3CBDE6B3CD3DC578CECBE /* WebDAV.swift in Sources */,
 				FDFA55C4921747A9CBCBBEEC /* TransferManager.swift in Sources */,
 				5694337ECF8D3ADD3695CBCD /* NativeServices.swift in Sources */,
 				F8D51B4045340275FBD12D16 /* SharedInbox.swift in Sources */,
+				43DB9AB631DD359AEC613A1D /* WebDAV.swift in Sources */,
+				134157C4C8F53C9997FF265C /* TransferTypes.swift in Sources */,
+				E295E45196E3973A5F7E1D8E /* SharedAccount.swift in Sources */,
+				62028E64976F15B4FDEDA9F1 /* ShareUpload.swift in Sources */,
+				A3B3AB501C29516E20455F23 /* DavFolders.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
