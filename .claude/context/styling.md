@@ -133,6 +133,18 @@ blocks are noted where they matter:
   `NooChip`/`NooSegmentedControl`; still the sort/hidden/scope/type-filter/
   view-mode row shared by Files and Offline (`showStorageScope: false` for
   Offline), and reused as-is by Favorites.
+- Hidden files and external storage are each a three-way segmented row
+  (`HiddenFilesFilterRow`/`StorageScopeRow`, `lib/widgets/filter_mode_rows.dart`,
+  in both the Files and Photos filter sheets), not toggles:
+  `HiddenFilesFilter` hide (default) / only / include, and `StorageScope`
+  cloud (default) / external / all. Files and Photos each persist their own
+  hidden filter (`ui_hidden_filter`, `ui_hidden_filter_photos`; the old
+  `ui_show_hidden*` bools are still read as a fallback, `true` → include);
+  `StorageScope` stays shared. Leaving `hide` is still behind the
+  hidden-files lock gate. With `StorageScope.all`, Files splits the listing:
+  regular items first, then a collapsible "External storage" section
+  (`_ExternalStorageHeader`, local `_externalExpanded` state, default open)
+  holding the external ones; Photos/Favorites just merge them into one list.
 - `lib/widgets/files/file_breadcrumb_row.dart` — the noo-styled breadcrumb
   trail Files uses in place of the shared
   [`Breadcrumbs`](../../lib/widgets/breadcrumbs.dart) widget. `Breadcrumbs`

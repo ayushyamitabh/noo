@@ -17,6 +17,7 @@ class PhotosController extends ChangeNotifier {
 
   static const _prefShowFavoritesOnlyPhotos = 'ui_show_favorites_only_photos';
   static const _prefShowHiddenPhotos = 'ui_show_hidden_photos';
+  static const _prefHiddenFilterPhotos = 'ui_hidden_filter_photos';
   static const _prefSortField = 'ui_sort_field';
   static const _prefSortAscending = 'ui_sort_ascending';
 
@@ -25,7 +26,7 @@ class PhotosController extends ChangeNotifier {
   String? _errorMessage;
 
   bool _showFavoritesOnly = false;
-  bool _showHidden = false;
+  HiddenFilesFilter _hiddenFilter = HiddenFilesFilter.hide;
   FileSortField _sortField = FileSortField.name;
   bool _sortAscending = true;
 
@@ -37,7 +38,7 @@ class PhotosController extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   bool get showFavoritesOnly => _showFavoritesOnly;
-  bool get showHidden => _showHidden;
+  HiddenFilesFilter get hiddenFilter => _hiddenFilter;
   FileSortField get sortField => _sortField;
   bool get sortAscending => _sortAscending;
 
@@ -48,7 +49,7 @@ class PhotosController extends ChangeNotifier {
     final filtered = files.applyCommonFilters(
       media,
       showFavoritesOnly: _showFavoritesOnly,
-      showHidden: _showHidden,
+      hidden: _hiddenFilter,
     )..sort((a, b) => _compare(a, b));
     return _sortAscending ? filtered : filtered.reversed.toList();
   }
@@ -86,7 +87,11 @@ class PhotosController extends ChangeNotifier {
         String k(String base) => session.accountStore.accountPrefKey(id, base);
         _showFavoritesOnly =
             prefs.getBool(k(_prefShowFavoritesOnlyPhotos)) ?? false;
-        _showHidden = prefs.getBool(k(_prefShowHiddenPhotos)) ?? false;
+        _hiddenFilter = FilesController.loadHiddenFilter(
+          prefs,
+          k(_prefHiddenFilterPhotos),
+          k(_prefShowHiddenPhotos),
+        );
         final sortFieldName = prefs.getString(k(_prefSortField));
         _sortField = FileSortField.values.firstWhere(
           (f) => f.name == sortFieldName,
@@ -148,8 +153,10 @@ class PhotosController extends ChangeNotifier {
     );
   }
 
-  Future<void> toggleShowHidden() async {
-    if (!_showHidden) {
+  /// Gated the same way as [FilesController.setHiddenFilter].
+  Future<void> setHiddenFilter(HiddenFilesFilter filter) async {
+    if (_hiddenFilter == filter) return;
+    if (_hiddenFilter == HiddenFilesFilter.hide) {
       if (!await session.passGate(
         session.lockHiddenFiles,
         'Unlock to show hidden files',
@@ -157,11 +164,11 @@ class PhotosController extends ChangeNotifier {
         return;
       }
     }
-    _showHidden = !_showHidden;
+    _hiddenFilter = filter;
     notifyListeners();
     _persistAccountPref(
-      _prefShowHiddenPhotos,
-      (p, key) => p.setBool(key, _showHidden),
+      _prefHiddenFilterPhotos,
+      (p, key) => p.setString(key, filter.name),
     );
   }
 

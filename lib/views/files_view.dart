@@ -76,6 +76,57 @@ class FilesView extends StatefulWidget {
   State<FilesView> createState() => _FilesViewState();
 }
 
+/// The collapsible "External storage" header [StorageScope.all] puts above
+/// the external items.
+class _ExternalStorageHeader extends StatelessWidget {
+  final int count;
+  final bool expanded;
+  final VoidCallback onTap;
+
+  const _ExternalStorageHeader({
+    required this.count,
+    required this.expanded,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.nooColors;
+    return Semantics(
+      button: true,
+      expanded: expanded,
+      label: 'External storage',
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: NooSpace.md,
+            vertical: 14,
+          ),
+          child: Row(
+            children: [
+              Icon(LucideIcons.hardDrive, size: 18, color: colors.fg2),
+              const SizedBox(width: 10),
+              Text(
+                'External storage',
+                style: NooText.bodyL.copyWith(color: colors.fg1),
+              ),
+              const SizedBox(width: 8),
+              Text('$count', style: NooText.body.copyWith(color: colors.fg3)),
+              const Spacer(),
+              Icon(
+                expanded ? LucideIcons.chevronUp : LucideIcons.chevronDown,
+                size: 18,
+                color: colors.fg3,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Slides+fades its child in on first build. Give it a [Key] that changes
 /// whenever the folder changes (folder path + item id) so Flutter discards
 /// and remounts the Element instead of just updating it in place - that's
@@ -236,6 +287,9 @@ class _GridThumbnail extends StatelessWidget {
 
 class _FilesViewState extends State<FilesView> {
   final Set<String> _selectedIds = {};
+
+  /// Whether [StorageScope.all]'s external-storage section is open.
+  bool _externalExpanded = true;
   int _lastPathDepth = 1;
 
   bool get _isSelecting => _selectedIds.isNotEmpty;
@@ -669,6 +723,131 @@ class _FilesViewState extends State<FilesView> {
             ),
           );
 
+    // One sliver group per layout (grid / desktop table / mobile list) for
+    // an arbitrary slice of items - [StorageScope.all] renders two of them,
+    // the regular items and then the external ones under a collapsible
+    // header, instead of one list over `browser.items`.
+    List<Widget> itemSlivers(
+      List<NextcloudItem> items, {
+      required String section,
+      bool tableHeader = true,
+    }) {
+      if (files.isGridView) {
+        return [
+          SliverPadding(
+            key: ValueKey('files-grid-$section'),
+            padding: EdgeInsets.fromLTRB(
+              gutter,
+              NooSpace.xs,
+              gutter,
+              NooSpace.lg,
+            ),
+            sliver: SliverGrid(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: isDesktop
+                    ? 5
+                    : NooLayout.gridColumns(context, phone: 2, minTile: 180),
+                childAspectRatio: isDesktop ? 1.05 : 0.92,
+                crossAxisSpacing: isDesktop ? 16 : 10,
+                mainAxisSpacing: isDesktop ? 16 : 10,
+              ),
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final item = items[index];
+                return _FolderEnterAnimation(
+                  key: ValueKey('${browser.currentFolderPath}::${item.id}'),
+                  index: index,
+                  fromRight: navigatingDeeper,
+                  child: _buildGridCard(context, item),
+                );
+              }, childCount: items.length),
+            ),
+          ),
+        ];
+      }
+      if (isDesktop) {
+        return [
+          if (tableHeader)
+            SliverPadding(
+              key: const ValueKey('files-table-header'),
+              padding: EdgeInsets.fromLTRB(gutter, NooSpace.xs, gutter, 0),
+              sliver: SliverToBoxAdapter(
+                child: _buildDesktopHeader(
+                  context,
+                  files,
+                  browser.currentFolderPath,
+                ),
+              ),
+            ),
+          SliverPadding(
+            key: ValueKey('files-table-$section'),
+            padding: EdgeInsets.fromLTRB(gutter, 0, gutter, NooSpace.lg),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final item = items[index];
+                return _FolderEnterAnimation(
+                  key: ValueKey('${browser.currentFolderPath}::${item.id}'),
+                  index: index,
+                  fromRight: navigatingDeeper,
+                  child: _buildDesktopRow(context, item),
+                );
+              }, childCount: items.length),
+            ),
+          ),
+        ];
+      }
+      return [
+        SliverPadding(
+          key: ValueKey('files-list-$section'),
+          padding: const EdgeInsets.fromLTRB(
+            NooSpace.sm,
+            NooSpace.xs,
+            NooSpace.sm,
+            NooSpace.lg,
+          ),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate((context, index) {
+              final item = items[index];
+              return _FolderEnterAnimation(
+                key: ValueKey('${browser.currentFolderPath}::${item.id}'),
+                index: index,
+                fromRight: navigatingDeeper,
+                child: _buildMobileRow(context, item, index, items.length),
+              );
+            }, childCount: items.length),
+          ),
+        ),
+      ];
+    }
+
+    // "All + external": external items leave the main list for their own
+    // collapsible section below it. Offline has no such distinction.
+    final splitExternal = !_offline && files.storageScope == StorageScope.all;
+    final mainItems = splitExternal
+        ? browser.items.where((i) => !i.isExternalStorage).toList()
+        : browser.items;
+    final externalItems = splitExternal
+        ? browser.items.where((i) => i.isExternalStorage).toList()
+        : const <NextcloudItem>[];
+    final bodySlivers = <Widget>[
+      if (mainItems.isNotEmpty) ...itemSlivers(mainItems, section: 'main'),
+      if (externalItems.isNotEmpty) ...[
+        SliverToBoxAdapter(
+          child: _ExternalStorageHeader(
+            count: externalItems.length,
+            expanded: _externalExpanded,
+            onTap: () =>
+                setState(() => _externalExpanded = !_externalExpanded),
+          ),
+        ),
+        if (_externalExpanded)
+          ...itemSlivers(
+            externalItems,
+            section: 'external',
+            tableHeader: mainItems.isEmpty,
+          ),
+      ],
+    ];
+
     final List<Widget> contentSlivers = [
       if (widget.topBar != null) topBarSliver(widget.topBar!),
       // Pinned in both states - while browsing this is the controls row
@@ -753,88 +932,8 @@ class _FilesViewState extends State<FilesView> {
             ),
           ),
         )
-      else if (files.isGridView)
-        SliverPadding(
-          key: const ValueKey('files-grid'),
-          padding: EdgeInsets.fromLTRB(
-            gutter,
-            NooSpace.xs,
-            gutter,
-            NooSpace.lg,
-          ),
-          sliver: SliverGrid(
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: isDesktop
-                  ? 5
-                  : NooLayout.gridColumns(context, phone: 2, minTile: 180),
-              childAspectRatio: isDesktop ? 1.05 : 0.92,
-              crossAxisSpacing: isDesktop ? 16 : 10,
-              mainAxisSpacing: isDesktop ? 16 : 10,
-            ),
-            delegate: SliverChildBuilderDelegate((context, index) {
-              final item = browser.items[index];
-              return _FolderEnterAnimation(
-                key: ValueKey('${browser.currentFolderPath}::${item.id}'),
-                index: index,
-                fromRight: navigatingDeeper,
-                child: _buildGridCard(context, item),
-              );
-            }, childCount: browser.items.length),
-          ),
-        )
-      else if (isDesktop) ...[
-        SliverPadding(
-          key: const ValueKey('files-table-header'),
-          padding: EdgeInsets.fromLTRB(gutter, NooSpace.xs, gutter, 0),
-          sliver: SliverToBoxAdapter(
-            child: _buildDesktopHeader(
-              context,
-              files,
-              browser.currentFolderPath,
-            ),
-          ),
-        ),
-        SliverPadding(
-          key: const ValueKey('files-table'),
-          padding: EdgeInsets.fromLTRB(gutter, 0, gutter, NooSpace.lg),
-          sliver: SliverList(
-            delegate: SliverChildBuilderDelegate((context, index) {
-              final item = browser.items[index];
-              return _FolderEnterAnimation(
-                key: ValueKey('${browser.currentFolderPath}::${item.id}'),
-                index: index,
-                fromRight: navigatingDeeper,
-                child: _buildDesktopRow(context, item),
-              );
-            }, childCount: browser.items.length),
-          ),
-        ),
-      ] else
-        SliverPadding(
-          key: const ValueKey('files-list'),
-          padding: const EdgeInsets.fromLTRB(
-            NooSpace.sm,
-            NooSpace.xs,
-            NooSpace.sm,
-            NooSpace.lg,
-          ),
-          sliver: SliverList(
-            delegate: SliverChildBuilderDelegate((context, index) {
-              final item = browser.items[index];
-              return _FolderEnterAnimation(
-                key: ValueKey('${browser.currentFolderPath}::${item.id}'),
-                index: index,
-                fromRight: navigatingDeeper,
-                child: _buildMobileRow(
-                  context,
-                  item,
-                  index,
-                  browser.items.length,
-                ),
-              );
-            }, childCount: browser.items.length),
-          ),
-        ),
+      else
+        ...bodySlivers,
       // List/grid/table above only pad NooSpace.lg at the bottom - plenty
       // once Scaffold shrinks the body above an attached bar, but floating
       // draws the body behind the bar instead (as does a frosted bar), so it
