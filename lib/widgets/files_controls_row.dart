@@ -171,29 +171,33 @@ class FilesControlsRow extends StatelessWidget {
               // Same "icon always, label only when selected" pill as
               // Photos' own type filter below - not a checkmark list, so
               // the two screens' filter sheets look and behave the same.
-              NooSegmentedControl<FilesTypeFilter>(
-                fill: true,
-                onSurface: true,
-                labelOnlySelected: true,
-                value: files.filesTypeFilter,
-                onChanged: files.setFilesTypeFilter,
-                options: const [
-                  NooSegmentOption(
-                    value: FilesTypeFilter.all,
-                    icon: LucideIcons.layoutGrid,
-                    label: 'All',
-                  ),
-                  NooSegmentOption(
-                    value: FilesTypeFilter.filesOnly,
-                    icon: LucideIcons.file,
-                    label: 'Files',
-                  ),
-                  NooSegmentOption(
-                    value: FilesTypeFilter.foldersOnly,
-                    icon: LucideIcons.folder,
-                    label: 'Folders',
-                  ),
-                ],
+              FilterSection(
+                icon: LucideIcons.layoutGrid,
+                title: 'Type',
+                child: NooSegmentedControl<FilesTypeFilter>(
+                  fill: true,
+                  onSurface: true,
+                  labelOnlySelected: true,
+                  value: files.filesTypeFilter,
+                  onChanged: files.setFilesTypeFilter,
+                  options: const [
+                    NooSegmentOption(
+                      value: FilesTypeFilter.all,
+                      icon: LucideIcons.layoutGrid,
+                      label: 'All',
+                    ),
+                    NooSegmentOption(
+                      value: FilesTypeFilter.filesOnly,
+                      icon: LucideIcons.file,
+                      label: 'Files',
+                    ),
+                    NooSegmentOption(
+                      value: FilesTypeFilter.foldersOnly,
+                      icon: LucideIcons.folder,
+                      label: 'Folders',
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 22),
               HiddenFilesFilterRow(

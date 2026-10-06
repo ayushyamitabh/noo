@@ -522,32 +522,36 @@ class _PhotosViewState extends State<PhotosView> {
                 // Same "icon always, label only when selected" pill as
                 // Files' own type filter - not a fully-labelled track, so
                 // the two screens' filter sheets look and behave the same.
-                NooSegmentedControl<_PhotoTypeFilter>(
-                  fill: true,
-                  onSurface: true,
-                  labelOnlySelected: true,
-                  value: _typeFilter,
-                  onChanged: (filter) => setState(() {
-                    _typeFilter = filter;
-                    setSheetState(() {});
-                  }),
-                  options: const [
-                    NooSegmentOption(
-                      value: _PhotoTypeFilter.all,
-                      icon: LucideIcons.layoutGrid,
-                      label: 'All',
-                    ),
-                    NooSegmentOption(
-                      value: _PhotoTypeFilter.image,
-                      icon: LucideIcons.image,
-                      label: 'Photos',
-                    ),
-                    NooSegmentOption(
-                      value: _PhotoTypeFilter.video,
-                      icon: LucideIcons.film,
-                      label: 'Videos',
-                    ),
-                  ],
+                FilterSection(
+                  icon: LucideIcons.layoutGrid,
+                  title: 'Type',
+                  child: NooSegmentedControl<_PhotoTypeFilter>(
+                    fill: true,
+                    onSurface: true,
+                    labelOnlySelected: true,
+                    value: _typeFilter,
+                    onChanged: (filter) => setState(() {
+                      _typeFilter = filter;
+                      setSheetState(() {});
+                    }),
+                    options: const [
+                      NooSegmentOption(
+                        value: _PhotoTypeFilter.all,
+                        icon: LucideIcons.layoutGrid,
+                        label: 'All',
+                      ),
+                      NooSegmentOption(
+                        value: _PhotoTypeFilter.image,
+                        icon: LucideIcons.image,
+                        label: 'Photos',
+                      ),
+                      NooSegmentOption(
+                        value: _PhotoTypeFilter.video,
+                        icon: LucideIcons.film,
+                        label: 'Videos',
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 22),
                 NooGroupedList(

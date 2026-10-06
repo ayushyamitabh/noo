@@ -39,7 +39,7 @@ class HiddenFilesFilterRow extends StatelessWidget {
         NooSegmentOption(
           value: HiddenFilesFilter.include,
           icon: LucideIcons.layers,
-          label: 'All + hidden',
+          label: 'All',
         ),
       ],
     );
@@ -80,8 +80,43 @@ class StorageScopeRow extends StatelessWidget {
         NooSegmentOption(
           value: StorageScope.all,
           icon: LucideIcons.layers,
-          label: 'All + external',
+          label: 'All',
         ),
+      ],
+    );
+  }
+}
+
+/// An icon + title line above [child] - the shape every row of the Files/
+/// Photos filter sheets shares, including their type (All/Files/Folders)
+/// control, which lives in its own file.
+class FilterSection extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final Widget child;
+
+  const FilterSection({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.nooColors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 18, color: colors.fg2),
+            const SizedBox(width: 10),
+            Text(title, style: NooText.bodyL.copyWith(color: colors.fg1)),
+          ],
+        ),
+        const SizedBox(height: 10),
+        child,
       ],
     );
   }
@@ -104,27 +139,17 @@ class _FilterModeRow<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.nooColors;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(icon, size: 18, color: colors.fg2),
-            const SizedBox(width: 10),
-            Text(title, style: NooText.bodyL.copyWith(color: colors.fg1)),
-          ],
-        ),
-        const SizedBox(height: 10),
-        NooSegmentedControl<T>(
-          fill: true,
-          onSurface: true,
-          labelOnlySelected: true,
-          value: value,
-          onChanged: onChanged,
-          options: options,
-        ),
-      ],
+    return FilterSection(
+      icon: icon,
+      title: title,
+      child: NooSegmentedControl<T>(
+        fill: true,
+        onSurface: true,
+        labelOnlySelected: true,
+        value: value,
+        onChanged: onChanged,
+        options: options,
+      ),
     );
   }
 }
