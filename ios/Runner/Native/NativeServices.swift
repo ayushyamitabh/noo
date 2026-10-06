@@ -75,6 +75,35 @@ enum NativeServices {
     }
     TransferManager.shared.reconnect()
     registerShare(messenger: messenger)
+    registerShareAccount(messenger: messenger)
+  }
+
+  // MARK: - Account for the Share Extension
+
+  /// `share_account`: Dart tells native which account is active so the Share
+  /// Extension - a separate process with no Flutter engine - can list folders
+  /// and upload as it. Stored in the shared Keychain group.
+  private static func registerShareAccount(messenger: FlutterBinaryMessenger) {
+    FlutterMethodChannel(name: "dev.ayushya.noo/share_account", binaryMessenger: messenger)
+      .setMethodCallHandler { call, result in
+        switch call.method {
+        case "setAccount":
+          handle(call, result) { args in
+            try SharedAccountStore.save(
+              SharedAccount(
+                serverUrl: try string(args, "serverUrl"),
+                username: try string(args, "username"),
+                authHeader: try string(args, "authHeader"),
+                displayName: (args["displayName"] as? String) ?? ""
+              ))
+          }
+        case "clearAccount":
+          SharedAccountStore.clear()
+          result(nil)
+        default:
+          result(FlutterMethodNotImplemented)
+        }
+      }
   }
 
   // MARK: - Share Extension inbox

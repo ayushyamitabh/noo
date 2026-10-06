@@ -22,6 +22,7 @@ import 'providers/shares_controller.dart';
 import 'providers/sync_status_controller.dart';
 import 'providers/trash_controller.dart';
 import 'services/pick_intent_service.dart';
+import 'services/share_account_service.dart';
 import 'services/share_intent_service.dart';
 import 'theme/app_theme.dart';
 import 'theme/design_tokens.dart';
@@ -58,7 +59,16 @@ void main() {
       providers: [
         ChangeNotifierProvider(create: (_) => ConnectivityController()),
         ChangeNotifierProvider(
-          create: (context) => SessionController(context.read()),
+          create: (context) {
+            final session = SessionController(context.read());
+            // iOS's Share Extension has no Flutter engine; it picks its
+            // folders/uploads as whichever account was last published here.
+            session.addAccountReadyListener(
+              () => ShareAccountService.publish(session),
+            );
+            session.addAccountClearedListener(ShareAccountService.clear);
+            return session;
+          },
         ),
         ChangeNotifierProvider(create: (_) => SettingsController()),
         // Before SyncStatusController, which follows its Files Cache rule

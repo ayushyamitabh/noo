@@ -874,37 +874,52 @@ iOS. `OfflineController` and `localSyncedFilePath` both go through it.
 
 ### iOS Share Extension (`ios/ShareExtension/`, `ios/Shared/`)
 
-"Share to Noo" from any app's share sheet. An extension can't pick a
-destination, hold a session, or launch its host app, so it only *hands off*:
+"Share to Noo" from any app's share sheet. A Share Extension can't open its
+host app (`extensionContext.open` is Today-widget-only), so - like
+Reminders/Notes - the destination is picked *inside* the sheet:
 
-1. `ShareViewController` (extension) copies each shared file
-   (`NSItemProvider.loadFileRepresentation`, public.item) into the App Group
-   container (`group.dev.ayushya.noo`) under `SharedInbox/<batch>/`, appends
-   them to `SharedInbox/pending.json`, and posts a local notification ("Open
-   Noo to choose where to upload N files") since it can't open the app.
-2. The app reads that manifest through `SharedInbox.consume` - once on cold
-   start via `share_intent.getInitialShare`, and whenever it becomes active
-   (`UIApplication.didBecomeActiveNotification`) via the `share_intent/new`
-   event stream - and from there it's the same Dart flow as an Android
-   share: `main.dart`'s `_handleSharedFiles` -> `ShareUploadView` ->
-   `UploadService`. The `file://` URI points into the App Group container;
-   `TransferManager.startUpload` deletes that copy once it has staged it.
-3. `ios/Shared/SharedInbox.swift` is compiled into both targets (manifest
-   read/append/consume under an `NSFileCoordinator`, entries whose file is
-   gone are dropped, each share is delivered once) and unit-tested in
-   `RunnerTests`.
+1. `ShareViewController` copies each shared file (`NSItemProvider.
+   loadFileRepresentation`, public.item) into the App Group container
+   (`group.dev.ayushya.noo`, `SharedInbox/<batch>/`) and hosts the SwiftUI
+   `SharePickerView` (`ShareModel` holds its state).
+2. It reads the signed-in account from the shared Keychain
+   (`SharedAccountStore`) and lists folders over WebDAV (`DavClient`
+   `PROPFIND` Depth 1, parsed by `DavFolderParser`; dot-folders hidden).
+   The Dart side keeps that account current: `ShareAccountService.publish`
+   (`lib/services/share_account_service.dart`) runs on every account-ready
+   event and `clear` on account-cleared, through the native `share_account`
+   channel - both wired where `SessionController` is created in `main.dart`.
+3. **Upload** calls `ShareUpload.enqueue`: one `PUT` per file on a *background*
+   `URLSession` (`dev.ayushya.noo.transfers.share`, with
+   `sharedContainerIdentifier`) that outlives the extension. The app recreates
+   that session at launch (`TransferManager.reconnect`) and is relaunched by
+   the system to receive the results, post the "Uploaded N files" summary and
+   delete the copies; `TransferBatchStore` keeps batch totals in the App
+   Group's `UserDefaults` because the extension and the app are different
+   processes.
+4. Fallbacks: with no account (or the user taps "Choose a folder later in
+   Noo") the files go into `SharedInbox/pending.json` instead and a local
+   notification asks the user to open Noo; the app consumes that through
+   `share_intent` (`getInitialShare` at cold start, `share_intent/new` on
+   `UIApplication.didBecomeActiveNotification`) into the same Dart
+   `ShareUploadView` flow as an Android share, and `TransferManager.
+   startUpload` deletes the inbox copy once staged.
 
-Both targets carry `group.dev.ayushya.noo` in their `.entitlements`
-(`Runner/Runner.entitlements`, `ShareExtension/ShareExtension.entitlements`);
-the extension's bundle id is `dev.ayushya.noo.ShareExtension`, and its
-version/build come from the same `FLUTTER_BUILD_NAME`/`FLUTTER_BUILD_NUMBER`
-xcconfig as the app (iOS rejects a mismatch). The extension is embedded via an
-"Embed Foundation Extensions" phase placed *before* Flutter's script phases
-(after them Xcode reports a dependency cycle). The simulator honours the App
-Group without a signing team; a real device needs a team that owns the group
-id and both bundle ids registered. To try it without the share sheet, put a
-file and a `pending.json` in the simulator's group container
-(`xcrun simctl get_app_container <udid> dev.ayushya.noo groups`) and launch.
+The keychain group is `$(AppIdentifierPrefix)dev.ayushya.noo.shared`
+(`keychain-access-groups` in both `.entitlements`); both Info.plists also
+carry it as `NooKeychainAccessGroup`, which `SharedAccountStore` reads, so the
+two processes always agree on the team-prefixed id. The account is stored as
+JSON in one generic-password item (`kSecAttrAccessibleAfterFirstUnlock`).
+
+`ios/Shared/` (compiled into both targets): `SharedInbox`, `SharedAccount`,
+`ShareUpload`, `DavFolders`, `TransferTypes`, `WebDAV`. Everything in it that
+isn't UI is unit-tested in `RunnerTests`. The extension's bundle id is
+`dev.ayushya.noo.ShareExtension` and its version/build come from the same
+`FLUTTER_BUILD_NAME`/`FLUTTER_BUILD_NUMBER` xcconfig as the app (iOS rejects a
+mismatch); it's embedded by an "Embed Foundation Extensions" phase placed
+*before* Flutter's script phases (after them Xcode reports a dependency
+cycle). The simulator honours the App Group and keychain group without a
+signing team; a real device needs a team that owns both ids.
 
 Not built on iOS yet: the picker (File Provider) and sync
 (`BGTaskScheduler`) - see the iOS handoff notes.
