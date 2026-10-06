@@ -29,6 +29,13 @@ widgets. Key points:
   whole app in `main.dart`. When available and `useDynamicColor` is on, the
   OS-provided `ColorScheme` wins over the seed color — always thread both
   `dynamicScheme` and `useDynamicColor` through when adding a theme knob.
+  `NooColors.fromDynamicScheme` keeps `bg` on the OS `surface` but picks
+  `surface` (cards, selection bar, rows) from the container roles so it
+  stays lighter than `bg`: `surfaceContainerLowest` (white) in light,
+  `surfaceContainer` in dark. The dynamic_color package seeds the container
+  roles from the primary color rather than the OS palette, and in light mode
+  `surfaceContainerLow` is slightly *darker* than the OS `surface`, which
+  made cards blend into the page ("the selection bar has no background").
 - **Font**: Inter via `google_fonts`, applied through
   `GoogleFonts.interTextTheme(...)`. Font files ship in
   `assets/google_fonts/` (Instrument Sans, Schibsted Grotesk) and
