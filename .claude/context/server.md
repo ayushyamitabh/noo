@@ -863,10 +863,13 @@ iOS. `OfflineController` and `localSyncedFilePath` both go through it.
   `Documents/Downloads`, with `UIFileSharingEnabled` +
   `LSSupportsOpeningDocumentsInPlace` set so it shows in the Files app under
   "On My iPhone > Noo"; a name clash becomes `a (1).txt`.
-- No progress notification (iOS can't update one from a background session
-  the way Android's foreground service does) and no cancel yet - only the
-  final summary. The Dart snackbar text still says "see the notification for
-  progress".
+- Notifications (`ios/Shared/TransferNotifications.swift`): "Uploading 3
+  files..." when a batch starts, replaced in place (same request id =
+  `transfer.<batch>`) by "Uploaded 3 files" when it ends. iOS can't show live
+  byte progress from a background session the way Android's foreground
+  service does (a Live Activity would, but needs a widget extension), and
+  there's no cancel yet. The Dart snackbar text still says "see the
+  notification for progress".
 - `WebDAV.swift` (URL building) and `LocalFiles.uniqueURL` are pure and
   covered by `ios/RunnerTests` (`xcodebuild test -workspace
   ios/Runner.xcworkspace -scheme Runner -destination 'platform=iOS
@@ -891,12 +894,20 @@ Reminders/Notes - the destination is picked *inside* the sheet:
    channel - both wired where `SessionController` is created in `main.dart`.
 3. **Upload** calls `ShareUpload.enqueue`: one `PUT` per file on a *background*
    `URLSession` (`dev.ayushya.noo.transfers.share`, with
-   `sharedContainerIdentifier`) that outlives the extension. The app recreates
+   `sharedContainerIdentifier`) that outlives the extension, and posts
+   "Uploading N files...". Results go to whichever process is alive:
+   files that finish while the sheet is still open are counted by the
+   extension's `ShareUploadDelegate`; the rest by the app, which recreates
    that session at launch (`TransferManager.reconnect`) and is relaunched by
-   the system to receive the results, post the "Uploaded N files" summary and
-   delete the copies; `TransferBatchStore` keeps batch totals in the App
-   Group's `UserDefaults` because the extension and the app are different
-   processes.
+   the system. Either way `UploadResults.handle` deletes the staged copy,
+   counts the file in `TransferBatchStore` (batch totals live in the App
+   Group's `UserDefaults` because the two are different processes) and
+   posts the "Uploaded N files" summary on the last one; an upload the
+   extension finished leaves a note (`noteFinishedUpload`) so the app
+   refreshes that folder on its next activation. **Don't give the
+   extension's session no delegate** - a fast upload then finishes unseen and
+   the invalidated session is discarded before the app can ever hear of it
+   (found the hard way: no notification, no count).
 4. Fallbacks: with no account (or the user taps "Choose a folder later in
    Noo") the files go into `SharedInbox/pending.json` instead and a local
    notification asks the user to open Noo; the app consumes that through

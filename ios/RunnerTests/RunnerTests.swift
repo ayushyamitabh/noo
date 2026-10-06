@@ -185,4 +185,19 @@ class RunnerTests: XCTestCase {
     XCTAssertEqual(finished?.failed, 1)
     XCTAssertEqual(finished?.remoteFolder, "/Docs")
   }
+
+  func testFinishedUploadFoldersAreNotedOnceAndConsumed() {
+    _ = TransferBatchStore.consumeFinishedUploadFolders()  // start clean
+    TransferBatchStore.noteFinishedUpload(folder: "/Docs")
+    TransferBatchStore.noteFinishedUpload(folder: "/Docs")
+    TransferBatchStore.noteFinishedUpload(folder: "/Photos")
+
+    XCTAssertEqual(TransferBatchStore.consumeFinishedUploadFolders(), ["/Docs", "/Photos"])
+    XCTAssertEqual(TransferBatchStore.consumeFinishedUploadFolders(), [])
+  }
+
+  func testNotificationFileCountWording() {
+    XCTAssertEqual(TransferNotifications.files(1), "1 file")
+    XCTAssertEqual(TransferNotifications.files(3), "3 files")
+  }
 }
