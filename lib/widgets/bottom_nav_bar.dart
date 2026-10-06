@@ -17,6 +17,8 @@ class BottomNavBar extends StatelessWidget {
   final NooNavStyle style;
   final NooBottomBarStyle barStyle;
   final bool frosted;
+  final double frostedBlur;
+  final double frostedOpacity;
   final List<AppTab> tabs;
   final int selectedIndex;
   final ValueChanged<int> onDestinationSelected;
@@ -27,6 +29,8 @@ class BottomNavBar extends StatelessWidget {
     required this.style,
     this.barStyle = NooBottomBarStyle.attached,
     this.frosted = false,
+    this.frostedBlur = NooBottomBar.defaultFrostedBlur,
+    this.frostedOpacity = NooBottomBar.defaultFrostedOpacity,
     required this.tabs,
     required this.selectedIndex,
     required this.onDestinationSelected,
@@ -39,6 +43,8 @@ class BottomNavBar extends StatelessWidget {
       style: style,
       barStyle: barStyle,
       frosted: frosted,
+      frostedBlur: frostedBlur,
+      frostedOpacity: frostedOpacity,
       destinations: [
         for (final tab in tabs)
           NooNavDestination(icon: tab.icon, label: tab.label),

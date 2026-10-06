@@ -1,3 +1,4 @@
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -61,6 +62,44 @@ void main() {
         );
       }
     }
+
+    testNooWidgets('frosted bar uses the given blur sigma and fill opacity', (
+      tester,
+      theme,
+      c,
+    ) async {
+      await pumpNoo(
+        tester,
+        SizedBox(
+          width: 360,
+          height: 120,
+          child: NooBottomBar(
+            style: NooNavStyle.android,
+            frosted: true,
+            frostedBlur: 31,
+            frostedOpacity: 0.5,
+            destinations: _destinations,
+            selectedIndex: 0,
+            onSelected: (_) {},
+          ),
+        ),
+        theme: theme,
+      );
+      expect(
+        tester.widget<BackdropFilter>(find.byType(BackdropFilter)).filter,
+        ImageFilter.blur(sigmaX: 31, sigmaY: 31),
+      );
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Container &&
+              w.decoration is BoxDecoration &&
+              (w.decoration as BoxDecoration).color ==
+                  c.surface.withValues(alpha: 0.5),
+        ),
+        findsOneWidget,
+      );
+    });
 
     test('drawsBehindBody: floating or frosted', () {
       expect(

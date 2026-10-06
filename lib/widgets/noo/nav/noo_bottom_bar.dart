@@ -14,11 +14,6 @@ const double _kFloatingPillTop = 8;
 const double _kAndroidPillWidth = 56;
 const double _kAndroidPillHeight = 32;
 
-/// Frosted glass: the surface fill's opacity and the backdrop blur sigma -
-/// the same sigma [FrostedGlassContainer] uses for the media viewer chrome.
-const double _kFrostedAlpha = 0.72;
-const double _kFrostedSigma = 20;
-
 /// The mobile bottom bar (DESIGN_SYSTEM.md 3, "Mobile"; `iNav`/`aNav` in
 /// `Mobile Screen.dc.html`). Shows the 5 pinned tabs - which ones, and in
 /// what order, is the caller's business; this only draws [destinations].
@@ -71,6 +66,12 @@ class NooBottomBar extends StatelessWidget {
   final NooNavStyle style;
   final NooBottomBarStyle barStyle;
   final bool frosted;
+
+  /// Backdrop blur sigma and surface-fill opacity while [frosted] (user-
+  /// adjustable in Settings; the defaults match [FrostedGlassContainer]'s
+  /// blur).
+  final double frostedBlur;
+  final double frostedOpacity;
   final List<NooNavDestination> destinations;
   final int selectedIndex;
   final ValueChanged<int> onSelected;
@@ -82,6 +83,8 @@ class NooBottomBar extends StatelessWidget {
     required this.style,
     this.barStyle = NooBottomBarStyle.attached,
     this.frosted = false,
+    this.frostedBlur = defaultFrostedBlur,
+    this.frostedOpacity = defaultFrostedOpacity,
     required this.destinations,
     required this.selectedIndex,
     required this.onSelected,
@@ -98,6 +101,9 @@ class NooBottomBar extends StatelessWidget {
     }
     return barStyle == NooBottomBarStyle.floating ? 64 : 80;
   }
+
+  static const double defaultFrostedBlur = 20;
+  static const double defaultFrostedOpacity = 0.72;
 
   /// Whether the host `Scaffold` must draw its body behind the bar
   /// (`extendBody`) - true for floating (its transparent margin) and for any
@@ -144,7 +150,9 @@ class NooBottomBar extends StatelessWidget {
         ),
         child: row,
       );
-      final pill = frosted ? _blurred(pillBox, pillRadius) : pillBox;
+      final pill = frosted
+          ? _blurred(pillBox, pillRadius, frostedBlur)
+          : pillBox;
       return SafeArea(
         top: false,
         child: Padding(
@@ -176,6 +184,8 @@ class NooBottomBar extends StatelessWidget {
                         onTap: onSearchTap!,
                         size: barHeight,
                         frosted: frosted,
+                        frostedBlur: frostedBlur,
+                        frostedOpacity: frostedOpacity,
                       ),
                     ],
                   ),
@@ -195,11 +205,11 @@ class NooBottomBar extends StatelessWidget {
         child: SizedBox(height: barHeight, child: row),
       ),
     );
-    return frosted ? _blurred(bar, BorderRadius.zero) : bar;
+    return frosted ? _blurred(bar, BorderRadius.zero, frostedBlur) : bar;
   }
 
   Color _fill(NooColors colors) => frosted
-      ? colors.surface.withValues(alpha: _kFrostedAlpha)
+      ? colors.surface.withValues(alpha: frostedOpacity)
       : colors.surface;
 
   Widget _buildIosRow({NooNavDestination? trailingSearch}) {
@@ -286,10 +296,10 @@ class NooBottomBar extends StatelessWidget {
 
 /// Clips [child] to [radius] and blurs whatever is drawn behind it - the
 /// frosted bar's backdrop. [child] supplies the translucent fill on top.
-Widget _blurred(Widget child, BorderRadius radius) => ClipRRect(
+Widget _blurred(Widget child, BorderRadius radius, double sigma) => ClipRRect(
   borderRadius: radius,
   child: BackdropFilter(
-    filter: ImageFilter.blur(sigmaX: _kFrostedSigma, sigmaY: _kFrostedSigma),
+    filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
     child: child,
   ),
 );
@@ -302,12 +312,16 @@ class _SearchSatellite extends StatelessWidget {
   final VoidCallback onTap;
   final double size;
   final bool frosted;
+  final double frostedBlur;
+  final double frostedOpacity;
 
   const _SearchSatellite({
     required this.destination,
     required this.onTap,
     required this.size,
     required this.frosted,
+    required this.frostedBlur,
+    required this.frostedOpacity,
   });
 
   @override
@@ -331,7 +345,7 @@ class _SearchSatellite extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: frosted
-            ? colors.surface.withValues(alpha: _kFrostedAlpha)
+            ? colors.surface.withValues(alpha: frostedOpacity)
             : colors.surface,
         border: Border.all(color: colors.line),
         shape: BoxShape.circle,
@@ -339,7 +353,9 @@ class _SearchSatellite extends StatelessWidget {
       ),
       child: Icon(destination.icon, size: 24, color: colors.fg1),
     );
-    return frosted ? _blurred(disc, BorderRadius.circular(size / 2)) : disc;
+    return frosted
+        ? _blurred(disc, BorderRadius.circular(size / 2), frostedBlur)
+        : disc;
   }
 }
 
