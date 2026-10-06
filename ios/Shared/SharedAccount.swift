@@ -96,5 +96,11 @@ enum SharedAccountStore {
 
   static func clear() {
     SecItemDelete(baseQuery() as CFDictionary)
+    // The first version kept a single account under its own service name;
+    // don't leave that credential behind.
+    var legacy = baseQuery()
+    legacy[kSecAttrService as String] = "dev.ayushya.noo.shared-account"
+    legacy[kSecAttrAccount as String] = "active"
+    SecItemDelete(legacy as CFDictionary)
   }
 }
