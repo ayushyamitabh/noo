@@ -26,6 +26,7 @@
 		7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */; };
 		78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */ = {isa = PBXBuildFile; productRef = 78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */; };
 		852C0C8EBA96CB6389DF6917 /* SharedAccount.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F2C956C98F58A97B5595307 /* SharedAccount.swift */; };
+		8C73B4CB445AEF383B7640E1 /* DeviceAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97ACCF43E1EC13AA2538E42C /* DeviceAuth.swift */; };
 		91C1658DC7467CACB2AAC7FF /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0AE6F681A3100A461B4A5318 /* Foundation.framework */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
@@ -107,6 +108,7 @@
 		901C0CDB4FB819302E2A7563 /* NativeServices.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeServices.swift; sourceTree = "<group>"; };
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Debug.xcconfig; path = Flutter/Debug.xcconfig; sourceTree = "<group>"; };
 		9740EEB31CF90195004384FC /* Generated.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Generated.xcconfig; path = Flutter/Generated.xcconfig; sourceTree = "<group>"; };
+		97ACCF43E1EC13AA2538E42C /* DeviceAuth.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DeviceAuth.swift; sourceTree = "<group>"; };
 		97C146EE1CF9000F007C117D /* Runner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Runner.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		97C146FB1CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		97C146FD1CF9000F007C117D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -158,6 +160,7 @@
 				49213989F0FA1B83B0B8A523 /* Info.plist */,
 				65F57A1EB0C62774E561860D /* ShareExtension.entitlements */,
 				5BE7B8C31FF78E212BD71DFC /* SharePickerView.swift */,
+				97ACCF43E1EC13AA2538E42C /* DeviceAuth.swift */,
 			);
 			name = ShareExtension;
 			path = ShareExtension;
@@ -438,6 +441,7 @@
 				3C1A0DAA5F9B37FEA4C604BE /* DavFolders.swift in Sources */,
 				66AFC246E251554A80B2476F /* SharePickerView.swift in Sources */,
 				A16680889B3A9D8672FA29C1 /* TransferNotifications.swift in Sources */,
+				8C73B4CB445AEF383B7640E1 /* DeviceAuth.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

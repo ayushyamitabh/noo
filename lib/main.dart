@@ -61,11 +61,9 @@ void main() {
         ChangeNotifierProvider(
           create: (context) {
             final session = SessionController(context.read());
-            // iOS's Share Extension has no Flutter engine; it picks its
-            // folders/uploads as whichever account was last published here.
-            session.addAccountReadyListener(
-              () => ShareAccountService.publish(session),
-            );
+            // iOS's Share Extension has no Flutter engine; sign-out must wipe
+            // what it was given. (Publishing happens in the shell - see
+            // ShareAccountSync - once there's a FilesController to read.)
             session.addAccountClearedListener(ShareAccountService.clear);
             return session;
           },
@@ -215,6 +213,7 @@ class _MainShellViewState extends State<MainShellView> {
   late final Map<AppTab, ScrollController> _scrollControllers;
   StreamSubscription<List<SharedFileRef>>? _shareSub;
   StreamSubscription<PickRequest>? _pickSub;
+  ShareAccountSync? _shareAccountSync;
 
   @override
   void initState() {
@@ -235,6 +234,13 @@ class _MainShellViewState extends State<MainShellView> {
     // file's actual bytes, so a large shared file can't block startup.
     ShareIntentService.getInitialShare().then(_handleSharedFiles);
     _shareSub = ShareIntentService.onNewShare.listen(_handleSharedFiles);
+
+    // iOS's Share Extension picks accounts/folders on its own, so it's kept
+    // supplied with the accounts, lock settings and hidden-files filters.
+    _shareAccountSync = ShareAccountSync(
+      context.read<SessionController>(),
+      context.read<FilesController>(),
+    )..start();
 
     // Same cold-start-vs-already-running split as the share intent above:
     // another app may have launched Noo as its GET_CONTENT picker.
@@ -320,6 +326,7 @@ class _MainShellViewState extends State<MainShellView> {
     }
     _shareSub?.cancel();
     _pickSub?.cancel();
+    _shareAccountSync?.dispose();
     super.dispose();
   }
 

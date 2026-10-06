@@ -124,8 +124,24 @@ class RunnerTests: XCTestCase {
       DavFolderParser.folders(from: xml, excluding: "/Docs"),
       [DavFolder(name: "Tax Forms", path: "/Docs/Tax Forms"), DavFolder(name: "zeta", path: "/Docs/zeta")])
     XCTAssertEqual(
-      DavFolderParser.folders(from: xml, excluding: "/Docs", includeHidden: true).map(\.name),
+      DavFolderParser.folders(from: xml, excluding: "/Docs", hidden: .include).map(\.name),
       [".git", "Tax Forms", "zeta"])
+    XCTAssertEqual(
+      DavFolderParser.folders(from: xml, excluding: "/Docs", hidden: .only).map(\.name),
+      [".git"])
+  }
+
+  func testHiddenFilterTreatsAnyDotSegmentAsHidden() {
+    XCTAssertTrue(HiddenFilter.isHidden(path: "/.cache"))
+    XCTAssertTrue(HiddenFilter.isHidden(path: "/.cache/inside/deeper"), "children of a hidden folder are hidden")
+    XCTAssertFalse(HiddenFilter.isHidden(path: "/Docs/Tax Forms"))
+    XCTAssertTrue(HiddenFilter.hide.shows(path: "/Docs"))
+    XCTAssertFalse(HiddenFilter.hide.shows(path: "/.git"))
+    XCTAssertTrue(HiddenFilter.only.shows(path: "/.git/hooks"))
+    XCTAssertFalse(HiddenFilter.only.shows(path: "/Docs"))
+    XCTAssertTrue(HiddenFilter.include.shows(path: "/Docs"))
+    XCTAssertEqual(HiddenFilter(raw: "include"), .include)
+    XCTAssertEqual(HiddenFilter(raw: "nonsense"), .hide, "unknown values fall back to hiding")
   }
 
   func testFoldersAtRootAndUnderServerSubPath() {
@@ -150,24 +166,56 @@ class RunnerTests: XCTestCase {
 
   // MARK: - Shared account (Keychain group shared with the extension)
 
-  func testSharedAccountRoundTripsThroughTheKeychain() throws {
-    let account = SharedAccount(
-      serverUrl: "https://cloud.example.com", username: "alice",
-      authHeader: "Basic YWxpY2U6c2VjcmV0", displayName: "alice@cloud.example.com")
+  private func account(_ id: String, hidden: String = "hide") -> SharedAccount {
+    SharedAccount(
+      id: id, serverUrl: "https://\(id).example.com", username: id,
+      authHeader: "Basic \(id)", displayName: "\(id)@\(id).example.com", hiddenFilter: hidden)
+  }
+
+  func testSharedAccountsRoundTripThroughTheKeychain() throws {
+    let accounts = SharedAccounts(
+      accounts: [account("alice", hidden: "include"), account("bob")], activeId: "bob",
+      loginLockEnabled: true, lockAccountSwitching: true, lockHiddenFiles: false)
     addTeardownBlock { SharedAccountStore.clear() }
 
     SharedAccountStore.clear()
     XCTAssertNil(SharedAccountStore.load())
-    try SharedAccountStore.save(account)
-    XCTAssertEqual(SharedAccountStore.load(), account)
+    try SharedAccountStore.save(accounts)
+    XCTAssertEqual(SharedAccountStore.load(), accounts)
 
-    let replacement = SharedAccount(
-      serverUrl: "https://other.example.org", username: "bob", authHeader: "Basic Ym9i", displayName: "bob")
+    let replacement = SharedAccounts(
+      accounts: [account("carol")], activeId: "carol",
+      loginLockEnabled: false, lockAccountSwitching: false, lockHiddenFiles: false)
     try SharedAccountStore.save(replacement)
     XCTAssertEqual(SharedAccountStore.load(), replacement, "saving replaces, never duplicates")
 
     SharedAccountStore.clear()
     XCTAssertNil(SharedAccountStore.load())
+  }
+
+  func testSharedAccountsActiveFallsBackToTheFirstAccount() {
+    var shared = SharedAccounts(
+      accounts: [account("alice"), account("bob")], activeId: "bob",
+      loginLockEnabled: false, lockAccountSwitching: false, lockHiddenFiles: false)
+    XCTAssertEqual(shared.active?.id, "bob")
+    shared.activeId = "gone"
+    XCTAssertEqual(shared.active?.id, "alice")
+    shared.activeId = nil
+    XCTAssertEqual(shared.active?.id, "alice")
+  }
+
+  func testUnlockRulesNeedTheMasterLockAndTheirOwnToggle() {
+    func rules(master: Bool, switching: Bool, hidden: Bool) -> (Bool, Bool) {
+      let shared = SharedAccounts(
+        accounts: [account("a")], activeId: "a",
+        loginLockEnabled: master, lockAccountSwitching: switching, lockHiddenFiles: hidden)
+      return (shared.needsUnlockToSwitchAccount, shared.needsUnlockForHidden)
+    }
+    XCTAssertTrue(rules(master: true, switching: true, hidden: false) == (true, false))
+    XCTAssertTrue(rules(master: true, switching: false, hidden: true) == (false, true))
+    XCTAssertTrue(
+      rules(master: false, switching: true, hidden: true) == (false, false),
+      "the sub-toggles mean nothing while the login lock is off, as in the app")
   }
 
   // MARK: - TransferBatchStore

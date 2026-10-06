@@ -1,27 +1,57 @@
 import Foundation
 import Security
 
-/// The signed-in account, as much of it as the Share Extension needs to list
-/// folders and upload: the app writes it when an account becomes active and
-/// clears it on sign-out. Compiled into both targets.
-struct SharedAccount: Codable, Equatable {
+/// One signed-in account, as much of it as the Share Extension needs to list
+/// folders and upload. Compiled into both targets.
+struct SharedAccount: Codable, Equatable, Identifiable {
+  let id: String
   let serverUrl: String
   let username: String
   /// `Basic ...` - the app password never leaves the Keychain as plain text.
   let authHeader: String
   /// Shown in the picker, e.g. "alice@cloud.example.com".
   let displayName: String
+  /// The app's Files "hidden files" filter for this account - `hide` (the
+  /// default), `only` or `include` (see `HiddenFilter`). The share sheet
+  /// follows it instead of having a setting of its own.
+  let hiddenFilter: String
 }
 
-/// Keeps the [SharedAccount] in a Keychain access group both the app and the
+/// Everything the app publishes for the extension: every account that can
+/// upload, which one is active in the app, and the app-lock settings the
+/// extension has to honour. The app rewrites it whenever any of that changes.
+struct SharedAccounts: Codable, Equatable {
+  var accounts: [SharedAccount]
+  var activeId: String?
+  /// Settings -> Security: the master "login lock" and its two sub-toggles.
+  /// The sub-toggles only count while the master one is on (as in the app).
+  var loginLockEnabled: Bool
+  var lockAccountSwitching: Bool
+  var lockHiddenFiles: Bool
+
+  /// The account the app is currently using, else the first one.
+  var active: SharedAccount? {
+    accounts.first { $0.id == activeId } ?? accounts.first
+  }
+
+  /// Uploading to an account other than the active one is "switching" in
+  /// the app's terms, so it needs the same unlock.
+  var needsUnlockToSwitchAccount: Bool { loginLockEnabled && lockAccountSwitching }
+
+  /// Showing hidden folders needs the same unlock the app asks for when you
+  /// turn hidden files on.
+  var needsUnlockForHidden: Bool { loginLockEnabled && lockHiddenFiles }
+}
+
+/// Keeps the [SharedAccounts] in a Keychain access group both the app and the
 /// extension are entitled to (`keychain-access-groups`). The group's full id
 /// carries the signing team's prefix, so it's injected into each target's
 /// Info.plist as `NooKeychainAccessGroup` (= `$(AppIdentifierPrefix)` +
 /// `dev.ayushya.noo.shared`) instead of being hard-coded - both processes
 /// then always agree on it, with or without a team.
 enum SharedAccountStore {
-  private static let service = "dev.ayushya.noo.shared-account"
-  private static let account = "active"
+  private static let service = "dev.ayushya.noo.shared-accounts"
+  private static let account = "all"
 
   static var accessGroup: String? {
     Bundle.main.object(forInfoDictionaryKey: "NooKeychainAccessGroup") as? String
@@ -39,7 +69,7 @@ enum SharedAccountStore {
     return query
   }
 
-  static func save(_ value: SharedAccount) throws {
+  static func save(_ value: SharedAccounts) throws {
     let data = try JSONEncoder().encode(value)
     clear()
     var query = baseQuery()
@@ -51,15 +81,17 @@ enum SharedAccountStore {
     }
   }
 
-  static func load() -> SharedAccount? {
+  static func load() -> SharedAccounts? {
     var query = baseQuery()
     query[kSecReturnData as String] = true
     query[kSecMatchLimit as String] = kSecMatchLimitOne
     var result: AnyObject?
     guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
-      let data = result as? Data
+      let data = result as? Data,
+      let decoded = try? JSONDecoder().decode(SharedAccounts.self, from: data),
+      !decoded.accounts.isEmpty
     else { return nil }
-    return try? JSONDecoder().decode(SharedAccount.self, from: data)
+    return decoded
   }
 
   static func clear() {

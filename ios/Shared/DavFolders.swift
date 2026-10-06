@@ -7,6 +7,30 @@ struct DavFolder: Equatable {
   let path: String
 }
 
+/// The app's Files "hidden files" filter (`HiddenFilesFilter` in Dart):
+/// leave dot-folders out (`hide`, the default), list only them (`only`), or
+/// list everything (`include`). A folder counts as hidden when it - or any
+/// folder above it - starts with a dot, exactly as in the app.
+enum HiddenFilter: String {
+  case hide, only, include
+
+  init(raw: String) {
+    self = HiddenFilter(rawValue: raw) ?? .hide
+  }
+
+  static func isHidden(path: String) -> Bool {
+    path.split(separator: "/").contains { $0.hasPrefix(".") }
+  }
+
+  func shows(path: String) -> Bool {
+    switch self {
+    case .hide: return !Self.isHidden(path: path)
+    case .only: return Self.isHidden(path: path)
+    case .include: return true
+    }
+  }
+}
+
 /// Parses a WebDAV `PROPFIND` multistatus into folders. Pure (no
 /// networking), so it's unit-tested. Compiled into both targets.
 enum DavFolderParser {
@@ -67,11 +91,11 @@ enum DavFolderParser {
     return "/" + parts.joined(separator: "/")
   }
 
-  /// Child folders of [currentPath], sorted by name. The requested folder
-  /// itself (which a Depth-1 PROPFIND also returns) and - unless
-  /// [includeHidden] - dot-folders are left out.
+  /// Child folders of [currentPath], sorted by name, filtered by [hidden].
+  /// The requested folder itself (which a Depth-1 PROPFIND also returns) is
+  /// always left out.
   static func folders(
-    from xml: Data, excluding currentPath: String, includeHidden: Bool = false
+    from xml: Data, excluding currentPath: String, hidden: HiddenFilter = .hide
   ) -> [DavFolder] {
     let delegate = Delegate()
     let parser = XMLParser(data: xml)
@@ -84,7 +108,7 @@ enum DavFolderParser {
       .compactMap { response -> DavFolder? in
         guard let path = relativePath(fromHref: response.href), path != current else { return nil }
         let name = (path as NSString).lastPathComponent
-        guard !name.isEmpty, includeHidden || !name.hasPrefix(".") else { return nil }
+        guard !name.isEmpty, hidden.shows(path: path) else { return nil }
         return DavFolder(name: name, path: path)
       }
       .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
@@ -99,7 +123,7 @@ enum DavClient {
     <d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/></d:prop></d:propfind>
     """
 
-  static func listFolders(account: SharedAccount, path: String) async throws -> [DavFolder] {
+  static func listFolders(account: SharedAccount, path: String, hidden: HiddenFilter) async throws -> [DavFolder] {
     guard let url = WebDAV.fileURL(serverUrl: account.serverUrl, username: account.username, remotePath: path)
     else { throw TransferError(message: "Invalid server address.") }
     var request = URLRequest(url: url)
@@ -115,6 +139,6 @@ enum DavClient {
     guard status == 207 else {
       throw TransferError(message: status == 401 ? "Signed out - open Noo to sign in again." : "Server returned \(status).")
     }
-    return DavFolderParser.folders(from: data, excluding: path)
+    return DavFolderParser.folders(from: data, excluding: path, hidden: hidden)
   }
 }
