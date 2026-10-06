@@ -100,6 +100,11 @@ final class TransferManager: NSObject {
       let staged = stageDir.appendingPathComponent("\(index)-\(file.name)")
       do {
         try FileManager.default.copyItem(at: source, to: staged)
+        // A file the Share Extension left in the App Group is ours to clean
+        // up once it's staged; a picker's temp file isn't.
+        if source.path.contains("/\(SharedInbox.folderName)/") {
+          try? FileManager.default.removeItem(at: source)
+        }
       } catch {
         throw TransferError(message: "Can't read \(file.name): \(error.localizedDescription)")
       }
