@@ -40,7 +40,7 @@ Website: <https://noo.ayushya.dev>
 Prerequisites:
 
 - [Flutter](https://docs.flutter.dev/get-started/install) (SDK `^3.12.2`)
-- An Android device or emulator, an iOS device, or Windows
+- An Android device or emulator, or an iOS device or simulator
 - A Nextcloud server with Login Flow v2 enabled (on by default since
   Nextcloud 15)
 
@@ -57,7 +57,6 @@ finish signing in.
 ```bash
 flutter build apk       # Android (debug-signed unless you configure a key)
 flutter build ios       # iOS
-flutter build windows   # Windows
 ```
 
 Release builds read signing details from `android/key.properties` or from

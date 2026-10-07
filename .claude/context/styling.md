@@ -24,7 +24,7 @@ widgets. Key points:
 
 - **Material 3**, seed-color based. `AppTheme.seedColors` is the picker list
   users choose from; `defaultNextcloudBlue` (`#0082C9`) is the fallback.
-- **Dynamic color** (Android 12+ Material You / desktop accent color) is
+- **Dynamic color** (Android 12+ Material You) is
   supported via `package:dynamic_color`'s `DynamicColorBuilder` wrapping the
   whole app in `main.dart`. When available and `useDynamicColor` is on, the
   OS-provided `ColorScheme` wins over the seed color — always thread both
@@ -81,7 +81,7 @@ Catalog:
 |---|---|
 | `core/` | `NooButton`, `NooFab`, `NooChip`, `NooSegmentedControl`, `NooToggle`, `NooSearchField`, `NooAvatar`, `NooBadge`, `NooProgressBar` |
 | `lists/` | `NooGroupedList`, `NooSettingsRow`, `NooTabOrderRow`, `NooBanner`, `NooInfoNote` (tinted info callout; `SettingsSection(notice:)`), `NooSummaryCard`, `NooSelectionBar` |
-| `files/` | `NooFileKind` (spec §1.2 tiles; `NooFileKind.from(name:, mimeType:, isDirectory:)`), `NooFileTile`, `NooStatusIcon`/`NooSyncStatus`, `NooFileRow` (mobile 64px), `NooFileTableHeader`/`NooFileTableRow` (desktop), `NooSwipeAction` |
+| `files/` | `NooFileKind` (spec §1.2 tiles; `NooFileKind.from(name:, mimeType:, isDirectory:)`), `NooFileTile`, `NooStatusIcon`/`NooSyncStatus`, `NooFileRow` (mobile 64px), `NooFileTableHeader`/`NooFileTableRow` (wide tablet), `NooSwipeAction` |
 | `media/` | `NooGridCard`, `NooPhotoTile` (video badge, selection), `NooPhotoGroupHeader`/`NooPhotoGrid` (sliver, or `.box`), `NooActivityItem`, `NooStatCard` |
 | `nav/` | `NooBottomBar`, `NooTopBar` (a `PreferredSizeWidget`) with `NooTopBarButton`/`NooTopBarBack`, `NooDrawer` with its `Account`/`Storage`/`Item`/`Link` parts, `NooSidebar` with `NooSidebarItem`/`Divider`/`Account`/`Storage`, `NooToolbar` (floating rounded card with margin; `NooToolbar.outerHeight` for `appBar` sizing) |
 | `overlays/` | `showNooSheet`, `showNooDialog`/`NooDialog`, `NooOverlayHeader`, `NooTextField`, and the share parts `NooShareSection`, `NooPersonAccessRow`, `NooPermissionPill` |
@@ -102,8 +102,6 @@ Gotchas:
   trigger it) but also fires it directly if the drag goes far enough (past
   1.8x the block's width) before release - a full swipe-through does delete
   in one gesture, it's not tap-only anymore.
-- Window chrome (macOS traffic lights, the Windows 40px title bar) isn't
-  built yet. `NooSidebar.windowControls` is the slot for it.
 - Always read colors through `context.nooColors`, never
   `Theme.of(context).colorScheme` - the latter is Flutter's own Material 3
   scheme, reseeded by the user's accent color choice (`AppTheme.light`/
@@ -156,7 +154,7 @@ blocks are noted where they matter:
   `settings_dialogs.dart`'s `confirmRemoveAccount`.
   `lib/widgets/shell/shell_common.dart` — account/storage formatting,
   `openSettings`/`openSearch`, `showAccountSwitcher`, `ShellAvatarButton`,
-  `ShellSearchLauncher`, shared by the mobile and desktop shell chrome.
+  `ShellSearchLauncher`, shared by the mobile and wide tablet shell chrome.
 - [`getItemIcon`/`getIconColor`/`ItemThumbnail`](../../lib/widgets/item_icon.dart)
   — `getItemIcon`/`getIconColor` are superseded by `NooFileKind` in
   rebuilt screens; `ItemThumbnail` is still reused as-is, fed into
@@ -362,13 +360,13 @@ Markdown files (`.md`/`.markdown`) in `MediaTextPreview` open rendered via `flut
 
 `ShareSheet`: focusing the people search field does not scroll; once the user types, `_revealPeopleSection` animates the "Share with people" section (keyed by `_peopleKey` on the `NooShareSection`, not the inner column) to just below the sheet's top edge with a small gap.
 
-## Desktop/tablet layout notes
+## Wide tablet layout notes
 
-- The desktop branch in `main.dart` is wrapped in `SafeArea` so tablets keep
+- The wide tablet branch in `main.dart` is wrapped in `SafeArea` so tablets keep
   system bars clear of the sidebar; the sidebar has no divider between pinned
   and hidden tabs.
-- Desktop Settings is the same two-level menu as mobile (centered 640px column, back button in the floating toolbar); the
-  pushed category screens render the desktop card layout.
+- Wide tablet Settings is the same two-level menu as mobile (centered 640px column, back button in the floating toolbar); the
+  pushed category screens render the wide tablet card layout.
 - Settings that don't apply in wide-tablet (Appearance nav options,
   Swipe on a file) show a `NooInfoNote` via `SettingsSection.notice`.
 - Mobile-layout grids (Files, Favorites, move/copy picker, share upload,

@@ -1,6 +1,6 @@
 # Noo Design System
 
-Noo is a Nextcloud client for iOS, Android, macOS and Windows. ("Noo" is a placeholder name.)
+Noo is a Nextcloud client for iOS and Android. ("Noo" is a placeholder name.)
 Its visual language is warm neutrals with one violet accent, flat surfaces, pill-shaped controls, and no gradients.
 
 **Platform rule:** keep one visual language everywhere. Adapt only the navigation chrome (status bar, top bar, bottom bar, window controls) to each platform. Content components look the same on every platform.
@@ -9,8 +9,8 @@ Reference files in this project:
 - `Noo Screens.dc.html` has every screen on every platform, in light and dark.
 - `Noo Design System.dc.html` is the visual component sheet.
 - `noo-kit.js` holds the tokens (`TH`), the icon set (`SVG`/`ic`), file-type mapping (`KIND`) and mock data.
-- `Mobile Screen.dc.html` and `Desktop Screen.dc.html` are the reference builds for each screen.
-- [Noo — Missing Screens](https://claude.ai/artifact/3AGPqqMdkLSC2ypCh2CQs4) is a live design canvas (Claude Design, not a static file in this repo) covering pieces this doc originally had no recipe for: Media viewer, Search, the Upload/Move/Copy destination picker, the Details sheet's tab switch, and the Selection action bar (mobile + desktop). It has both an iOS row (built first, ready for later) and an Android row (built to match right now) - same content, chrome adapted per the platform rule above. §4 below is the written-up version of what's approved there; go back to the canvas for pixel-level layout, not just the summary.
+- `Mobile Screen.dc.html` is the reference build for each screen.
+- [Noo — Missing Screens](https://claude.ai/artifact/3AGPqqMdkLSC2ypCh2CQs4) is a live design canvas (Claude Design, not a static file in this repo) covering pieces this doc originally had no recipe for: Media viewer, Search, the Upload/Move/Copy destination picker, the Details sheet's tab switch, and the Selection action bar (mobile + wide tablet). It has both an iOS row (built first, ready for later) and an Android row (built to match right now) - same content, chrome adapted per the platform rule above. §4 below is the written-up version of what's approved there; go back to the canvas for pixel-level layout, not just the summary.
 
 ---
 
@@ -20,8 +20,8 @@ Reference files in this project:
 
 | Token | Role | Light | Dark |
 |---|---|---|---|
-| `bg` | App background, desktop sidebar | `#F3EFE6` warm off-white | `#0E0D0B` |
-| `surface` (`sf`) | Cards, rows, bars, sheets, desktop main pane | `#FFFFFF` | `#25241F` |
+| `bg` | App background, wide tablet sidebar | `#F3EFE6` warm off-white | `#0E0D0B` |
+| `surface` (`sf`) | Cards, rows, bars, sheets, wide tablet main pane | `#FFFFFF` | `#25241F` |
 | `surface-2` (`sf2`) | Inputs, inset panels, secondary buttons | `#F6F5F2` | `#3D3C38` |
 | `surface-3` (`sf3`) | Progress tracks, toggle off, grabbers | `#EAE8E2` | `#5A5852` |
 | `line` (`ln`) | Dividers, 1px borders | `#EAE8E2` | `#3D3C38` |
@@ -54,7 +54,7 @@ Rules:
 | image | info-soft | info | `image` |
 | archive | surface-3 | fg-2 | `file-archive` |
 
-Tile sizes: 40px/r12 for mobile rows, 30px/r9 for desktop rows, 44px/r12 for the share header, 32px/r10 for activity. The icon is half the tile size (20, 16, 24, 16).
+Tile sizes: 40px/r12 for mobile rows, 30px/r9 for wide tablet rows, 44px/r12 for the share header, 32px/r10 for activity. The icon is half the tile size (20, 16, 24, 16).
 
 ### 1.3 Typography
 Fonts (Google Fonts): **Schibsted Grotesk** for headings (weights 500/600) and **Instrument Sans** for UI (weights 400/500/600). Load them with `https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Schibsted+Grotesk:wght@500;600&display=swap`. Don't use italics, all-caps or wide tracking.
@@ -62,30 +62,30 @@ Fonts (Google Fonts): **Schibsted Grotesk** for headings (weights 500/600) and *
 | Style | Font | Size / line-height | Tracking | Use |
 |---|---|---|---|---|
 | Large title | Schibsted 600 | 34 / 0.9 | −3% | iOS large title |
-| Stat | Schibsted 600 | 32 (mobile) · 28 (desktop) / 0.9 | −3% | Offline GB, counters |
-| Title | Schibsted 500 | 22 / 1 | −2% | Android top bar, desktop toolbar |
+| Stat | Schibsted 600 | 32 (mobile) · 28 (wide tablet) / 0.9 | −3% | Offline GB, counters |
+| Title | Schibsted 500 | 22 / 1 | −2% | Android top bar, wide tablet toolbar |
 | Card title | Schibsted 500 | 17–20 / 1 | −2% | Settings cards, sheet sections, account name |
 | Group heading | Schibsted 500 | 18 / 1 | −2% | Photos month |
 | Body L | Instrument 400/500 | 16 / 1.2 | 0 | Mobile row title, settings label |
-| Body | Instrument 400/500 | 14–15 / 1.3 | 0 | Desktop rows, activity text, banners |
+| Body | Instrument 400/500 | 14–15 / 1.3 | 0 | Wide tablet rows, activity text, banners |
 | Label | Instrument 600 | 13 / 1 | 0 | Section labels (fg-2), chips, table headers (12, fg-3) |
-| Meta | Instrument 400 | 13 (mobile) · 12–13 (desktop) / 1.2 | 0 | Size · date, subtitles (fg-3) |
+| Meta | Instrument 400 | 13 (mobile) · 12–13 (wide tablet) / 1.2 | 0 | Size · date, subtitles (fg-3) |
 | Nav label | Instrument 500 / 600 (active) | 12 Android · 10 iOS | 0 | Bottom bars |
 | Button | Instrument 600 | 14–16 / 1 | 0 | All buttons |
 | Mono | ui-monospace 400 | 13–14 | 0 | Share URLs, local paths |
 
 ### 1.4 Space, radius, elevation, motion
-- **Spacing** uses a 4px base: 4, 8, 12, 14, 16, 20, 24, 32. Mobile screen gutter is **12px** (cards) and 16px (bars). Desktop content gutter is **24px**.
+- **Spacing** uses a 4px base: 4, 8, 12, 14, 16, 20, 24, 32. Mobile screen gutter is **12px** (cards) and 16px (bars). Wide tablet content gutter is **24px**.
 - **Radius:**
   - pills (`999px`) for every button, chip, segmented control, toggle, search field and badge
   - 20px for cards and grouped lists
   - 18px for grid cards and stat cards
   - 14px for inputs and inset panels
-  - 12px for desktop sidebar items and selected table rows
+  - 12px for wide tablet sidebar items and selected table rows
   - 28px for the sheet top and drawer edge
-  - 24px for desktop dialogs
+  - 24px for wide tablet dialogs
   - screen corners are 48 on iOS and 36 on Android
-- **Elevation:** product UI is flat, with no shadows on buttons or cards. The only shadow is `0 24px 48px rgba(30,0,47,.14)`, and only on floating desktop dialogs. Separate things by surface color, not by shadow.
+- **Elevation:** product UI is flat, with no shadows on buttons or cards. The only shadow is `0 24px 48px rgba(30,0,47,.14)`, and only on floating wide tablet dialogs. Separate things by surface color, not by shadow.
 - **Motion:** use `cubic-bezier(.7,0,.15,1)` with durations of 180, 280 and 480ms. Nothing bounces. Pressing a button scales it to 0.98.
 
 ### 1.5 Icons
@@ -96,7 +96,7 @@ Use **Lucide** (pinned to `lucide-static@0.460.0`) at a 1.8 stroke. Sizes are 14
 ## 2. Components
 
 **Button**
-- Always a pill. Heights: 52 (sheet CTA), 44 (mobile card), 40 (inline in a field), 36 (desktop toolbar), 28–32 (compact).
+- Always a pill. Heights: 52 (sheet CTA), 44 (mobile card), 40 (inline in a field), 36 (wide tablet toolbar), 28–32 (compact).
 - Variants:
   - *Primary*: accent fill, white text.
   - *Tonal*: accent-soft fill, accent-text.
@@ -124,7 +124,7 @@ Use **Lucide** (pinned to `lucide-static@0.460.0`) at a 1.8 stroke. Sizes are 14
 
 **Chip**
 - A pill, 32–34px tall, 12px horizontal padding, Label 13–14.
-- Idle: surface fill on mobile, or a 1px line border on desktop.
+- Idle: surface fill on mobile, or a 1px line border on wide tablet.
 - Selected: accent-soft fill with accent-text.
 - A trailing `chevron-down` means it opens a menu. A trailing `x` means it's an active filter.
 
@@ -134,7 +134,7 @@ Use **Lucide** (pinned to `lucide-static@0.460.0`) at a 1.8 stroke. Sizes are 14
 - Use it for the List/Grid toggle (icons only, 36×28), Shares scope, Theme, and default view.
 
 **Toggle**
-- 48×28 on mobile, 44×26 on desktop, with a white knob 3px inset.
+- 48×28 on mobile, 44×26 on wide tablet, with a white knob 3px inset.
 - On: accent track. Off: surface-3 track. It looks the same on every platform.
 
 **Search field**
@@ -143,7 +143,7 @@ Use **Lucide** (pinned to `lucide-static@0.460.0`) at a 1.8 stroke. Sizes are 14
 - Placement:
   - iOS: below the large title.
   - Android: an icon in the top bar that expands.
-  - Desktop: 260px wide in the toolbar.
+  - Wide tablet: 260px wide in the toolbar.
 
 **Grouped list (card)**
 - A surface card with radius 20 and 1px gaps showing `line`, which draws the dividers.
@@ -156,7 +156,7 @@ Use **Lucide** (pinned to `lucide-static@0.460.0`) at a 1.8 stroke. Sizes are 14
   - The meta line is `[status icon][shared icon] size · modified`.
   - A favorite shows an accent-text star before the overflow menu.
   - Trailing icon by screen: star in Favorites, `rotate-ccw` in Trash.
-- Desktop: a table row 52px tall.
+- Wide tablet: a table row 52px tall.
   - Columns are `minmax(0,1fr) 180px 160px 120px`: Name, two data columns, then status icons and the overflow menu.
   - The header row is 36px, 12/600 in fg-3, with a sort arrow on the active column.
   - A selected row gets an accent-soft fill with radius 12.
@@ -179,12 +179,12 @@ multi-select)
   never a second bar stacked underneath it, and never the shell's own top
   bar/toolbar, which don't change for selection.
 - A `surface` card, radius 20, in the screen's usual gutter (12 mobile, 24
-  desktop) - selection reads as a distinct mode, not a bare row of buttons
+  wide tablet) - selection reads as a distinct mode, not a bare row of buttons
   on `bg`.
 - Left to right: a 36px `surface-2` close circle (`x`), then "N selected"
   (17/500), then the bulk actions, trailing-anchored. Fixed width, never
   scrolls: only the first few actions show inline (3 on mobile, 4 on
-  desktop - there can be up to 9: favorite, share, download, delete, copy,
+  wide tablet - there can be up to 9: favorite, share, download, delete, copy,
   move, rename, sync, details); the rest sit behind a trailing "More"
   button that opens the same grouped-list sheet a file row's own overflow
   menu (`ellipsis`/`ellipsis-vertical`) already uses. Which actions land in
@@ -193,20 +193,20 @@ multi-select)
 - Mobile: inline actions are plain 20px accent-text icons, no fill; "More"
   is the same 40px `NooOverflowButton` treatment (`ellipsis`/
   `ellipsis-vertical`, fg-3) file rows use for their own overflow menu.
-- Desktop: inline actions are labelled tonal pills (accent-soft/
-  accent-text), danger-soft/danger for the one labelled "Delete" - desktop
+- Wide tablet: inline actions are labelled tonal pills (accent-soft/
+  accent-text), danger-soft/danger for the one labelled "Delete" - wide tablet
   has the room for labels, and the app's other toolbar actions are already
   labelled buttons rather than bare icons. "More" is a secondary pill
   (surface-2/fg-1) with a trailing `chevron-down`, so it reads as "opens a
   menu" rather than another bulk action.
 
 **Grid card**
-- Surface fill, radius 18. Mobile uses 2 columns with a 10px gap; desktop uses 5 columns with a 16px gap.
+- Surface fill, radius 18. Mobile uses 2 columns with a 10px gap; wide tablet uses 5 columns with a 16px gap.
 - The thumbnail area is 104–118px tall, filled with the file-type soft color and a 32px icon. Real thumbnails replace it when they exist.
 - Below it: the name (14/500) with an overflow menu, then the meta (12).
 
 **Photo grid**
-- Square tiles with a 2px gap on mobile (3 columns, edge to edge) and a 4px gap on desktop (8 columns).
+- Square tiles with a 2px gap on mobile (3 columns, edge to edge) and a 4px gap on wide tablet (8 columns).
 - Tiles are grouped by month, with the group heading on the left and the count on the right.
 - Videos get a badge in the bottom-right: a `play` icon and the duration on `rgba(14,13,11,.7)`.
 
@@ -215,7 +215,7 @@ multi-select)
 - Time in meta style. The file tile (32) goes on the right.
 
 **Banner / summary card**
-- A surface card with radius 20 (surface-2 on desktop) and padding of 14–18.
+- A surface card with radius 20 (surface-2 on wide tablet) and padding of 14–18.
 - The action sits on its own row below the description text, not squeezed
   onto the same line - a long retention message/caption and the action
   used to fight for the same row's width.
@@ -236,7 +236,7 @@ multi-select)
 **Settings row**
 - 52px tall, or 60px with a subtitle.
 - Left to right: an optional 20px icon in fg-2, then the label (16) with an optional subtitle (13, fg-3), then a trailing control.
-- Trailing control is one of: a toggle, a value in fg-3 with a chevron (desktop uses a 32px dropdown with radius 10), a segmented control, a pill button, or a status badge.
+- Trailing control is one of: a toggle, a value in fg-3 with a chevron (wide tablet uses a 32px dropdown with radius 10), a segmented control, a pill button, or a status badge.
 - A destructive row uses danger text.
 - Exception: a segmented control with 3+ labelled segments (Theme's
   System/Light/Dark) gets its own row below the label instead of a
@@ -247,14 +247,14 @@ multi-select)
   control and Photos' filter-sheet type control already use.
 
 **Tab order row**
-- A grip icon (`grip-vertical`, fg-3), the tab icon, the label, then a pin button: a 36px circle (30 on desktop) that is accent-soft with `pin` when pinned, or surface-2 with `pin-off` when not.
+- A grip icon (`grip-vertical`, fg-3), the tab icon, the label, then a pin button: a 36px circle (30 on wide tablet) that is accent-soft with `pin` when pinned, or surface-2 with `pin-off` when not.
 - Allow at most 5 pinned tabs.
 
 **Sheet** (mobile)
 - Surface fill, radius 28 at the top. A 36×5 grabber in surface-3. Padding 20, with 22px between sections.
 - It sits on a scrim.
 
-**Dialog** (desktop)
+**Dialog** (wide tablet)
 - 540px wide, radius 24, padding 24, sitting on a scrim.
 - Header: file tile, title "Share "<name>"", and a close button (32px circle, surface-2).
 
@@ -282,7 +282,7 @@ Mobile always has **5 pinned tabs in the bottom bar**. The rest go in the drawer
 | Status bar | 54px, Dynamic Island | 40px |
 | Top bar | 44px row: `menu` on the left; `plus` and avatar on the right (all accent-text). Then a 34px large title, then the search field. | 64px: `menu`, 22px title, avatar - see "Search" below for what replaces `search` there, and "Navigation menu" for `menu` |
 | Bottom bar | Surface fill, 1px top line. Icon 24 above a 10px label. Active: accent-text. Idle: fg-3. 34px home indicator below. | Surface fill, 80px. Icon 24 above a 12px label (label space is always reserved, just invisible when idle, so nothing shifts on selection). The active icon sits inside a 56×32 accent-soft pill that slides between tabs as one shared indicator, rather than popping in/out per tab. 20px gesture bar below. |
-| Bottom bar - floating (Settings → Appearance → "Bottom bar", both platforms) | Same content, inset 16px from both side edges and clear of the bottom safe area instead of edge to edge, radius 28 (the sheet-top/drawer-edge radius) rather than square corners. Product UI otherwise stays flat (see 1.4), but this is the one other place - besides desktop dialogs - that gets the app's one shadow: a 1px `line` border plus the dialog shadow, since a bar that's genuinely floating above scrolling content needs to read as elevated. Row height drops (iOS 50, same as attached; Android 64 vs 80) to suit. Android's idle tabs drop their reserved label space in this mode - the icon just centers in the button and renders a touch bigger (25 vs 24px) - rather than sitting high with a gap held open under it. `Scaffold.extendBody: true` while floating, so the body scrolls behind the bar's transparent margin instead of stopping short of it - which means every tab's scrollable list has to pad its own bottom enough to clear the bar's footprint, since nothing does that for it automatically once the body draws behind the bar. The Android FAB stays fully round in this mode (see "Upload" below), consistent with the bar's own rounder shape. |
+| Bottom bar - floating (Settings → Appearance → "Bottom bar", both platforms) | Same content, inset 16px from both side edges and clear of the bottom safe area instead of edge to edge, radius 28 (the sheet-top/drawer-edge radius) rather than square corners. Product UI otherwise stays flat (see 1.4), but this is the one other place - besides wide tablet dialogs - that gets the app's one shadow: a 1px `line` border plus the dialog shadow, since a bar that's genuinely floating above scrolling content needs to read as elevated. Row height drops (iOS 50, same as attached; Android 64 vs 80) to suit. Android's idle tabs drop their reserved label space in this mode - the icon just centers in the button and renders a touch bigger (25 vs 24px) - rather than sitting high with a gap held open under it. `Scaffold.extendBody: true` while floating, so the body scrolls behind the bar's transparent margin instead of stopping short of it - which means every tab's scrollable list has to pad its own bottom enough to clear the bar's footprint, since nothing does that for it automatically once the body draws behind the bar. The Android FAB stays fully round in this mode (see "Upload" below), consistent with the bar's own rounder shape. |
 | Bottom bar - "Search in bottom bar" (Settings → Appearance, either bar style) | Adds a Search entry that's never highlighted (tapping it pushes Search, same as the top bar's own search action, which this replaces so there's only one entry point on screen) - the row's last item when attached (same styling as a real tab, just permanently idle), or its own separate, always fully round satellite circle beside the bar when floating. Costs one regular tab: `SettingsController.maxVisibleTabs` drops from 5 to 4 while this is on. |
 | Search (top bar, when not in the bottom bar) | A real inline search field (`NooSearchField`, non-editable launcher) below the large title | A search-field-styled launcher takes the title's own flexible slot instead of a bare `search` icon beside it - no second row to put it under the way iOS has |
 | Navigation menu (Settings → Appearance → "Navigation menu", both platforms) | `drawer` (default): the `menu` icon opens the left `Drawer` (hidden tabs + Settings), unchanged. `avatarMenu`: no `menu` icon at all - the avatar button opens a dropdown instead (`showAvatarMenu`), anchored under the top bar, full width minus the same 16px gutter every content row uses, with the same hidden-tabs + Settings content the drawer holds (not its storage bar - this is a quick menu, not the drawer's full account summary). The avatar sits in the exact same (right-end) position either way, and the dropdown's own header repeats it there too, so the open menu reads as having grown out of the button that opened it. Not a mandatory replacement: this halves the top-corner surface a thumb has to reach (from `menu` + avatar down to avatar alone) without costing any permanent screen width the way an earlier side-rail exploration would have. |
@@ -291,9 +291,9 @@ Mobile always has **5 pinned tabs in the bottom bar**. The rest go in the drawer
 | Settings | Pushed screen with a "‹ Files" back button and a large title. No bottom bar. | Pushed screen with a back arrow and a title. No bottom bar. |
 | Biometric label | "Lock with Face ID" | "Lock with fingerprint" |
 
-### Desktop
+### Wide tablet
 
-Desktop has a 256px sidebar in `bg` and a main pane in `surface`, separated by a 1px line.
+Wide tablet has a 256px sidebar in `bg` and a main pane in `surface`, separated by a 1px line.
 
 **Sidebar**, top to bottom:
 - account switcher card
@@ -312,14 +312,7 @@ Sidebar items are 38px tall with radius 12, an 18px icon and a 14/500 label. The
 - the search field
 - context actions: List/Grid toggle and Upload in Files, Upload in Photos, Empty trash in Trash, Sync now in Offline
 
-| Element | macOS | Windows |
-|---|---|---|
-| Window | Radius 12 | Radius 8 |
-| Controls | Traffic lights at the top of the sidebar | 40px title bar with the app mark and name; minimize, maximize and close buttons 46px wide |
-| Navigation | Back and forward chevrons at the start of the toolbar | Not shown in the toolbar |
-| Biometric | "Touch ID" | "Windows Hello" |
-| Local path | `~/Noo/…` | `C:\Users\…\Noo` |
-| Swipe setting | "Trackpad swipe on a file" | "Touch swipe on a file" |
+
 
 ---
 
@@ -327,7 +320,7 @@ Sidebar items are 38px tall with radius 12, an 18px icon and a 14/500 label. The
 
 - **Files:**
   - Toolbar: sort chip (`Name ↑`), type filter chip, List/Grid segmented toggle.
-  - Desktop adds Modified and Shared filter chips, an active-filter chip, and an item count.
+  - Wide tablet adds Modified and Shared filter chips, an active-filter chip, and an item count.
   - Content: a list, or a grid when the toggle is set.
 - **Photos:** a sort chip and a filter chip (mirroring Files' own controls
   row - no List/Grid toggle, the grid is the only view). The type filter
@@ -342,7 +335,7 @@ Sidebar items are 38px tall with radius 12, an 18px icon and a 14/500 label. The
   Files' old checkmark list or Photos' own always-labelled track. Then the
   photo grid grouped by month.
 - **Favorites:** a file list with a star as the trailing icon.
-- **Offline:** a summary card (or 4 stat cards on desktop), then a list whose rows show sync status icons and status meta.
+- **Offline:** a summary card (or 4 stat cards on wide tablet), then a list whose rows show sync status icons and status meta.
 - **Shares:** a segmented control (With you, By you, Links), then a list. The
   meta reads "Owner · Permission". No per-row overflow menu on any of the
   three scopes - tapping a row (file or folder) opens the full Share sheet
@@ -352,8 +345,8 @@ Sidebar items are 38px tall with radius 12, an 18px icon and a 14/500 label. The
   copying a link or removing access lives, so a second, row-local menu here
   was redundant.
 - **Recent:** a list grouped into Today, Yesterday and This week. The meta is the action plus the location.
-- **Activity:** the feed grouped by day. Desktop limits it to 760px wide.
-- **Trash:** a retention banner, then a list. Mobile rows get a restore icon; desktop rows get a tonal "Restore" pill.
+- **Activity:** the feed grouped by day. Wide tablet limits it to 760px wide.
+- **Trash:** a retention banner, then a list. Mobile rows get a restore icon; wide tablet rows get a tonal "Restore" pill.
 - **Settings:** sections in this order:
   1. Account card
   2. Accounts (list, then "Add account")
@@ -365,7 +358,7 @@ Sidebar items are 38px tall with radius 12, an 18px icon and a 14/500 label. The
   8. Action bar - a reorder-only list (no pin/hide, unlike Tabs): the
      priority order for the Selection action bar's bulk actions (favorite,
      share, download, delete, copy, move, rename, sync, details) - the
-     first few (3 mobile / 4 desktop) land in the bar's fixed inline
+     first few (3 mobile / 4 wide tablet) land in the bar's fixed inline
      slots, the rest sit behind "More". See §2 "Selection action bar".
   9. Swipe on a file
 
@@ -383,7 +376,7 @@ Sidebar items are 38px tall with radius 12, an 18px icon and a 14/500 label. The
   `collapsible` param) so the page could at least be collapsed down. Both
   scrolled the *same* page to or past an anchor; a genuinely separate
   pushed screen per category removes the scroll-depth problem outright
-  instead of just working around it. Desktop is unchanged: a 2-column grid
+  instead of just working around it. Wide tablet is unchanged: a 2-column grid
   of cards with a 1px line and radius 20, wide enough to see most sections
   without scrolling, so it gets neither a menu nor collapsing.
 - **Share sheet / dialog:** sections in this order:
@@ -431,7 +424,7 @@ Sidebar items are 38px tall with radius 12, an 18px icon and a 14/500 label. The
   (not the inset-panel text-field shape - a search field is always the pill,
   except the one named iOS-inline exception) taking over the top row,
   autofocus, a clear button once there's a query. Below it: a file list
-  (mobile rows / desktop table, same as Files), or a centered icon + short
+  (mobile rows / wide tablet table, same as Files), or a centered icon + short
   sentence-case message for the empty ("Search your files") and no-results
   states.
 - **Upload / Move / Copy destination picker:** a pushed screen (outside the

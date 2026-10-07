@@ -25,7 +25,7 @@ lib/
     noo/                    # the Noo design-system component kit - see
                             # styling.md's catalog
     details/                # the file-details bottom sheet and its tabs
-    shell/                  # pieces shared by the mobile/desktop app shell
+    shell/                  # pieces shared by the phone/tablet app shell
     settings/               # Settings' section widgets
     tabs/                   # loading/error/empty slivers + grouping helpers
                             # shared by Recent/Activity/Trash/Shares
@@ -237,7 +237,7 @@ added - an existing saved tab order from before a new tab existed), so
 adding a tab to the `AppTab` enum needs no extra migration. Only the (up
 to) 5 pinned tabs (`settings.visibleTabs`) become bottom-nav/sidebar
 destinations; the rest sit in the "More" section of the drawer (mobile) or
-sidebar (desktop) - see below.
+sidebar (wide tablet) - see below.
 Each tab keeps its own `ScrollController` (survives tab switches via
 `IndexedStack`'s built-but-hidden trees) and tapping the already-active tab
 scrolls it back to top (`tapTabToScrollTop` setting). `MainShellView` also
@@ -276,7 +276,7 @@ bare system prompt gives no context on its own.
 `MainShellView` builds its chrome from the Noo nav kit
 (`widgets/noo/nav/`) and switches between two layouts on
 `NooLayout.isDesktop` (width >= 900dp *and* shortest side >= 600dp, so a
-phone in landscape keeps the mobile layout and only tablet-class windows get
+phone in landscape keeps the mobile layout and only tablet-class viewports get
 the sidebar):
 
 - **Mobile:** `AppTopBar` (`widgets/app_top_bar.dart`) wraps `NooTopBar`
@@ -295,7 +295,7 @@ the sidebar):
   native "floating" app bar behavior, tied to that tab's own
   `ScrollController`: scrolls away as the list scrolls down and reappears
   the moment the drag reverses, not only once scrolled back to the top).
-  `topBar` is null (no top bar rendered) on desktop and while picking,
+  `topBar` is null (no top bar rendered) on wide tablet and while picking,
   matching `Scaffold.appBar`'s old `pickRequest == null` guard - see
   `buildAppTabView`'s doc comment. It sits above each tab's own pinned
   in-content header (the sort/filter controls row, or Files/Photos'
@@ -314,7 +314,7 @@ the sidebar):
   the avatar button opens `showAvatarMenu` (`widgets/avatar_menu.dart`)
   instead, a dropdown holding the same hidden-tabs + Settings content -
   see `styling.md`'s Gotchas for the wiring.
-- **Desktop:** a `NooSidebar` (account card, pinned tabs, divider,
+- **Wide tablet:** a `NooSidebar` (account card, pinned tabs, divider,
   remaining tabs, storage meter, Settings) sits beside a `NooToolbar`
   (tab title, search, an "Upload" action on Files/Photos) over the same
   `IndexedStack`, both built inline in `main.dart` rather than as separate
@@ -331,7 +331,7 @@ pinned or another "More" tab. `widgets/shell/shell_common.dart` holds the
 pieces both layouts share: account/storage formatting, `openSettings`/
 `openSearch`, `showAccountSwitcher` (the saved-accounts list behind the
 drawer's chevron and the sidebar's account card - a sheet on mobile, a
-dialog on desktop), `ShellAvatarButton` and `ShellSearchLauncher`.
+dialog on wide tablet), `ShellAvatarButton` and `ShellSearchLauncher`.
 
 All eight tabs used to share
 [`SyncedHeaderScaffold`](../../lib/widgets/synced_header_scaffold.dart) - a
@@ -346,9 +346,9 @@ pinned chip. `SyncedHeaderScaffold` is now unused - the last two screens on
 it, `ShareUploadView` (the share-to-upload destination picker, pushed
 rather than a tab - see below) and `MoveCopyDestinationPicker`, are
 rebuilt too: both are a `Scaffold` with a `NooTopBar`+`NooTopBarBack`
-(mobile) / `NooToolbar` (desktop) top bar, a noo-styled
+(mobile) / `NooToolbar` (wide tablet) top bar, a noo-styled
 [`Breadcrumbs`](../../lib/widgets/breadcrumbs.dart) row + folder list
-(`NooFileRow` mobile, `NooFileTableRow` desktop - both pickers only ever
+(`NooFileRow` mobile, `NooFileTableRow` wide tablet - both pickers only ever
 browse *folders*, so the old dimmed-but-visible file rows are gone; a
 `RefreshIndicator`+`CustomScrollView`) for a body, and a `colors.surface`
 bottom bar with a top `line` (no more rounded-top elevated `Material`
@@ -393,14 +393,14 @@ per-item conflict follow-up, if any, is
 `SearchView`, `AccountView` (Settings), the file-details sheet
 (`DetailsSheet`), and the share sheet (`ShareSheet`) are pushed on top via
 `Navigator`/`showNooSheet`/`showNooDialog` rather than being tabs (the two
-per-item sheets pick between the mobile sheet and the desktop dialog via
+per-item sheets pick between the mobile sheet and the wide tablet dialog via
 `NooLayout.isDesktop`, same as every other overlay in the app;
 `showGradualBottomSheet`, the custom drag-to-resize sheet they used before,
 has no remaining callers). On mobile, `ShellAvatarButton`
 (`widgets/shell/shell_common.dart`,
 shown in `AppTopBar`'s trailing actions on every tab, and reused directly by
 `ShareUploadView`) opens Settings on tap and cycles between saved accounts
-on a vertical swipe. Desktop has no avatar in the
+on a vertical swipe. Wide tablet has no avatar in the
 toolbar; `NooSidebarAccount`'s account card opens the full switcher instead
 (`showAccountSwitcher`, the same one behind the mobile drawer's chevron).
 
