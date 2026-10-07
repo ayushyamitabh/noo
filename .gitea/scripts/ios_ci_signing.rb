@@ -6,6 +6,11 @@
 require "xcodeproj"
 
 TEAM = "Q3JLTAG9PV"
+# Pinned by SHA-1, not by the "Apple Distribution" name: a runner that also
+# holds other same-named distribution certs (e.g. a dev Mac's login keychain)
+# would otherwise let Xcode pick one the profiles don't include. Update this
+# (and ios/ExportOptions.plist) when the certificate is renewed.
+CERT_SHA1 = "2527806871D806E8E27221B15CA8A1938CF216F2"
 PROFILES = {
   "Runner" => "NooProfile",
   "ShareExtension" => "NooShareSheetProfile",
@@ -18,8 +23,8 @@ PROFILES.each do |target_name, profile|
     settings = config.build_settings
     settings["CODE_SIGN_STYLE"] = "Manual"
     settings["DEVELOPMENT_TEAM"] = TEAM
-    settings["CODE_SIGN_IDENTITY"] = "Apple Distribution"
-    settings["CODE_SIGN_IDENTITY[sdk=iphoneos*]"] = "Apple Distribution"
+    settings["CODE_SIGN_IDENTITY"] = CERT_SHA1
+    settings["CODE_SIGN_IDENTITY[sdk=iphoneos*]"] = CERT_SHA1
     settings["PROVISIONING_PROFILE_SPECIFIER"] = profile
   end
 end

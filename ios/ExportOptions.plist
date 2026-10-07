@@ -9,7 +9,7 @@
 	<key>signingStyle</key>
 	<string>manual</string>
 	<key>signingCertificate</key>
-	<string>Apple Distribution</string>
+	<string>2527806871D806E8E27221B15CA8A1938CF216F2</string>
 	<key>provisioningProfiles</key>
 	<dict>
 		<key>dev.ayushya.noo</key>
