@@ -34,6 +34,11 @@ final class TransferManager: NSObject {
     config.sessionSendsLaunchEvents = true
     config.isDiscretionary = false
     config.waitsForConnectivity = true
+    // Two accounts can share a server: authenticate by the request's own
+    // header only, never a cookie another account's request left behind.
+    config.httpShouldSetCookies = false
+    config.httpCookieAcceptPolicy = .never
+    config.urlCredentialStorage = nil
     return URLSession(configuration: config, delegate: self, delegateQueue: nil)
   }()
 

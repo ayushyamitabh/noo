@@ -16,6 +16,10 @@ enum ShareUpload {
     config.sessionSendsLaunchEvents = true
     config.isDiscretionary = false
     config.waitsForConnectivity = true
+    // Authenticate by the request's own header only (see DavClient.session).
+    config.httpShouldSetCookies = false
+    config.httpCookieAcceptPolicy = .never
+    config.urlCredentialStorage = nil
     return config
   }
 
