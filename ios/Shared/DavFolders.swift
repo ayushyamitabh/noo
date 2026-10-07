@@ -149,6 +149,20 @@ enum DavClient {
 
   /// Every child folder, hidden and external ones included - the sheet's
   /// toggles filter that list in memory, so changing one doesn't refetch.
+  /// Two accounts can live on the same server, so a request must be
+  /// authenticated by its own `Authorization` header alone - never by a
+  /// session cookie or credential a previous account's request left behind
+  /// in the shared stores, or the second account could be answered as the
+  /// first.
+  private static let session: URLSession = {
+    let config = URLSessionConfiguration.ephemeral
+    config.httpShouldSetCookies = false
+    config.httpCookieAcceptPolicy = .never
+    config.urlCredentialStorage = nil
+    config.requestCachePolicy = .reloadIgnoringLocalCacheData
+    return URLSession(configuration: config)
+  }()
+
   static func listFolders(account: SharedAccount, path: String) async throws -> [DavFolder] {
     guard let url = WebDAV.fileURL(serverUrl: account.serverUrl, username: account.username, remotePath: path)
     else { throw TransferError(message: "Invalid server address.") }
@@ -160,8 +174,9 @@ enum DavClient {
     request.httpBody = body.data(using: .utf8)
     request.timeoutInterval = 20
 
-    let (data, response) = try await URLSession.shared.data(for: request)
+    let (data, response) = try await session.data(for: request)
     let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+    NSLog("[DavClient] PROPFIND %@ as %@ -> %d", url.path, account.username, status)
     guard status == 207 else {
       throw TransferError(message: status == 401 ? "Signed out - open Noo to sign in again." : "Server returned \(status).")
     }
