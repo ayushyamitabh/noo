@@ -76,6 +76,115 @@ enum NativeServices {
     TransferManager.shared.reconnect()
     registerShare(messenger: messenger)
     registerShareAccount(messenger: messenger)
+    registerSync(messenger: messenger)
+  }
+
+  // MARK: - Device sync
+
+  /// Sends the current sync status the moment Dart starts listening, then
+  /// every change - same as Android's `SyncStatusBus.subscribe`.
+  private final class SyncStatusStream: NSObject, FlutterStreamHandler {
+    var sink: FlutterEventSink?
+
+    func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink)
+      -> FlutterError?
+    {
+      sink = events
+      let coordinator = SyncCoordinator.shared
+      events(coordinator.statusMap(coordinator.bus.snapshot()))
+      return nil
+    }
+
+    func onCancel(withArguments arguments: Any?) -> FlutterError? {
+      sink = nil
+      return nil
+    }
+  }
+
+  private static let syncStatusStream = SyncStatusStream()
+  /// Serial, so status events reach Dart in the order they happened even
+  /// though building each one reads the state from disk.
+  private static let syncStatusQueue = DispatchQueue(label: "dev.ayushya.noo.sync-status", qos: .utility)
+
+  /// `sync_service`: the same methods Android's `MainActivity.kt` serves,
+  /// backed by `SyncCoordinator`/`SyncRunner`.
+  private static func registerSync(messenger: FlutterBinaryMessenger) {
+    let coordinator = SyncCoordinator.shared
+
+    FlutterMethodChannel(name: "dev.ayushya.noo/sync_service", binaryMessenger: messenger)
+      .setMethodCallHandler { call, result in
+        let args = call.arguments as? [String: Any] ?? [:]
+        switch call.method {
+        case "reschedule":
+          handle(call, result) { _ in coordinator.reschedule(try syncConfig(args)) }
+        case "cancel":
+          // `forget` (default true) = signed out / removed; false = only the
+          // background job is off - credentials stay for manual runs and
+          // conflict actions.
+          handle(call, result) { _ in
+            coordinator.cancel(
+              accountId: try string(args, "accountId"), forget: args["forget"] as? Bool ?? true)
+          }
+        case "syncNow":
+          handle(call, result) { _ in
+            let force = args["force"] as? Bool ?? true
+            coordinator.syncNow(try syncConfig(args), force: force, wifiOnly: args["wifiOnly"] as? Bool)
+          }
+        case "getSyncStatus":
+          let accountId = args["accountId"] as? String
+          syncStatusQueue.async {
+            let map = coordinator.statusMap(coordinator.bus.snapshot(), accountIdOverride: accountId)
+            DispatchQueue.main.async { result(map) }
+          }
+        case "resolveConflict":
+          handle(call, result) { _ in
+            let conflict = SyncConflict(
+              accountId: try string(args, "accountId"), fileId: try string(args, "fileId"),
+              remotePath: try string(args, "remotePath"), relPath: try string(args, "relPath"),
+              name: ((args["relPath"] as? String ?? "") as NSString).lastPathComponent)
+            let creds = SyncCredentials(
+              serverUrl: try string(args, "serverUrl"), username: try string(args, "username"),
+              authHeader: try string(args, "authHeader"))
+            let resolution = try string(args, "resolution")
+            // Fire and forget, like Android: the status stream reports the result.
+            Task { _ = await coordinator.resolveConflict(conflict, resolution: resolution, creds: creds) }
+          }
+        case "removeLocalSync":
+          guard let accountId = args["accountId"] as? String, let path = args["path"] as? String else {
+            return result(FlutterError(code: "bad_args", message: "Missing required arguments", details: nil))
+          }
+          Task {
+            await coordinator.removeLocalSync(accountId: accountId, path: path)
+            await MainActor.run { result(nil) }
+          }
+        default:
+          result(FlutterMethodNotImplemented)
+        }
+      }
+
+    FlutterEventChannel(name: "dev.ayushya.noo/sync_service/status", binaryMessenger: messenger)
+      .setStreamHandler(syncStatusStream)
+    coordinator.bus.onChange = { status in
+      syncStatusQueue.async {
+        let map = coordinator.statusMap(status)
+        DispatchQueue.main.async { syncStatusStream.sink?(map) }
+      }
+    }
+  }
+
+  /// The account credentials + settings every sync call carries, as a config.
+  private static func syncConfig(_ args: [String: Any]) throws -> SyncAccountConfig {
+    var folders: [String] = []
+    if let json = args["folders"] as? String, let data = json.data(using: .utf8),
+      let list = try? JSONSerialization.jsonObject(with: data) as? [String]
+    {
+      folders = list
+    }
+    return SyncAccountConfig(
+      accountId: try string(args, "accountId"), serverUrl: try string(args, "serverUrl"),
+      username: try string(args, "username"), authHeader: try string(args, "authHeader"),
+      folders: folders, wifiOnly: args["wifiOnly"] as? Bool ?? true,
+      intervalMinutes: args["intervalMinutes"] as? Int, notify: args["notify"] as? Bool ?? true)
   }
 
   // MARK: - Account for the Share Extension

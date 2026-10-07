@@ -831,9 +831,9 @@ The five `dev.ayushya.noo/*` channels (`share_intent`, `pick_intent`,
 `upload_service`, `download_service`, `sync_service`, plus their status
 `EventChannel`s) were written for Android in Kotlin. iOS implements
 `upload_service` (+ its status stream), `download_service` and
-`share_intent` so far (`ios/Runner/Native/` + `ios/ShareExtension/`, see
-below); for `pick_intent` and `sync_service` there's no handler, so calls
-throw `MissingPluginException`. `lib/services/native_channel.dart`
+`share_intent` and `sync_service` so far (`ios/Runner/Native/` +
+`ios/ShareExtension/`, see below); for `pick_intent` there's no handler, so
+calls throw `MissingPluginException`. `lib/services/native_channel.dart`
 makes that safe until each one is built in Swift:
 
 - `invokeIfAvailable` - a missing implementation returns null. For cold-start
@@ -987,5 +987,73 @@ mismatch); it's embedded by an "Embed Foundation Extensions" phase placed
 cycle). The simulator honours the App Group and keychain group without a
 signing team; a real device needs a team that owns both ids.
 
-Not built on iOS yet: the picker (File Provider) and sync
-(`BGTaskScheduler`) - see the iOS handoff notes.
+### iOS device sync (`ios/Runner/Native/SyncEngine/`)
+
+A Swift port of Android's `SyncEngine.kt`/`SyncWorker.kt`/
+`ConflictResolveWorker.kt`/`SyncStatusBus.kt`, behind the same `sync_service`
+channel (+ `/status` event stream) so the Dart side is unchanged apart from
+`cancelAccount`'s `forget` flag (below). Same rules: only paths the user
+synced are mirrored; brand-new local files are never uploaded (only edits to
+already-synced files are); a file edited on both sides is a conflict (neither
+copy is touched, "Keep local"/"Use server" resolves it); a local deletion is
+repaired by re-downloading; the mirror lives at
+`<Application Support>/sync/<accountId>/...` (what Dart's
+`SyncService.baseDirectory()` reads for the Offline tab, excluded from
+backup) with state in `<...>/sync-state/<accountId>/*.json`.
+
+- `SyncDiff` (pure decisions, mirrors `diffFolder`), `DavSyncClient`
+  (PROPFIND/GET/PUT on a cookie-less ephemeral session), `SyncRunner` (one
+  account's pass), `SyncStore`, `SyncConfigStore` (Keychain), `SyncCoordinator`
+  (runs, `BGTaskScheduler`, notifications), and the `registerSync` channel
+  handlers in `NativeServices.swift`.
+- **Safeguards (each has a regression test in `SyncEngineTests`, which drives
+  the real runner against an in-memory fake Nextcloud):** an unreachable
+  server, a non-207, or a PROPFIND answer that is truncated, not a
+  `multistatus`, empty, or has an href outside the account root / with dot
+  components throws `SyncRemoteUnavailable` and the path is skipped - never
+  diffed as empty or partial (which would delete local files); unreadable
+  recorded state makes the run do nothing (`SyncStateUnreadable`) instead of
+  treating every file as untracked and overwriting local edits; every
+  server-supplied path is resolved through `LocalFS.resolve` (no escaping the
+  mirror) and entries that would land on the same local file (case or Unicode
+  spellings) are skipped, not downloaded over each other; downloads go to a
+  temp file and replace atomically, never replacing a folder; empty-folder
+  pruning uses `rmdir` and only on a successful empty read; a root's etag
+  shortcut marker is only written when the path synced cleanly *and* the state
+  was saved.
+- **Deliberate differences from Android:** a file deleted on the server but
+  edited here is **kept** (untracked) rather than deleted - the edit is the
+  only copy; after our own upload the file's etag is re-read so it isn't
+  downloaded back; state is flushed every 20 transfers; conflicts are kept
+  per account on the status bus; downloads write to a temp file first. No
+  ongoing progress notification (a run posts a summary, and conflict
+  notifications with Keep local / Use server actions).
+- **Running:** every run - "Sync now", the in-app refresh, and background -
+  goes through `SyncCoordinator.startRun`: one tracked run per account
+  (`force` supersedes it, a quiet check leaves it alone), serialised by one
+  cancellable `AsyncMutex`, tagged with a per-account *generation* so a run
+  that was only queued never starts for an account that was cancelled or had a
+  path removed meanwhile. `removeLocalSync` cancels the run and takes the same
+  mutex, so a finishing run can't write stale state back over it.
+- **Background:** `BGAppRefreshTask` + `BGProcessingTask`
+  (`dev.ayushya.noo.sync.refresh`/`.processing`, `UIBackgroundModes` fetch +
+  processing, `BGTaskSchedulerPermittedIdentifiers` in Info.plist; handlers
+  registered before launch finishes). `intervalMinutes` (floored at 15, like
+  Android) is only the *earliest* start - iOS picks when - and Wi-Fi-only is
+  checked with `NWPathMonitor` (`isExpensive`) since a BGTask can't require
+  it. An expiring task cancels its runs (they save state as they go) and is
+  completed exactly once (`OnceGate`). **Not testable in the simulator**
+  (needs a real device and the Xcode `_simulateLaunchForTaskWithIdentifier`
+  debugger command).
+- **Credentials:** `SyncConfigStore` keeps each account's server, auth header,
+  paths, interval and notify flag as one Keychain item
+  (`AfterFirstUnlock`, so a background run works with the phone locked).
+  Conflict notification actions look the account up there - nothing secret is
+  in a notification. `sync_service.cancel` takes `forget` (default true:
+  signed out/removed -> credentials dropped; false: only background sync was
+  turned off -> kept for manual runs and conflict actions). Dart sends
+  `forget: false` only for "paths configured but no background interval".
+- **Gotcha:** `ios/.gitignore` has `**/*sync/`, which (case-insensitively on
+  macOS) swallows any directory named `Sync` - hence `SyncEngine/`.
+
+Not built on iOS yet: the picker (File Provider) - see the iOS handoff notes.
