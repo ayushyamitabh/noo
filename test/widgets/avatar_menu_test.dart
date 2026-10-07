@@ -219,5 +219,9 @@ void main() {
       tester.getTopRight(row).dx - tester.getTopRight(avatar).dx,
       NooSpace.md,
     );
+    // The card is as wide as the Files list's rows: inset NooSpace.sm from
+    // each screen edge, less its 1px border and 1px inner padding per side.
+    final screenWidth = tester.getSize(find.byType(MaterialApp)).width;
+    expect(tester.getSize(row).width, screenWidth - 2 * NooSpace.sm - 4);
   });
 }

@@ -79,7 +79,9 @@ class _AvatarMenuContentState extends State<_AvatarMenuContent> {
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: NooSpace.md),
+          // Same side inset as the Files list's rows (`NooSpace.sm`), so the
+          // card is as wide as the list beneath it.
+          padding: const EdgeInsets.symmetric(horizontal: NooSpace.sm),
           child: SizedBox(
             width: double.infinity,
             child: Container(
