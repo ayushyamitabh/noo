@@ -89,8 +89,9 @@ class TextPreviewController extends ChangeNotifier {
 
 /// Text/markdown file preview and editor for [FileViewerScreen]'s static
 /// (non-swipeable) path (`_textPreviewExtensions`). Content is always
-/// editable when online; Save appears once it has changed. Markdown files open
-/// rendered, with an Edit/Preview toggle. Both controls live in the viewer's
+/// editable when online - after tapping Edit; every file opens read-only
+/// (Markdown rendered) with an Edit/Preview toggle - and Save appears once it
+/// has changed. Both controls live in the viewer's
 /// top bar, driven through [controller]. Opened from the Offline tab
 /// ([localPathResolver] set) it is read-only, since the local copy has no
 /// server to write back to.
@@ -125,12 +126,15 @@ class _MediaTextPreviewState extends State<MediaTextPreview> {
   String? _error;
   bool _isSaving = false;
   bool _editing = false;
+  final _focus = FocusNode();
 
   bool get _isMarkdown {
     final name = widget.item.name.toLowerCase();
     return name.endsWith('.md') || name.endsWith('.markdown');
   }
 
+  /// Markdown shows rendered until the user taps Edit. Plain text has no
+  /// rendered form, so it just shows its (read-only) text until then.
   bool get _showRendered => _isMarkdown && !_editing;
 
   bool get _readOnly => widget.localPathResolver != null;
@@ -150,6 +154,7 @@ class _MediaTextPreviewState extends State<MediaTextPreview> {
   @override
   void dispose() {
     widget.controller?._unbind();
+    _focus.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -159,7 +164,7 @@ class _MediaTextPreviewState extends State<MediaTextPreview> {
   /// initState, where notifying the bar's listeners would be illegal.
   void _syncToolbar() {
     widget.controller?._update(
-      canToggleEditing: _saved != null && _isMarkdown && !_readOnly,
+      canToggleEditing: _saved != null && !_readOnly,
       editing: _editing,
       dirty: _dirty,
       saving: _isSaving,
@@ -169,6 +174,12 @@ class _MediaTextPreviewState extends State<MediaTextPreview> {
   void _toggleEditing() {
     setState(() => _editing = !_editing);
     _syncToolbar();
+    // Tapping Edit should put the cursor in the text, not just unlock it.
+    if (_editing) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _focus.requestFocus(),
+      );
+    }
   }
 
   Future<void> _load() async {
@@ -262,7 +273,10 @@ class _MediaTextPreviewState extends State<MediaTextPreview> {
                     padding: padding,
                     child: TextField(
                       controller: _controller,
-                      readOnly: _readOnly,
+                      focusNode: _focus,
+                      // Read-only until Edit is tapped (always, for the
+                      // Offline copy).
+                      readOnly: _readOnly || !_editing,
                       maxLines: null,
                       keyboardType: TextInputType.multiline,
                       style: style,

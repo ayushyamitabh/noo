@@ -759,7 +759,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
 
 /// The text viewer's top-bar buttons: Edit/Preview (markdown only) and Save
 /// (once the content changed; a spinner while it saves). Same
-/// [NooTopBarButton] look as the back button next to it.
+/// round [NooButton] look (primary for the main action, secondary beside it).
 class _TextActions extends StatelessWidget {
   final TextPreviewController controller;
 
@@ -767,39 +767,92 @@ class _TextActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.nooColors;
+    final toggle = controller.canToggleEditing;
+    final save = controller.saving || controller.showSave;
+    // One button is the primary action; with two, Save is and Edit/Preview
+    // steps back to secondary.
+    final both = toggle && save;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (controller.canToggleEditing)
-          NooTopBarButton(
+        if (toggle)
+          _ActionButton(
             icon: controller.editing ? LucideIcons.eye : LucideIcons.pencil,
             tooltip: controller.editing ? 'Preview' : 'Edit',
+            variant: both
+                ? NooButtonVariant.secondary
+                : NooButtonVariant.primary,
             onTap: controller.toggleEditing,
           ),
+        if (both) const SizedBox(width: 8),
         if (controller.saving)
-          Semantics(
-            label: 'Saving',
-            child: SizedBox.square(
-              dimension: 48,
-              child: Center(
-                child: SizedBox.square(
-                  dimension: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: colors.fg1,
-                  ),
-                ),
-              ),
-            ),
-          )
-        else if (controller.showSave)
-          NooTopBarButton(
+          const _SavingIndicator()
+        else if (save)
+          _ActionButton(
             icon: LucideIcons.save,
             tooltip: 'Save',
+            variant: NooButtonVariant.primary,
             onTap: controller.save,
           ),
       ],
+    );
+  }
+}
+
+/// A round icon-only [NooButton] with the tooltip and semantic label an
+/// icon-only button needs.
+class _ActionButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final NooButtonVariant variant;
+  final VoidCallback onTap;
+
+  const _ActionButton({
+    required this.icon,
+    required this.tooltip,
+    required this.variant,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Semantics(
+        button: true,
+        label: tooltip,
+        excludeSemantics: true,
+        child: NooButton(
+          icon: icon,
+          iconOnly: true,
+          variant: variant,
+          onTap: onTap,
+        ),
+      ),
+    );
+  }
+}
+
+/// Stands in for the Save button while it saves: the same primary circle,
+/// with a spinner, so it can't be tapped twice.
+class _SavingIndicator extends StatelessWidget {
+  const _SavingIndicator();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.nooColors;
+    return Semantics(
+      label: 'Saving',
+      child: Container(
+        width: 36,
+        height: 36,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(color: colors.accent, shape: BoxShape.circle),
+        child: const SizedBox.square(
+          dimension: 16,
+          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+        ),
+      ),
     );
   }
 }
