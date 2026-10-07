@@ -35,9 +35,6 @@ final class ShareModel: ObservableObject {
 
   let shared: SharedAccounts?
 
-  /// One successful unlock covers every gate for the rest of this sheet.
-  private var unlocked = false
-
   /// Set by the view controller: what each button actually does.
   var onUpload: () -> Void = {}
   var onSaveForLater: () -> Void = {}
@@ -103,24 +100,30 @@ final class ShareModel: ObservableObject {
   func select(_ account: SharedAccount) async {
     guard let shared else { return }
     notice = nil
-    if account.id != shared.active?.id, shared.needsUnlockToSwitchAccount {
-      guard await unlock("Unlock to upload to \(account.displayName)") else {
-        notice = "Unlock to upload to a different account."
-        stage = .chooseAccount
-        return
-      }
-    }
-    NSLog("[ShareExtension] selected %@ (hidden=%@ storage=%@)", account.id, account.hiddenFilter, account.storageScope)
-    selected = account
-    externalRoots = []
-    storageFilter = StorageFilter(raw: account.storageScope)
-    hiddenFilter = HiddenFilter(raw: account.hiddenFilter)
-    if hiddenFilter != .hide, shared.needsUnlockForHidden {
-      if await !unlock("Unlock to show hidden folders") {
-        hiddenFilter = .hide
+    var wantedHidden = HiddenFilter(raw: account.hiddenFilter)
+
+    // Every selection asks again, like the app does for every switch - no
+    // unlock is remembered. If one action needs both unlocks, one prompt
+    // covers both.
+    let needs = shared.unlockNeeds(choosing: account, showing: wantedHidden)
+    if needs.needsPrompt {
+      let reason = needs.switchesAccount
+        ? "Unlock to upload to \(account.displayName)" : "Unlock to show hidden folders"
+      if await !DeviceAuth.authenticate(reason: reason) {
+        guard !needs.switchesAccount else {
+          notice = "Unlock to upload to a different account."
+          stage = .chooseAccount
+          return
+        }
+        wantedHidden = .hide
         notice = "Hidden folders are locked, so they're not shown."
       }
     }
+    NSLog("[ShareExtension] selected %@ (hidden=%@ storage=%@)", account.id, wantedHidden.rawValue, account.storageScope)
+    selected = account
+    externalRoots = []
+    storageFilter = StorageFilter(raw: account.storageScope)
+    hiddenFilter = wantedHidden
     stage = .picking
     await open("/")
   }
@@ -132,8 +135,8 @@ final class ShareModel: ObservableObject {
   /// between the two revealing modes.
   func setHiddenFilter(_ filter: HiddenFilter) async {
     guard filter != hiddenFilter else { return }
-    if hiddenFilter == .hide, shared?.needsUnlockForHidden == true {
-      guard await unlock("Unlock to show hidden folders") else {
+    if shared?.needsUnlockToChangeHidden(from: hiddenFilter, to: filter) == true {
+      guard await DeviceAuth.authenticate(reason: "Unlock to show hidden folders") else {
         notice = "Hidden folders are locked, so they're not shown."
         return
       }
@@ -148,13 +151,6 @@ final class ShareModel: ObservableObject {
     notice = nil
     storageFilter = filter
     await open("/")
-  }
-
-  private func unlock(_ reason: String) async -> Bool {
-    if unlocked { return true }
-    let ok = await DeviceAuth.authenticate(reason: reason)
-    if ok { unlocked = true }
-    return ok
   }
 
   // MARK: - Browsing

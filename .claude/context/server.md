@@ -935,7 +935,15 @@ Reminders/Notes - the destination is picked *inside* the sheet:
      hidden, with a note. Switching `only` <-> `all`, or back to `hide`, never
      asks.
    - **Account switching**: choosing any account other than the app's
-     active one asks for the same unlock when "lock account switching" is on. One successful unlock covers the rest of that sheet.
+     active one asks for the same unlock when "lock account switching" is on.
+     **Every gated action prompts every time**, exactly like the app - no
+     unlock is remembered for the sheet (an earlier version cached one, so
+     later account picks / hidden toggles skipped Face ID). The only
+     merging is within one action: picking another account whose own filter
+     already shows hidden folders is a single prompt covering both
+     (`SharedAccounts.unlockNeeds` / `SelectionUnlock`, unit-tested).
+     Declining the account unlock cancels the pick; declining only the
+     hidden unlock shows the account with hidden folders hidden.
    - Opening the sheet itself is not gated - only these two actions are
      (as in the app, where login lock guards launch and these are separate
      locks).

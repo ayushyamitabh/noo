@@ -217,6 +217,55 @@ class RunnerTests: XCTestCase {
     XCTAssertTrue(rules(master: true, switching: true, hidden: true) == (true, true))
   }
 
+  // Which actions in the share sheet ask to unlock - and how many prompts.
+
+  private func lockedAccounts(switching: Bool, hidden: Bool) -> SharedAccounts {
+    SharedAccounts(
+      accounts: [account("alice"), account("bob")], activeId: "alice",
+      loginLockEnabled: false, lockAccountSwitching: switching, lockHiddenFiles: hidden)
+  }
+
+  func testChoosingTheActiveAccountWithoutHiddenFoldersNeverPrompts() {
+    let shared = lockedAccounts(switching: true, hidden: true)
+    let needs = shared.unlockNeeds(choosing: account("alice"), showing: .hide)
+    XCTAssertEqual(needs, SelectionUnlock(switchesAccount: false, showsHidden: false))
+    XCTAssertFalse(needs.needsPrompt)
+  }
+
+  func testChoosingAnotherAccountPromptsEveryTime() {
+    let shared = lockedAccounts(switching: true, hidden: false)
+    // No unlock is remembered: the same choice asks again on every call.
+    for _ in 0..<3 {
+      XCTAssertTrue(shared.unlockNeeds(choosing: account("bob"), showing: .hide).needsPrompt)
+    }
+    XCTAssertFalse(
+      lockedAccounts(switching: false, hidden: false).unlockNeeds(choosing: account("bob"), showing: .hide).needsPrompt)
+  }
+
+  func testSwitchPlusHiddenFoldersIsOnePromptThatCoversBoth() {
+    let needs = lockedAccounts(switching: true, hidden: true)
+      .unlockNeeds(choosing: account("bob"), showing: .include)
+    XCTAssertEqual(needs, SelectionUnlock(switchesAccount: true, showsHidden: true))
+    XCTAssertTrue(needs.needsPrompt)
+  }
+
+  func testHiddenFoldersAloneOnTheActiveAccountPromptsForHidden() {
+    let needs = lockedAccounts(switching: true, hidden: true)
+      .unlockNeeds(choosing: account("alice"), showing: .only)
+    XCTAssertEqual(needs, SelectionUnlock(switchesAccount: false, showsHidden: true))
+  }
+
+  func testOnlyTurningHiddenFoldersOnAsksToUnlock() {
+    let locked = lockedAccounts(switching: false, hidden: true)
+    XCTAssertTrue(locked.needsUnlockToChangeHidden(from: .hide, to: .only))
+    XCTAssertTrue(locked.needsUnlockToChangeHidden(from: .hide, to: .include))
+    XCTAssertFalse(locked.needsUnlockToChangeHidden(from: .include, to: .hide), "hiding again never asks")
+    XCTAssertFalse(locked.needsUnlockToChangeHidden(from: .only, to: .include), "only <-> all never asks")
+    XCTAssertFalse(
+      lockedAccounts(switching: false, hidden: false).needsUnlockToChangeHidden(from: .hide, to: .include),
+      "no lock set, no prompt")
+  }
+
   // MARK: - TransferBatchStore
 
   func testBatchSummaryFiresOnlyOnTheLastFile() {
