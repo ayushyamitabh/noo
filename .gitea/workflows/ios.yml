@@ -61,6 +61,9 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
           security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
           rm -f "${{ runner.temp }}/dist.p12"
+          # Must list 2527806871D8... (the cert the profiles embed); if it
+          # doesn't, IOS_DIST_CERT_P12_BASE64 holds the wrong certificate.
+          security find-identity -v -p codesigning "$KEYCHAIN"
 
           PROFILES_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
           mkdir -p "$PROFILES_DIR"
