@@ -204,18 +204,17 @@ class RunnerTests: XCTestCase {
     XCTAssertEqual(shared.active?.id, "alice")
   }
 
-  func testUnlockRulesNeedTheMasterLockAndTheirOwnToggle() {
+  func testUnlockRulesAreIndependentOfLoginLock() {
     func rules(master: Bool, switching: Bool, hidden: Bool) -> (Bool, Bool) {
       let shared = SharedAccounts(
         accounts: [account("a")], activeId: "a",
         loginLockEnabled: master, lockAccountSwitching: switching, lockHiddenFiles: hidden)
       return (shared.needsUnlockToSwitchAccount, shared.needsUnlockForHidden)
     }
-    XCTAssertTrue(rules(master: true, switching: true, hidden: false) == (true, false))
-    XCTAssertTrue(rules(master: true, switching: false, hidden: true) == (false, true))
-    XCTAssertTrue(
-      rules(master: false, switching: true, hidden: true) == (false, false),
-      "the sub-toggles mean nothing while the login lock is off, as in the app")
+    XCTAssertTrue(rules(master: false, switching: true, hidden: false) == (true, false))
+    XCTAssertTrue(rules(master: false, switching: false, hidden: true) == (false, true))
+    XCTAssertTrue(rules(master: true, switching: false, hidden: false) == (false, false))
+    XCTAssertTrue(rules(master: true, switching: true, hidden: true) == (true, true))
   }
 
   // MARK: - TransferBatchStore

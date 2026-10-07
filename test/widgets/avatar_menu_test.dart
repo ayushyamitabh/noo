@@ -15,6 +15,8 @@ import 'package:noo/providers/settings_controller.dart';
 import 'package:noo/providers/sync_status_controller.dart';
 import 'package:noo/providers/trash_controller.dart';
 import 'package:noo/theme/app_theme.dart';
+import 'package:noo/theme/design_tokens.dart';
+import 'package:noo/widgets/noo/core/noo_avatar.dart';
 import 'package:noo/widgets/app_top_bar.dart';
 import 'package:noo/widgets/noo/nav/noo_top_bar.dart';
 
@@ -174,4 +176,48 @@ void main() {
       expect(find.text('Add account'), findsOneWidget);
     },
   );
+
+  testWidgets("other accounts' avatars sit flush right in the dropdown", (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'account_migration_v1_done': true,
+      'accounts_list': jsonEncode([
+        const SavedAccount(
+          id: accountId,
+          serverUrl: 'https://server.example.com',
+          username: 'alice',
+        ).toJson(),
+        const SavedAccount(
+          id: 'other_example_org__bob',
+          serverUrl: 'https://other.example.org',
+          username: 'bob',
+        ).toJson(),
+      ]),
+      'active_account_id': accountId,
+    });
+    await pumpTopBar(tester, navMenuStyle: NooNavMenuStyle.avatarMenu);
+
+    await tester.tap(find.byTooltip('Menu'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    // Expand the account list from the header.
+    await tester.tap(find.text('alice'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    final row = find.ancestor(
+      of: find.text('bob'),
+      matching: find.byType(InkWell),
+    );
+    final avatar = find.descendant(of: row, matching: find.byType(NooAvatar));
+    expect(avatar, findsOneWidget);
+
+    // Only the row's own padding between the avatar and the card's edge -
+    // no extra gutter pushing it in from the right.
+    expect(
+      tester.getTopRight(row).dx - tester.getTopRight(avatar).dx,
+      NooSpace.md,
+    );
+  });
 }

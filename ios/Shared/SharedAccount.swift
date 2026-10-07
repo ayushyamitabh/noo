@@ -23,8 +23,9 @@ struct SharedAccount: Codable, Equatable, Identifiable {
 struct SharedAccounts: Codable, Equatable {
   var accounts: [SharedAccount]
   var activeId: String?
-  /// Settings -> Security: the master "login lock" and its two sub-toggles.
-  /// The sub-toggles only count while the master one is on (as in the app).
+  /// Settings -> Security: the three independent locks. `loginLockEnabled`
+  /// (unlock to open the app) is carried for completeness; the extension's own
+  /// gates are the other two.
   var loginLockEnabled: Bool
   var lockAccountSwitching: Bool
   var lockHiddenFiles: Bool
@@ -36,11 +37,11 @@ struct SharedAccounts: Codable, Equatable {
 
   /// Uploading to an account other than the active one is "switching" in
   /// the app's terms, so it needs the same unlock.
-  var needsUnlockToSwitchAccount: Bool { loginLockEnabled && lockAccountSwitching }
+  var needsUnlockToSwitchAccount: Bool { lockAccountSwitching }
 
   /// Showing hidden folders needs the same unlock the app asks for when you
   /// turn hidden files on.
-  var needsUnlockForHidden: Bool { loginLockEnabled && lockHiddenFiles }
+  var needsUnlockForHidden: Bool { lockHiddenFiles }
 }
 
 /// Keeps the [SharedAccounts] in a Keychain access group both the app and the
