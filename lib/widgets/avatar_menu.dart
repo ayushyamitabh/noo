@@ -73,6 +73,7 @@ class AvatarMenuCard extends StatelessWidget {
   final bool expanded;
   final bool movingAvatar;
   final bool showHeaderAvatar;
+  final Key? headerAvatarKey;
   final VoidCallback onExpand;
   final VoidCallback onClose;
   const AvatarMenuCard({
@@ -80,6 +81,7 @@ class AvatarMenuCard extends StatelessWidget {
     this.bottom = false,
     this.movingAvatar = false,
     this.showHeaderAvatar = true,
+    this.headerAvatarKey,
     required this.expanded,
     required this.onExpand,
     required this.onClose,
@@ -133,17 +135,20 @@ class AvatarMenuCard extends StatelessWidget {
             if (showHeaderAvatar) const SizedBox(width: 12),
             if (showHeaderAvatar)
               movingAvatar
-                  ? const SizedBox.square(dimension: 32)
-                  : NooAvatar(
-                      initials: accountInitial(session.username),
-                      current: true,
-                      size: 32,
+                  ? SizedBox.square(key: headerAvatarKey, dimension: 32)
+                  : GestureDetector(
+                      onTap: onClose,
+                      child: NooAvatar(
+                        key: headerAvatarKey,
+                        initials: accountInitial(session.username),
+                        current: true,
+                        size: 32,
+                      ),
                     ),
           ],
         ),
       ),
     );
-    final attached = bottom && !showHeaderAvatar;
     final accountSection = AnimatedSize(
       duration: NooMotion.base,
       curve: Curves.easeOutCubic,
@@ -199,7 +204,7 @@ class AvatarMenuCard extends StatelessWidget {
     final rows = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (!attached) accountSection,
+        if (!bottom) accountSection,
         for (final tab in settings.tabOrder.where(settings.hiddenTabs.contains))
           NooSettingsRow(
             backgroundColor: Colors.transparent,
@@ -223,7 +228,7 @@ class AvatarMenuCard extends StatelessWidget {
           label: const Text('Settings'),
           onTap: settingsTap,
         ),
-        if (attached) ...[header, accountSection],
+        if (bottom) ...[header, accountSection],
       ],
     );
     final content = SizedBox(
@@ -242,7 +247,6 @@ class AvatarMenuCard extends StatelessWidget {
                   fit: FlexFit.loose,
                   child: SingleChildScrollView(child: rows),
                 ),
-                if (bottom && !attached) header,
               ],
             ),
           ),
@@ -278,9 +282,7 @@ class _AvatarSurface extends StatelessWidget {
         color: frosted
             ? colors.surface.withValues(alpha: settings.bottomBarFrostedOpacity)
             : colors.surface,
-        border: connected
-            ? null
-            : Border.all(color: colors.line),
+        border: connected ? null : Border.all(color: colors.line),
         borderRadius: radius,
       ),
       child: Padding(padding: const EdgeInsets.all(1), child: child),
@@ -419,6 +421,8 @@ class _AvatarNavigationHostState extends State<AvatarNavigationHost>
     reverseDuration: const Duration(milliseconds: 320),
   );
   final GlobalKey measureKey = GlobalKey();
+  final GlobalKey measureAvatarKey = GlobalKey();
+  Offset avatarOffset = const Offset(0, 17);
   Rect? origin;
   bool bottom = false;
   bool expanded = false;
@@ -431,8 +435,18 @@ class _AvatarNavigationHostState extends State<AvatarNavigationHost>
       measuring = false;
       if (!mounted) return;
       final box = measureKey.currentContext?.findRenderObject() as RenderBox?;
-      if (box != null && (box.size.height - cardHeight).abs() > .5) {
-        setState(() => cardHeight = box.size.height);
+      final avatarBox =
+          measureAvatarKey.currentContext?.findRenderObject() as RenderBox?;
+      final offset = box != null && avatarBox != null
+          ? avatarBox.localToGlobal(Offset.zero, ancestor: box)
+          : avatarOffset;
+      if (box != null &&
+          ((box.size.height - cardHeight).abs() > .5 ||
+              (offset - avatarOffset).distance > .5)) {
+        setState(() {
+          cardHeight = box.size.height;
+          avatarOffset = offset;
+        });
       }
     });
   }
@@ -523,11 +537,12 @@ class _AvatarNavigationHostState extends State<AvatarNavigationHost>
                   height * .8,
                 );
                 measure();
-                Widget card() => ConstrainedBox(
+                Widget card({bool measurement = false}) => ConstrainedBox(
                   constraints: BoxConstraints(maxHeight: maxHeight),
                   child: AvatarMenuCard(
                     bottom: bottom,
-                    movingAvatar: true,
+                    movingAvatar: measurement || progress < 1,
+                    headerAvatarKey: measurement ? measureAvatarKey : null,
                     showHeaderAvatar: !attached,
                     expanded: expanded,
                     onExpand: () => setState(() => expanded = !expanded),
@@ -560,7 +575,7 @@ class _AvatarNavigationHostState extends State<AvatarNavigationHost>
                       );
                 final avatarTarget = Rect.fromLTWH(
                   target.right - 49,
-                  bottom ? target.bottom - 49 : target.top + 17,
+                  target.top + avatarOffset.dy,
                   32,
                   32,
                 );
@@ -595,7 +610,7 @@ class _AvatarNavigationHostState extends State<AvatarNavigationHost>
                                 child: SizeChangedLayoutNotifier(
                                   child: KeyedSubtree(
                                     key: measureKey,
-                                    child: card(),
+                                    child: card(measurement: true),
                                   ),
                                 ),
                               ),
@@ -643,7 +658,7 @@ class _AvatarNavigationHostState extends State<AvatarNavigationHost>
                           ),
                         ),
                       ),
-                      if (!attached)
+                      if (!attached && progress < 1)
                         Positioned.fromRect(
                           rect: avatar,
                           child: Semantics(

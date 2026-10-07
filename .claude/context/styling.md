@@ -309,7 +309,7 @@ blocks are noted where they matter:
   full screen width, rounded top corners and no gap above the bar; the
   avatar stays in the bar, and Search keeps its inline position.
   The attached popup has no outer border or shadow, blending into the bar.
-  Attached popup order is navigation (including Settings), current account,
+  All bottom popups order navigation (including Settings), current account,
   then expanded secondary accounts and Add/Manage Account controls.
   The iOS shell places Upload and the top avatar on the large-title row.
   Upload uses the shared `ui_fab_style` preference: Auto expands on Files
