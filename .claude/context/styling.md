@@ -121,7 +121,8 @@ Gotchas:
   toggle, Shares' scope switcher), but pass `onSurface: true` for one
   placed inside a sheet or dialog (already `colors.surface`), or its pill
   track blends invisibly into the sheet instead of reading as a grouped
-  control (Files'/Photos' sort and type-filter sheets do this).
+  control (Files'/Photos' filter sheets and Settings controls on surface
+  rows use the same `surface2` track).
 - Any `RefreshIndicator` needs `physics: const AlwaysScrollableScrollPhysics()`
   on its scrollable child, or pull-to-refresh silently can't be triggered
   once the list is short enough to fit the viewport (empty, or one item) -
@@ -140,6 +141,19 @@ blocks are noted where they matter:
   `NooChip`/`NooSegmentedControl`; still the sort/hidden/scope/type-filter/
   view-mode row shared by Files and Offline (`showStorageScope: false` for
   Offline), and reused as-is by Favorites.
+- Selection action bars in Files, Photos, and Favorites have a global
+  Settings → Action bar → Position choice: Top (default) or Bottom,
+  persisted as `ui_selection_bar_position`. Top stays pinned in the content
+  header; Bottom uses `SelectionBarOverlay` above navigation (or the content
+  pane's bottom on desktop), with extra list clearance. The overlay uses
+  Scaffold's MediaQuery bottom padding so attached/floating/frosted navigation
+  and safe areas are accounted for without counting their height twice.
+  The shell hides Android's Upload FAB during selection via view callbacks.
+  The mobile Action bar settings use one grouped card for Position and
+  the reorder list, with no nested rounded corners or repeated page title.
+  Their header backdrop is transparent, so content scrolls behind the inset
+  `surface` card. A `line` border and `nooDialogShadow` match the floating
+  bottom bar's solid treatment.
 - Hidden files and external storage are each a three-way segmented row
   (`HiddenFilesFilterRow`/`StorageScopeRow`, `lib/widgets/filter_mode_rows.dart`,
   in both the Files and Photos filter sheets), not toggles:
@@ -147,7 +161,8 @@ blocks are noted where they matter:
   cloud (default) / external / all. Files and Photos each persist their own
   hidden filter (`ui_hidden_filter`, `ui_hidden_filter_photos`; the old
   `ui_show_hidden*` bools are still read as a fallback, `true` → include);
-  `StorageScope` stays shared. Leaving `hide` is still behind the
+  `StorageScope` stays shared. Photos uses the same segmented pill for
+  Favorites (All / Favorites only). Leaving `hide` is still behind the
   hidden-files lock gate. With `StorageScope.all`, Files splits the listing:
   regular items first, then a collapsible "External storage" section
   (`_ExternalStorageHeader`, local `_externalExpanded` state, default open)
@@ -246,7 +261,7 @@ blocks are noted where they matter:
   instead of a corner badge. `NooBottomBar` later gained its own, unrelated
   `NooBottomBarStyle.floating` (Settings → Appearance → "Bottom bar") -
   don't confuse the two: this one is still non-blurred, just inset with a
-  `line` border and `nooDialogShadow` (the app's one other shadow user - see
+  `line` border and `nooDialogShadow` (also used by floating selection bars - see
   that constant's doc comment) instead of edge to edge (no opacity/blur knob
   either). `floating` ignores `NooNavStyle` and always uses the Android row
   (icon-only idle tabs, sliding pill, 64px), so iOS matches Android there;
@@ -279,44 +294,50 @@ blocks are noted where they matter:
   `onSearchTap`) and lowers `SettingsController.maxVisibleTabs` by one -
   use that getter, not `defaultMaxVisibleTabs` from `models/app_tab.dart`,
   anywhere that needs the *current* cap on regular tabs.
-- `SettingsController.navMenuStyle` (`NooNavMenuStyle.drawer`/`avatarMenu`,
-  Settings → Appearance → "Navigation menu") picks what opens hidden tabs +
-  Settings on mobile: the original hamburger-opens-`AppDrawer` pattern, or
-  the avatar button opens [`showAvatarMenu`](../../lib/widgets/avatar_menu.dart)
-  instead. Wired through `AppTopBar`→`NooTopBar.onMenu` (null in `avatarMenu`
-  mode - no menu icon renders at all, see `NooTopBar`'s `lead` logic) and
-  `ShellAvatarButton`'s new `onTap`/`label` overrides (`shell_common.dart`) -
-  a caller passing a custom `onTap` *must* also pass a matching `label`, or
-  the tooltip/semantics still say "Accounts" for a button that no longer
-  opens the account switcher. In `avatarMenu` mode `main.dart` also sets
-  `Scaffold.drawerEnableOpenDragGesture: false` so the edge swipe can't open
-  the drawer. The menu header has a chevron that expands an account section
-  (other saved accounts to switch to, "Add Account", "Manage Accounts")
-  above the hidden tabs/Settings. `showAvatarMenu` is this app's first use of
-  `showGeneralDialog` directly (`barrierColor: Colors.transparent` +
-  `barrierDismissible: true` for a non-dimming click-outside-to-close menu,
-  not a modal flow) - there's no existing anchored-popup primitive here
-  (`PopupMenuButton`'s own width doesn't stretch to a full content column),
-  so don't reach for `showNooSheet`/`showNooDialog` for something shaped
-  like this. It's positioned just past the status bar (`SafeArea`'s own
-  inset, not the top bar's full height on top of that) so it covers the
-  top bar - including the tab title - rather than sitting below it, and
-  its card carries two stacked `boxShadow`s rather than just
-  `nooDialogShadow` alone: that one shadow's blur is wide and soft enough
-  to read as basically invisible on a small card over a dark theme's
-  near-black `bg` (a dark, diffuse shadow needs real density close to the
-  edge to be visible against an already-dark backdrop), so a second,
-  tighter, more opaque contact shadow underneath it gives real elevation
-  in both themes. The card's border can go missing wherever an opaque row
-  sits against it too (every corner but the header's, which has no
-  full-bleed fill of its own) if a `Container` combines `border` with its
-  own `clipBehavior` - that paints the border as part of the *outer*
-  decoration, then the clipped child on top right up to the same boundary,
-  with no gap for the border's own stroke to show through. Fixed the same
-  way any bordered-and-clipped `Container` should be: no `clipBehavior` on
-  the bordered `Container` itself, and a 1px-inset `ClipRRect` (radius
-  reduced by that same 1px) around the filled, clipped content instead, so
-  it never paints over the border. Also added
+- `SettingsController.navMenuStyle` chooses hamburger/drawer or avatar popup
+  navigation (Settings → Appearance → Navigation menu). Avatar mode exposes
+  a persisted Avatar position choice (`ui_avatar_position`, Top by default).
+  `AvatarNavigationHost` owns one 420ms open / 320ms close animation using
+  `easeInOutCubicEmphasized`. The card expands from the real avatar anchor;
+  its controls fade in after the expansion starts. Top moves the content pane
+  down through `AvatarNavigationBody`, keeping bottom navigation stationary.
+  Bottom moves the avatar upward into the card's bottom-right corner and
+  overlays the list immediately above navigation. Both use the Files gutter.
+  The floating rail beside a bottom avatar shows text only on the selected
+  tab. Attached iOS also shows text only for the selected tab and keeps the full-width bar,
+  with the avatar inside the trailing end. Its popup expands upward with
+  full screen width, rounded top corners and no gap above the bar; the
+  avatar stays in the bar, and Search keeps its inline position.
+  The attached popup has no outer border or shadow, blending into the bar.
+  Attached popup order is navigation (including Settings), current account,
+  then expanded secondary accounts and Add/Manage Account controls.
+  The iOS shell places Upload and the top avatar on the large-title row.
+  Upload uses the shared `ui_fab_style` preference: Auto expands on Files
+  and Photos and collapses elsewhere; Mini is icon-only; Expanded always
+  shows the plus-and-Upload button. Upload uses the folder icon's tonal
+  `accentSoft` background and `accentText` foreground. Search stays below.
+  Upload uses the compact 32px size to match the visible top avatar.
+  On iOS the accent picker hides the unsupported wallpaper color option;
+  the accent subtitle, swatch and selection always reflect the seed color.
+  Upload's width, padding and label opacity interpolate over `NooMotion.base`.
+  A shared shell animation keeps separately mounted tab headers in sync
+  during Auto tab changes; reduced motion skips the transition.
+  Avatar navigation and its bottom satellite share the bottom bar's frost
+  toggle, blur and opacity, including throughout the popup animation.
+  The setting is labelled "Frosted glass" and also controls both media
+  viewer panels through `FrostedGlassContainer`. Off uses an opaque surface
+  without a backdrop filter; On uses the shared blur and tint opacity.
+  Search starts inside the rail when a bottom avatar occupies the satellite;
+  its row slot smoothly collapses as Search fades into that satellite while
+  the avatar moves into the popup. Closing reverses the same path. The card
+  retains hidden tabs, Settings, account switching, Add Account, and Manage
+  Accounts. Account controls scroll on short screens. Tap outside, tap the
+  popup avatar, or system Back to close. Reduced motion opens/closes without
+  the transition. Drawer gestures are disabled in avatar mode. Standalone
+  top bars outside the shell retain `showGeneralDialog` as a fallback.
+  `ShellAvatarButton` keeps its vertical-swipe account shortcuts in either
+  position. Its onTap override must have a matching tooltip/semantics label.
+  Also added
   `NooTopBar.androidTitleTrailing`: Android has no large title to put a
   second search row under the way iOS's `search:` slot does, so an inline
   search bar (`AppTopBar` passes a plain `ShellSearchLauncher()` when
@@ -346,11 +367,13 @@ blocks are noted where they matter:
   `FileBreadcrumbRow` proved the same trail is still wanted elsewhere.
 - [`SeekBarPainter`/`SeekBarPreview`](../../lib/widgets/seek_bar_painter.dart)
   — the four `MediaProgressBarStyle` presets (Default/Wavy/Slim/Squiggly)
-  for the video player's seek bar, plus a perpetually-animated
+  for the non-iOS video player's seek bar, plus a perpetually-animated
   `SeekBarPreview` wrapper used by the Settings style picker so every
   preview always matches the real widget exactly (same painter, just fed
   demo `progress`/`phase` values). Add new seek-bar presets here, not by
   forking the painter.
+  iOS uses `IosSeekBar` with `CupertinoSlider` instead and hides the style
+  picker. Scrubbing pauses playback temporarily and restores its prior state.
 - Chrome inside the media viewer (`file_viewer_screen.dart` — the top bar's
   back button + filename, the bottom action bar, the video transport
   controls) all share one small hand-rolled icon-button pattern

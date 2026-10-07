@@ -428,9 +428,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
     // The stage follows the app's own theme (`bg`) rather than being pinned
     // to black - a black stage in light mode read as jarringly out of place
     // next to the rest of the light-themed app. The floating top/action
-    // bars now follow the theme too (FrostedGlassContainer's own `surface`
-    // default), at a higher blur opacity to stay legible over arbitrary
-    // photo/video brightness underneath.
+    // bars follow the theme and share the navigation frost preference.
     final stageColor = colors.bg;
 
     return Scaffold(

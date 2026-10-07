@@ -52,6 +52,7 @@ class NooTopBar extends StatelessWidget implements PreferredSizeWidget {
   /// Icons inherit the bar's icon color (accent-text on iOS, fg-1 on
   /// Android) through [IconTheme].
   final List<Widget> actions;
+  final bool iosActionsInTitleRow;
 
   /// iOS only: the search field shown below the large title.
   final Widget? search;
@@ -76,6 +77,7 @@ class NooTopBar extends StatelessWidget implements PreferredSizeWidget {
     this.leading,
     this.onMenu,
     this.actions = const [],
+    this.iosActionsInTitleRow = false,
     this.search,
     this.androidTitleTrailing,
     this.backgroundColor,
@@ -86,6 +88,11 @@ class NooTopBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Size get preferredSize {
     if (!_ios) return const Size.fromHeight(_androidRow);
+    if (iosActionsInTitleRow) {
+      return Size.fromHeight(
+        64 + (search != null ? _iosSearch + _iosSearchBottom : 0),
+      );
+    }
     return Size.fromHeight(
       _iosRow +
           _iosTitleTop +
@@ -127,6 +134,50 @@ class NooTopBar extends StatelessWidget implements PreferredSizeWidget {
   }
 
   Widget _buildIos(NooColors colors, Widget? lead) {
+    if (iosActionsInTitleRow) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            height: 64,
+            child: Padding(
+              padding: EdgeInsetsDirectional.only(
+                start: lead == null ? 16 : 6,
+                end: 6,
+              ),
+              child: Row(
+                spacing: 4,
+                children: [
+                  ?lead,
+                  Expanded(
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: NooText.largeTitle.copyWith(
+                        leadingDistribution: TextLeadingDistribution.even,
+                        color: colors.fg1,
+                      ),
+                    ),
+                  ),
+                  ...actions,
+                ],
+              ),
+            ),
+          ),
+          if (search != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                NooSpace.md,
+                0,
+                NooSpace.md,
+                _iosSearchBottom,
+              ),
+              child: SizedBox(height: _iosSearch, child: search),
+            ),
+        ],
+      );
+    }
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,

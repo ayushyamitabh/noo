@@ -37,8 +37,8 @@ enum NooBottomBarStyle { attached, floating }
 /// as [NooBottomBarStyle]. [drawer] is the original pattern: a `menu`
 /// icon, top-left of the top bar, opens a left-edge `Drawer`. [avatarMenu]
 /// drops that icon entirely and repurposes the avatar button - already
-/// sitting top-right, already a tap target every user already knows - as
-/// the one entry point instead, opening a dropdown anchored below it (see
+/// available at the top or bottom by user preference - as the one entry
+/// point instead, expanding into an anchored navigation card (see
 /// `showAvatarMenu` in `widgets/avatar_menu.dart`) rather than a drawer
 /// sliding from the opposite edge. Applies on both platforms, since
 /// [NooTopBar]'s `onMenu`/avatar wiring is shared chrome, not

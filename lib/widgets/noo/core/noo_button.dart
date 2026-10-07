@@ -50,6 +50,9 @@ class NooButton extends StatefulWidget {
   /// are responsible for a tooltip/semantic label, since there's no text.
   final bool iconOnly;
 
+  /// Continuous icon-only to labelled expansion for animated shell actions.
+  final double? expansion;
+
   const NooButton({
     super.key,
     this.variant = NooButtonVariant.primary,
@@ -60,6 +63,7 @@ class NooButton extends StatefulWidget {
     this.disabled = false,
     this.onTap,
     this.iconOnly = false,
+    this.expansion,
   });
 
   @override
@@ -108,11 +112,22 @@ class _NooButtonState extends State<NooButton> {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (widget.icon != null) Icon(widget.icon, size: s.icon, color: fg),
-        if (widget.icon != null && widget.child != null) SizedBox(width: s.gap),
-        if (widget.child != null)
-          DefaultTextStyle(
-            style: NooText.buttonSm.copyWith(fontSize: s.font, color: fg),
-            child: widget.child!,
+        if (widget.icon != null && widget.child != null)
+          SizedBox(width: s.gap * (widget.expansion ?? 1)),
+        if (widget.child != null && widget.expansion != 0)
+          ClipRect(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              widthFactor: widget.expansion ?? 1,
+              heightFactor: 1,
+              child: Opacity(
+                opacity: widget.expansion ?? 1,
+                child: DefaultTextStyle(
+                  style: NooText.buttonSm.copyWith(fontSize: s.font, color: fg),
+                  child: widget.child!,
+                ),
+              ),
+            ),
           ),
       ],
     );
@@ -135,7 +150,17 @@ class _NooButtonState extends State<NooButton> {
             width: widget.iconOnly
                 ? s.height
                 : (widget.fullWidth ? double.infinity : null),
-            padding: _isTextVariant || widget.iconOnly
+            padding: widget.expansion != null
+                ? EdgeInsets.only(
+                    left:
+                        (s.height - s.icon) / 2 +
+                        (s.px - 4 - (s.height - s.icon) / 2) *
+                            widget.expansion!,
+                    right:
+                        (s.height - s.icon) / 2 +
+                        (s.px - (s.height - s.icon) / 2) * widget.expansion!,
+                  )
+                : _isTextVariant || widget.iconOnly
                 ? EdgeInsets.zero
                 : EdgeInsets.only(
                     left: hasLeadingIcon ? s.px - 4 : s.px,

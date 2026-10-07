@@ -1021,10 +1021,10 @@ backup) with state in `<...>/sync-state/<accountId>/*.json`.
   pruning uses `rmdir` and only on a successful empty read; a root's etag
   shortcut marker is only written when the path synced cleanly *and* the state
   was saved.
-- **Deliberate differences from Android:** a file deleted on the server but
-  edited here is **kept** (untracked) rather than deleted - the edit is the
-  only copy; after our own upload the file's etag is re-read so it isn't
-  downloaded back; state is flushed every 20 transfers; conflicts are kept
+- **Server deletions:** remove the local copy even if edited locally, matching
+  Android.
+- **Deliberate differences from Android:** after our own upload the file's
+  etag is re-read so it isn't downloaded back; state is flushed every 20 transfers; conflicts are kept
   per account on the status bus; downloads write to a temp file first. No
   ongoing progress notification (a run posts a summary, and conflict
   notifications with Keep local / Use server actions).
@@ -1039,12 +1039,19 @@ backup) with state in `<...>/sync-state/<accountId>/*.json`.
   (`dev.ayushya.noo.sync.refresh`/`.processing`, `UIBackgroundModes` fetch +
   processing, `BGTaskSchedulerPermittedIdentifiers` in Info.plist; handlers
   registered before launch finishes). `intervalMinutes` (floored at 15, like
-  Android) is only the *earliest* start - iOS picks when - and Wi-Fi-only is
+  Android) is only the *earliest* start - iOS picks when. The Files cache
+  settings explain this on iOS; the 15-minute Android warning appears only
+  on Android for intervals below 15 minutes. Wi-Fi-only is
   checked with `NWPathMonitor` (`isExpensive`) since a BGTask can't require
   it. An expiring task cancels its runs (they save state as they go) and is
   completed exactly once (`OnceGate`). **Not testable in the simulator**
   (needs a real device and the Xcode `_simulateLaunchForTaskWithIdentifier`
   debugger command).
+- **Simulator verification:** a temporary debug control ran the native
+  background slot and confirmed files update for a non-active saved account.
+  The control and its channel handler were removed after verification.
+  `startBackgroundSlot` retains a regression test for periodic eligibility.
+  OS wake-up delivery and background execution time limits remain unverified.
 - **Credentials:** `SyncConfigStore` keeps each account's server, auth header,
   paths, interval and notify flag as one Keychain item
   (`AfterFirstUnlock`, so a background run works with the phone locked).

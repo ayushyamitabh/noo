@@ -32,6 +32,7 @@ import 'views/share_upload_view.dart';
 import 'widgets/app_drawer.dart';
 import 'widgets/app_tab_view_builder.dart';
 import 'widgets/app_top_bar.dart';
+import 'widgets/avatar_menu.dart';
 import 'widgets/bottom_nav_bar.dart';
 import 'widgets/create_menu.dart';
 import 'widgets/noo/core/noo_avatar.dart';
@@ -210,6 +211,7 @@ class MainShellView extends StatefulWidget {
 
 class _MainShellViewState extends State<MainShellView> {
   late AppTab _currentTab;
+  final Set<AppTab> _selectionActiveTabs = {};
   late final Map<AppTab, ScrollController> _scrollControllers;
   StreamSubscription<List<SharedFileRef>>? _shareSub;
   StreamSubscription<PickRequest>? _pickSub;
@@ -430,24 +432,41 @@ class _MainShellViewState extends State<MainShellView> {
     // null`).
     final tabStack = Stack(
       children: [
-        IndexedStack(
-          index: selectedIndex,
-          children: displayTabs
-              .map(
-                (tab) => buildAppTabView(
-                  tab,
-                  _scrollControllers[tab]!,
-                  topBar: isDesktop || pickRequest != null
-                      ? null
-                      : AppTopBar(
-                          style: navStyle,
-                          tab: tab,
-                          searchInBottomBar: showBottomBarSearch,
-                          navMenuStyle: settings.navMenuStyle,
-                        ),
-                ),
-              )
-              .toList(),
+        AvatarNavigationBody(
+          child: IndexedStack(
+            index: selectedIndex,
+            children: displayTabs
+                .map(
+                  (tab) => buildAppTabView(
+                    tab,
+                    _scrollControllers[tab]!,
+                    onSelectionChanged: (selecting) {
+                      if (!mounted ||
+                          selecting == _selectionActiveTabs.contains(tab)) {
+                        return;
+                      }
+                      setState(() {
+                        if (selecting) {
+                          _selectionActiveTabs.add(tab);
+                        } else {
+                          _selectionActiveTabs.remove(tab);
+                        }
+                      });
+                    },
+                    topBar: isDesktop || pickRequest != null
+                        ? null
+                        : AppTopBar(
+                            style: navStyle,
+                            tab: tab,
+                            searchInBottomBar: showBottomBarSearch,
+                            navMenuStyle: settings.navMenuStyle,
+                            avatarPosition: settings.avatarPosition,
+                            uploadButtonStyle: settings.fabStyle,
+                          ),
+                  ),
+                )
+                .toList(),
+          ),
         ),
         if (pick.isDownloadingForPick) const _PickingProgressOverlay(),
       ],
@@ -549,13 +568,15 @@ class _MainShellViewState extends State<MainShellView> {
           bottomBarStyle,
           settings.bottomBarFrosted,
         ),
-        // Android-only extended Upload FAB - iOS uses the top bar's `plus`
+        // Android-only extended Upload FAB - iOS uses the top bar's Upload
         // instead (see AppTopBar). Stays mounted across every tab (picking
         // aside) and collapses to an icon-only circle off Files/Photos,
         // rather than the Scaffold popping it fully in/out on every tab
         // switch - see NooFab's [collapsed].
         floatingActionButton:
-            pickRequest == null && navStyle == NooNavStyle.android
+            pickRequest == null &&
+                navStyle == NooNavStyle.android &&
+                !_selectionActiveTabs.contains(selectedTab)
             ? NooFab(
                 collapsed: switch (settings.fabStyle) {
                   FabStyle.auto => !canUpload,
@@ -566,7 +587,22 @@ class _MainShellViewState extends State<MainShellView> {
                 onTap: () => showCreateMenu(context),
               )
             : null,
-        body: tabStack,
+        body: TweenAnimationBuilder<double>(
+          tween: Tween(
+            end: switch (settings.fabStyle) {
+              FabStyle.auto => canUpload ? 1.0 : 0.0,
+              FabStyle.mini => 0.0,
+              FabStyle.expanded => 1.0,
+            },
+          ),
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : NooMotion.base,
+          curve: NooMotion.ease,
+          child: tabStack,
+          builder: (context, progress, child) =>
+              UploadButtonAnimation(progress: progress, child: child!),
+        ),
         bottomNavigationBar: BottomNavBar(
           style: navStyle,
           barStyle: bottomBarStyle,
@@ -576,6 +612,10 @@ class _MainShellViewState extends State<MainShellView> {
           tabs: pinnedTabs,
           selectedIndex: pinnedIndex,
           onSearchTap: showBottomBarSearch ? () => openSearch(context) : null,
+          avatarInBottomBar:
+              pickRequest == null &&
+              settings.navMenuStyle == NooNavMenuStyle.avatarMenu &&
+              settings.avatarPosition == AvatarPosition.bottom,
           onDestinationSelected: (index) {
             final tappedTab = pinnedTabs[index];
             if (tappedTab == _currentTab) {
@@ -615,7 +655,7 @@ class _MainShellViewState extends State<MainShellView> {
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop && pickRequest != null) pick.cancelPick();
       },
-      child: scaffold,
+      child: isDesktop ? scaffold : AvatarNavigationHost(child: scaffold),
     );
   }
 }

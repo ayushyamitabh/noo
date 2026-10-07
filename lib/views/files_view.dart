@@ -44,6 +44,7 @@ import '../widgets/noo/noo_layout.dart';
 import '../widgets/noo/overlays/noo_sheet.dart';
 import '../widgets/share_sheet.dart';
 import '../widgets/sticky_header_delegate.dart';
+import '../widgets/selection_bar_overlay.dart';
 import '../widgets/tabs/tab_state_slivers.dart';
 import '../widgets/synced_header_scaffold.dart' show formatBytes;
 import 'file_viewer_screen.dart';
@@ -64,12 +65,14 @@ class FilesView extends StatefulWidget {
   /// This tab's own shell top bar, planted as its first sliver - see
   /// `buildAppTabView`'s doc comment. Null on desktop and while picking.
   final PreferredSizeWidget? topBar;
+  final ValueChanged<bool>? onSelectionChanged;
 
   const FilesView({
     super.key,
     required this.scrollController,
     this.offline = false,
     this.topBar,
+    this.onSelectionChanged,
   });
 
   @override
@@ -337,10 +340,12 @@ class _FilesViewState extends State<FilesView> {
     setState(() {
       if (!_selectedIds.remove(item.id)) _selectedIds.add(item.id);
     });
+    widget.onSelectionChanged?.call(_isSelecting);
   }
 
   void _clearSelection() {
     setState(_selectedIds.clear);
+    widget.onSelectionChanged?.call(false);
   }
 
   /// Routes a tap on an item, in picking, selecting or plain-browsing mode
@@ -652,6 +657,10 @@ class _FilesViewState extends State<FilesView> {
 
   @override
   Widget build(BuildContext context) {
+    final selectionAtBottom =
+        _isSelecting &&
+        context.watch<SettingsController>().selectionBarPosition ==
+            SelectionBarPosition.bottom;
     final colors = context.nooColors;
     // Display prefs (grid/list, filters, sort) live on FilesController for
     // both tabs; `browser` is the tab's own folder listing.
@@ -835,8 +844,7 @@ class _FilesViewState extends State<FilesView> {
           child: _ExternalStorageHeader(
             count: externalItems.length,
             expanded: _externalExpanded,
-            onTap: () =>
-                setState(() => _externalExpanded = !_externalExpanded),
+            onTap: () => setState(() => _externalExpanded = !_externalExpanded),
           ),
         ),
         if (_externalExpanded)
@@ -854,17 +862,19 @@ class _FilesViewState extends State<FilesView> {
       // (+ breadcrumbs), while selecting it's the selection bar (see
       // `topRow` above): either way it's the one thing that always stays
       // at the very top of the scroll view.
-      SliverPersistentHeader(
-        pinned: true,
-        delegate: StickyHeaderDelegate(
-          // 20 (topRow's own top+bottom padding) + 44 (FilesControlsRow's
-          // fixed height) [+ 10 gap + 32 breadcrumbs height, if present].
-          // Getting this wrong overflows the sliver header by exactly the
-          // shortfall - a real bug this shipped with once already.
-          height: _isSelecting ? 56 : (hasBreadcrumbs ? 106 : 64),
-          child: topRow,
+      if (!selectionAtBottom)
+        SliverPersistentHeader(
+          pinned: true,
+          delegate: StickyHeaderDelegate(
+            floating: _isSelecting,
+            // 20 (topRow's own top+bottom padding) + 44 (FilesControlsRow's
+            // fixed height) [+ 10 gap + 32 breadcrumbs height, if present].
+            // Getting this wrong overflows the sliver header by exactly the
+            // shortfall - a real bug this shipped with once already.
+            height: _isSelecting ? 56 : (hasBreadcrumbs ? 106 : 64),
+            child: topRow,
+          ),
         ),
-      ),
       if (_offline)
         SliverToBoxAdapter(child: _buildOfflineSummary(context, sync)),
       // Files List / Grid
@@ -939,12 +949,17 @@ class _FilesViewState extends State<FilesView> {
       // draws the body behind the bar instead (as does a frosted bar), so it
       // needs the bar's own footprint added on top or the last row ends up
       // under it.
-      if (NooBottomBar.drawsBehindBody(
-        context.watch<SettingsController>().bottomBarStyle,
-        context.watch<SettingsController>().bottomBarFrosted,
-      ))
+      if (selectionAtBottom ||
+          NooBottomBar.drawsBehindBody(
+            context.watch<SettingsController>().bottomBarStyle,
+            context.watch<SettingsController>().bottomBarFrosted,
+          ))
         SliverToBoxAdapter(
-          child: SizedBox(height: bottomBarClearance(context)),
+          child: SizedBox(
+            height:
+                bottomBarClearance(context) +
+                (selectionAtBottom ? SelectionBarOverlay.clearance : 0),
+          ),
         ),
     ];
 
@@ -958,38 +973,43 @@ class _FilesViewState extends State<FilesView> {
           browser.navigateUp();
         }
       },
-      child: ColoredBox(
-        color: colors.bg,
-        child: RefreshIndicator(
-          color: colors.accent,
-          backgroundColor: colors.surface,
-          onRefresh: () {
-            unawaited(sync.syncOnPull());
-            return browser.reload();
-          },
-          // `topBarSliver`'s floating header can collapse all the way to
-          // zero height (fully scrolled away), at which point the sticky
-          // controls row right below it in `contentSlivers` would otherwise
-          // ride up underneath the status bar instead of stopping below it
-          // - the floating top bar used to be the only thing reserving that
-          // space (via its own internal `SafeArea`), and that reservation
-          // disappears along with it once it's fully hidden. Wrapping the
-          // whole scroll view keeps the inset outside the scrolling region
-          // entirely, so it's never implicated in the floating header's own
-          // collapse/reveal math - safe to apply unconditionally, since
-          // desktop's `MediaQuery.padding.top` is 0 anyway (no topBar / no
-          // status bar there).
-          child: SafeArea(
-            top: true,
-            bottom: false,
-            child: CustomScrollView(
-              controller: widget.scrollController,
-              // Pull-to-refresh needs a scroll physics that allows dragging
-              // past the edge even when content doesn't fill the viewport -
-              // an empty or single-item list otherwise can't be pulled at
-              // all under the platform default physics.
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: contentSlivers,
+      child: SelectionBarOverlay(
+        bar: selectionAtBottom
+            ? _buildSelectionBar(context, selectedItems)
+            : null,
+        child: ColoredBox(
+          color: colors.bg,
+          child: RefreshIndicator(
+            color: colors.accent,
+            backgroundColor: colors.surface,
+            onRefresh: () {
+              unawaited(sync.syncOnPull());
+              return browser.reload();
+            },
+            // `topBarSliver`'s floating header can collapse all the way to
+            // zero height (fully scrolled away), at which point the sticky
+            // controls row right below it in `contentSlivers` would otherwise
+            // ride up underneath the status bar instead of stopping below it
+            // - the floating top bar used to be the only thing reserving that
+            // space (via its own internal `SafeArea`), and that reservation
+            // disappears along with it once it's fully hidden. Wrapping the
+            // whole scroll view keeps the inset outside the scrolling region
+            // entirely, so it's never implicated in the floating header's own
+            // collapse/reveal math - safe to apply unconditionally, since
+            // desktop's `MediaQuery.padding.top` is 0 anyway (no topBar / no
+            // status bar there).
+            child: SafeArea(
+              top: true,
+              bottom: false,
+              child: CustomScrollView(
+                controller: widget.scrollController,
+                // Pull-to-refresh needs a scroll physics that allows dragging
+                // past the edge even when content doesn't fill the viewport -
+                // an empty or single-item list otherwise can't be pulled at
+                // all under the platform default physics.
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: contentSlivers,
+              ),
             ),
           ),
         ),

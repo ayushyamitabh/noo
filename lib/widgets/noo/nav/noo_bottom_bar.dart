@@ -19,8 +19,8 @@ const double _kAndroidPillHeight = 32;
 /// what order, is the caller's business; this only draws [destinations].
 ///
 /// - [NooNavStyle.ios]: surface fill, 1px top `line`, a 50px row (8px top
-///   padding) of icon 24 over a 10px label. Active: accent-text, 600.
-///   Idle: fg-3, 500. No ripple.
+///   padding) of icon 24 over a 10px selected label. Active: accent-text, 600.
+///   Idle: centered fg-3 icon, no label. No ripple.
 /// - [NooNavStyle.android]: surface fill, 80px. Every tab shows its 24px
 ///   icon over a 12px label (label only visible - not removed from layout,
 ///   so the row never resizes - once selected). The active icon sits in a
@@ -78,6 +78,11 @@ class NooBottomBar extends StatelessWidget {
   final NooNavDestination? searchDestination;
   final VoidCallback? onSearchTap;
 
+  /// Bottom-avatar navigation occupies this slot while closed. Search moves
+  /// from the row into the slot as the avatar expands into its popup.
+  final Widget? avatarSatellite;
+  final double avatarMenuProgress;
+
   const NooBottomBar({
     super.key,
     required this.style,
@@ -90,6 +95,8 @@ class NooBottomBar extends StatelessWidget {
     required this.onSelected,
     this.searchDestination,
     this.onSearchTap,
+    this.avatarSatellite,
+    this.avatarMenuProgress = 0,
   });
 
   /// The row height [build] draws for [style]/[barStyle] - exposed so a
@@ -126,7 +133,12 @@ class NooBottomBar extends StatelessWidget {
     // Attached folds Search into the row itself (last item); floating
     // gives it a separate satellite circle instead (built below), so the
     // row builders only ever see it as a trailing item in the former case.
-    final rowSearch = hasSearch && !floating ? searchDestination : null;
+    final rowSearch =
+        hasSearch &&
+            (!floating || avatarSatellite != null) &&
+            (avatarSatellite == null || !floating || avatarMenuProgress < 1)
+        ? searchDestination
+        : null;
 
     final row = ios
         ? _buildIosRow(trailingSearch: rowSearch)
@@ -162,7 +174,9 @@ class NooBottomBar extends StatelessWidget {
             16,
             NooBottomBar.floatingBottomMargin,
           ),
-          child: hasSearch
+          child: avatarSatellite != null
+              ? _withAvatar(pill, barHeight, hasSearch)
+              : hasSearch
               // A fixed-height SizedBox, not just a Row with
               // crossAxisAlignment.stretch - the bottomNavigationBar slot
               // gives this widget a *loose* (unbounded-max) height
@@ -202,37 +216,126 @@ class NooBottomBar extends StatelessWidget {
       ),
       child: SafeArea(
         top: false,
-        child: SizedBox(height: barHeight, child: row),
+        child: SizedBox(
+          height: barHeight,
+          child: avatarSatellite == null
+              ? row
+              : Row(
+                  children: [
+                    Expanded(child: row),
+                    SizedBox(
+                      width: barHeight,
+                      height: barHeight,
+                      child: avatarSatellite,
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                ),
+        ),
       ),
     );
     return frosted ? _blurred(bar, BorderRadius.zero, frostedBlur) : bar;
+  }
+
+  Widget _withAvatar(Widget rail, double height, bool hasSearch) {
+    final satelliteWidth = hasSearch
+        ? height
+        : height * (1 - avatarMenuProgress);
+    return SizedBox(
+      height: height,
+      child: Row(
+        children: [
+          Expanded(child: rail),
+          SizedBox(width: 8 * (hasSearch ? 1 : 1 - avatarMenuProgress)),
+          SizedBox(
+            width: satelliteWidth,
+            height: height,
+            child: ClipRect(
+              child: OverflowBox(
+                alignment: Alignment.centerRight,
+                minWidth: height,
+                maxWidth: height,
+                child: Stack(
+                  children: [
+                    avatarSatellite!,
+                    if (hasSearch && avatarMenuProgress > 0)
+                      Opacity(
+                        opacity: avatarMenuProgress,
+                        child: _SearchSatellite(
+                          destination: searchDestination!,
+                          onTap: onSearchTap!,
+                          size: height,
+                          frosted: frosted,
+                          frostedBlur: frostedBlur,
+                          frostedOpacity: frostedOpacity,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Color _fill(NooColors colors) => frosted
       ? colors.surface.withValues(alpha: frostedOpacity)
       : colors.surface;
 
+  double get _rowSearchFraction =>
+      avatarSatellite == null || barStyle == NooBottomBarStyle.attached
+      ? 1
+      : 1 - avatarMenuProgress;
+
+  Widget _searchRowItem(Widget child, double width) => SizedBox(
+    width: width * _rowSearchFraction,
+    child: IgnorePointer(
+      ignoring: _rowSearchFraction < .95,
+      child: ClipRect(
+        child: OverflowBox(
+          minWidth: width,
+          maxWidth: width,
+          child: Opacity(opacity: _rowSearchFraction, child: child),
+        ),
+      ),
+    ),
+  );
+
   Widget _buildIosRow({NooNavDestination? trailingSearch}) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (var i = 0; i < destinations.length; i++)
-          Expanded(
-            child: _IosItem(
-              destination: destinations[i],
-              selected: i == selectedIndex,
-              onTap: () => onSelected(i),
-            ),
-          ),
-        if (trailingSearch != null)
-          Expanded(
-            child: _IosItem(
-              destination: trailingSearch,
-              selected: false,
-              onTap: onSearchTap!,
-            ),
-          ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width =
+            constraints.maxWidth /
+            (destinations.length +
+                (trailingSearch == null ? 0 : _rowSearchFraction));
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < destinations.length; i++)
+              SizedBox(
+                width: width,
+                child: _IosItem(
+                  destination: destinations[i],
+                  selected: i == selectedIndex,
+                  selectedLabelOnly: true,
+                  onTap: () => onSelected(i),
+                ),
+              ),
+            if (trailingSearch != null)
+              _searchRowItem(
+                _IosItem(
+                  destination: trailingSearch,
+                  selected: false,
+                  selectedLabelOnly: true,
+                  onTap: onSearchTap!,
+                ),
+                width,
+              ),
+          ],
+        );
+      },
     );
   }
 
@@ -242,7 +345,8 @@ class NooBottomBar extends StatelessWidget {
     NooNavDestination? trailingSearch,
   }) {
     final pillTop = floating ? _kFloatingPillTop : _kAttachedPillTop;
-    final itemCount = destinations.length + (trailingSearch != null ? 1 : 0);
+    final itemCount =
+        destinations.length + (trailingSearch != null ? _rowSearchFraction : 0);
     return LayoutBuilder(
       builder: (context, constraints) {
         final itemWidth = constraints.maxWidth / itemCount;
@@ -268,7 +372,8 @@ class NooBottomBar extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 for (var i = 0; i < destinations.length; i++)
-                  Expanded(
+                  SizedBox(
+                    width: itemWidth,
                     child: _AndroidItem(
                       destination: destinations[i],
                       selected: i == selectedIndex,
@@ -277,13 +382,14 @@ class NooBottomBar extends StatelessWidget {
                     ),
                   ),
                 if (trailingSearch != null)
-                  Expanded(
-                    child: _AndroidItem(
+                  _searchRowItem(
+                    _AndroidItem(
                       destination: trailingSearch,
                       selected: false,
                       floating: floating,
                       onTap: onSearchTap!,
                     ),
+                    itemWidth,
                   ),
               ],
             ),
@@ -362,11 +468,13 @@ class _SearchSatellite extends StatelessWidget {
 class _IosItem extends StatelessWidget {
   final NooNavDestination destination;
   final bool selected;
+  final bool selectedLabelOnly;
   final VoidCallback onTap;
 
   const _IosItem({
     required this.destination,
     required this.selected,
+    this.selectedLabelOnly = false,
     required this.onTap,
   });
 
@@ -377,30 +485,35 @@ class _IosItem extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
+      label: selectedLabelOnly && !selected ? destination.label : null,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.start,
-            children: [
-              Icon(destination.icon, size: 24, color: fg),
-              const SizedBox(height: 4),
-              Text(
-                destination.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: NooText.navLabel.copyWith(
-                  fontSize: 10,
-                  height: 1,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                  color: fg,
+        child: selectedLabelOnly && !selected
+            ? Center(child: Icon(destination.icon, size: 24, color: fg))
+            : Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    Icon(destination.icon, size: 24, color: fg),
+                    const SizedBox(height: 4),
+                    Text(
+                      destination.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: NooText.navLabel.copyWith(
+                        fontSize: 10,
+                        height: 1,
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.w500,
+                        color: fg,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-        ),
       ),
     );
   }

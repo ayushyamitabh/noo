@@ -29,6 +29,7 @@ import '../widgets/noo/overlays/noo_sheet.dart';
 import '../widgets/noo/core/noo_button.dart';
 import '../widgets/share_sheet.dart';
 import '../widgets/sticky_header_delegate.dart';
+import '../widgets/selection_bar_overlay.dart';
 import '../widgets/tabs/tab_state_slivers.dart';
 import '../widgets/synced_header_scaffold.dart' show formatBytes;
 import 'file_viewer_screen.dart';
@@ -54,8 +55,14 @@ class FavoritesView extends StatefulWidget {
   /// This tab's own shell top bar, planted as its first sliver - see
   /// `buildAppTabView`'s doc comment. Null on desktop and while picking.
   final PreferredSizeWidget? topBar;
+  final ValueChanged<bool>? onSelectionChanged;
 
-  const FavoritesView({super.key, required this.scrollController, this.topBar});
+  const FavoritesView({
+    super.key,
+    required this.scrollController,
+    this.topBar,
+    this.onSelectionChanged,
+  });
 
   @override
   State<FavoritesView> createState() => _FavoritesViewState();
@@ -72,10 +79,12 @@ class _FavoritesViewState extends State<FavoritesView> {
     setState(() {
       if (!_selectedIds.remove(item.id)) _selectedIds.add(item.id);
     });
+    widget.onSelectionChanged?.call(_isSelecting);
   }
 
   void _clearSelection() {
     setState(_selectedIds.clear);
+    widget.onSelectionChanged?.call(false);
   }
 
   /// A favorited folder switches to the Files tab, navigated there; a
@@ -483,6 +492,10 @@ class _FavoritesViewState extends State<FavoritesView> {
 
   @override
   Widget build(BuildContext context) {
+    final selectionAtBottom =
+        _isSelecting &&
+        context.watch<SettingsController>().selectionBarPosition ==
+            SelectionBarPosition.bottom;
     final colors = context.nooColors;
     final isDesktop = NooLayout.isDesktop(context);
     final favoritesController = context.watch<FavoritesController>();
@@ -513,15 +526,17 @@ class _FavoritesViewState extends State<FavoritesView> {
 
     final contentSlivers = <Widget>[
       if (widget.topBar != null) topBarSliver(widget.topBar!),
-      SliverPersistentHeader(
-        pinned: !_isSelecting,
-        delegate: StickyHeaderDelegate(
-          height: _isSelecting ? 56 : 64,
-          child: _isSelecting
-              ? _buildSelectionBar(context, selectedItems)
-              : controlsRow,
+      if (!selectionAtBottom)
+        SliverPersistentHeader(
+          pinned: true,
+          delegate: StickyHeaderDelegate(
+            floating: _isSelecting,
+            height: _isSelecting ? 56 : 64,
+            child: _isSelecting
+                ? _buildSelectionBar(context, selectedItems)
+                : controlsRow,
+          ),
         ),
-      ),
       if (favoritesController.isLoading && favorites.isEmpty)
         const SliverFillRemaining(
           hasScrollBody: false,
@@ -646,7 +661,13 @@ class _FavoritesViewState extends State<FavoritesView> {
             }, childCount: favorites.length),
           ),
         ),
-      SliverToBoxAdapter(child: SizedBox(height: bottomBarClearance(context))),
+      SliverToBoxAdapter(
+        child: SizedBox(
+          height:
+              bottomBarClearance(context) +
+              (selectionAtBottom ? SelectionBarOverlay.clearance : 0),
+        ),
+      ),
     ];
 
     return PopScope(
@@ -654,24 +675,29 @@ class _FavoritesViewState extends State<FavoritesView> {
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop && _isSelecting) _clearSelection();
       },
-      child: ColoredBox(
-        color: colors.bg,
-        child: RefreshIndicator(
-          color: colors.accent,
-          backgroundColor: colors.surface,
-          onRefresh: favoritesController.fetchAll,
-          // See files_view.dart's identical fix - without this, the sticky
-          // controls row rides up under the status bar once the floating
-          // top bar above it fully collapses.
-          child: SafeArea(
-            top: true,
-            bottom: false,
-            child: CustomScrollView(
-              controller: widget.scrollController,
-              // See files_view.dart's identical fix - without this, pull-to-
-              // refresh can't be triggered on an empty or single-item list.
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: contentSlivers,
+      child: SelectionBarOverlay(
+        bar: selectionAtBottom
+            ? _buildSelectionBar(context, selectedItems)
+            : null,
+        child: ColoredBox(
+          color: colors.bg,
+          child: RefreshIndicator(
+            color: colors.accent,
+            backgroundColor: colors.surface,
+            onRefresh: favoritesController.fetchAll,
+            // See files_view.dart's identical fix - without this, the sticky
+            // controls row rides up under the status bar once the floating
+            // top bar above it fully collapses.
+            child: SafeArea(
+              top: true,
+              bottom: false,
+              child: CustomScrollView(
+                controller: widget.scrollController,
+                // See files_view.dart's identical fix - without this, pull-to-
+                // refresh can't be triggered on an empty or single-item list.
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: contentSlivers,
+              ),
             ),
           ),
         ),

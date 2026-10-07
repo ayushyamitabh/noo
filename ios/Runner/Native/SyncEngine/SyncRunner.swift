@@ -144,7 +144,7 @@ final class SyncStatusBus {
 ///   edits with the server's copies).
 /// - Paths the server sends are checked to stay inside the mirror, and two
 ///   remote files that would land on the same local file are both skipped.
-/// - A file deleted on the server but edited here is kept, not deleted.
+/// - Server deletions remove the local copy, including local edits, like Android.
 /// - A root's etag is only remembered once its whole path synced cleanly, and
 ///   only if the state it relies on was actually saved.
 struct SyncRunner {
@@ -299,11 +299,6 @@ struct SyncRunner {
             {
               summary.deleted += 1
             }
-            state[fileId] = nil
-
-          case .orphan(_, let fileId):
-            // Deleted on the server but edited here: the edit stays on the
-            // device, no longer tracked.
             state[fileId] = nil
 
           case .conflict(let entry, let rel):
