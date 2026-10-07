@@ -15,6 +15,37 @@ struct SharedAccount: Codable, Equatable, Identifiable {
   /// default), `only` or `include` (see `HiddenFilter`). The share sheet
   /// follows it instead of having a setting of its own.
   let hiddenFilter: String
+  /// The app's storage scope for this account - `cloud` (the default),
+  /// `external` or `all` (see `StorageFilter`).
+  let storageScope: String
+
+  init(
+    id: String, serverUrl: String, username: String, authHeader: String, displayName: String,
+    hiddenFilter: String = "hide", storageScope: String = "cloud"
+  ) {
+    self.id = id
+    self.serverUrl = serverUrl
+    self.username = username
+    self.authHeader = authHeader
+    self.displayName = displayName
+    self.hiddenFilter = hiddenFilter
+    self.storageScope = storageScope
+  }
+
+  /// Tolerates data written before a field existed instead of failing the
+  /// whole decode (which would look like "signed out" to the extension).
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    self.init(
+      id: try c.decode(String.self, forKey: .id),
+      serverUrl: try c.decode(String.self, forKey: .serverUrl),
+      username: try c.decode(String.self, forKey: .username),
+      authHeader: try c.decode(String.self, forKey: .authHeader),
+      displayName: try c.decode(String.self, forKey: .displayName),
+      hiddenFilter: try c.decodeIfPresent(String.self, forKey: .hiddenFilter) ?? "hide",
+      storageScope: try c.decodeIfPresent(String.self, forKey: .storageScope) ?? "cloud"
+    )
+  }
 }
 
 /// Everything the app publishes for the extension: every account that can

@@ -908,19 +908,32 @@ Reminders/Notes - the destination is picked *inside* the sheet:
    `initState`) republishes - through the native `share_account` channel's
    `setAccounts` - when an account becomes ready or when its change
    signature moves: the account list/active account, the three lock
-   settings, or the active account's hidden-files filter; sign-out calls
+   settings, or the active account's hidden-files filter / storage scope;
+   sign-out calls
    `clearAccount`. It publishes every saved account that has a stored
    password and isn't signed out, each with its **own Files hidden-files
    filter** (`FilesController.savedHiddenFilter`).
-   - **Hidden folders** follow that app setting - there is no share-sheet
-     setting of their own. `hide` (default) drops dot-folders, `only` lists
-     just them, `include` lists everything; a folder is hidden when it *or
-     any ancestor* starts with a dot (`HiddenFilter`, same rule as the app).
-     When the filter isn't `hide` and the app's "lock hidden files" is on,
-     the sheet asks for Face ID/passcode first (`DeviceAuth`, the
+   - **Toggles**: the folder list has two menu chips, **Hidden** (hide / only
+     hidden / all) and **Storage** (cloud only / only external / all +
+     external), each starting at the chosen account's own app setting
+     (`hiddenFilter`, `storageScope` published per account) and changeable for
+     this share only - nothing is written back. The list is fetched once per
+     folder (`DavClient.listFolders` returns everything, hidden and external
+     included, with `nc:mount-type` requested) and filtered in memory
+     (`ShareModel.visibleFolders`), so flipping a toggle just returns to the
+     top. Hidden uses the app's rule (`HiddenFilter`): a folder is hidden when
+     it *or any ancestor* starts with a dot. External storage: only a mount's
+     *root* has `mount-type=external`, so `ShareModel` remembers the roots it
+     has seen and treats anything under one as external too (the app's own
+     filter doesn't, which empties its list inside a mount). "All" lists
+     external folders in their own "External storage" group.
+   - **Hidden unlock**: turning hidden folders *on* (from `hide`), or opening
+     the sheet with the account's filter already not `hide`, asks for
+     Face ID/passcode when "lock hidden files" is on (`DeviceAuth`, the
      `.deviceOwnerAuthentication` policy - biometrics with passcode fallback,
-     like `local_auth` with `biometricOnly: false`); cancelling falls back to
-     hiding them, with a note.
+     like `local_auth` with `biometricOnly: false`); cancelling keeps them
+     hidden, with a note. Switching `only` <-> `all`, or back to `hide`, never
+     asks.
    - **Account switching**: choosing any account other than the app's
      active one asks for the same unlock when "lock account switching" is on. One successful unlock covers the rest of that sheet.
    - Opening the sheet itself is not gated - only these two actions are

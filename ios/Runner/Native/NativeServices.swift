@@ -95,6 +95,7 @@ enum NativeServices {
               let accounts = try? JSONDecoder().decode(SharedAccounts.self, from: data)
             else { throw TransferError(message: "Bad accounts payload.") }
             try SharedAccountStore.save(accounts)
+            NSLog("[ShareAccounts] saved %d account(s), active=%@", accounts.accounts.count, accounts.activeId ?? "none")
           }
         case "clearAccount":
           SharedAccountStore.clear()

@@ -677,6 +677,19 @@ class FilesController extends ChangeNotifier
     );
   }
 
+  /// The storage scope saved for [accountId] (see [savedHiddenFilter]).
+  static StorageScope savedStorageScope(
+    SharedPreferences prefs,
+    String Function(String accountId, String baseKey) accountPrefKey,
+    String accountId,
+  ) {
+    final name = prefs.getString(accountPrefKey(accountId, _prefStorageScope));
+    return StorageScope.values.firstWhere(
+      (s) => s.name == name,
+      orElse: () => StorageScope.cloud,
+    );
+  }
+
   /// The hidden-files filter saved for [accountId] - not just the active
   /// account's, which is all [hiddenFilter] holds. For iOS's Share Extension,
   /// which follows each account's own setting.
