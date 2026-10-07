@@ -178,6 +178,10 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
 
   final _panelKey = GlobalKey<MediaDetailsPanelState>();
 
+  /// Edit/Preview + Save for a text/markdown file: the preview owns the
+  /// editing, this just lets the top bar draw (and trigger) its buttons.
+  final _textActions = TextPreviewController();
+
   void _openDetails() {
     if (NooLayout.isDesktop(context)) {
       DetailsSheet.show(context, _currentItem);
@@ -229,6 +233,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
 
   @override
   void dispose() {
+    _textActions.dispose();
     _pageController.dispose();
     super.dispose();
   }
@@ -532,7 +537,14 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 10),
+                            // Edit/Preview and Save for text/markdown files -
+                            // empty (zero-width) for every other file type.
+                            ListenableBuilder(
+                              listenable: _textActions,
+                              builder: (context, _) =>
+                                  _TextActions(controller: _textActions),
+                            ),
+                            const SizedBox(width: 4),
                           ],
                         ),
                       ),
@@ -731,6 +743,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
           return MediaTextPreview(
             item: widget.item,
             session: session,
+            controller: _textActions,
             localPathResolver: widget.localPathResolver,
           );
         }
@@ -741,5 +754,52 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
           onOpenDetails: () => DetailsSheet.show(context, widget.item),
         );
     }
+  }
+}
+
+/// The text viewer's top-bar buttons: Edit/Preview (markdown only) and Save
+/// (once the content changed; a spinner while it saves). Same
+/// [NooTopBarButton] look as the back button next to it.
+class _TextActions extends StatelessWidget {
+  final TextPreviewController controller;
+
+  const _TextActions({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.nooColors;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (controller.canToggleEditing)
+          NooTopBarButton(
+            icon: controller.editing ? LucideIcons.eye : LucideIcons.pencil,
+            tooltip: controller.editing ? 'Preview' : 'Edit',
+            onTap: controller.toggleEditing,
+          ),
+        if (controller.saving)
+          Semantics(
+            label: 'Saving',
+            child: SizedBox.square(
+              dimension: 48,
+              child: Center(
+                child: SizedBox.square(
+                  dimension: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: colors.fg1,
+                  ),
+                ),
+              ),
+            ),
+          )
+        else if (controller.showSave)
+          NooTopBarButton(
+            icon: LucideIcons.save,
+            tooltip: 'Save',
+            onTap: controller.save,
+          ),
+      ],
+    );
   }
 }

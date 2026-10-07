@@ -391,11 +391,11 @@ blocks are noted where they matter:
 
 ## Text/markdown viewer
 
-`MediaTextPreview` is an editable monospace `TextField` padded clear of the status bar, top bar and action bar; a Save button appears when dirty (read-only for offline copies). `NooPersonAccessRow.trailing` replaces the owner label/permission pill (used by share-search results). Sheets whose close button lives in `showNooSheet` children must pop via a `Builder` context, not the caller's.
+`MediaTextPreview` is an editable monospace `TextField` padded clear of the status bar, top bar and action bar; a Save icon button appears in the viewer's top bar when dirty (a spinner while it saves; read-only for offline copies). The preview owns the text, the editing mode and the save; a `TextPreviewController` (owned by `FileViewerScreen`, passed to `MediaTextPreview`) mirrors that state out so the screen's top bar can draw - and trigger - the buttons, which keeps the preview's widget tree unchanged. `NooPersonAccessRow.trailing` replaces the owner label/permission pill (used by share-search results). Sheets whose close button lives in `showNooSheet` children must pop via a `Builder` context, not the caller's.
 
 `showNooSheet` insets its body by the keyboard (`viewInsets.bottom`) so focused fields stay visible; the body's widget structure must not change when the keyboard opens, or the sheet content is rebuilt and loses focus.
 
-Markdown files (`.md`/`.markdown`) in `MediaTextPreview` open rendered via `flutter_markdown_plus` (`Markdown`, styled from Noo tokens in `_markdownStyle`), with a top-right Edit/Preview toggle (hidden for read-only offline copies). Other text files go straight to the editor.
+Markdown files (`.md`/`.markdown`) in `MediaTextPreview` open rendered via `flutter_markdown_plus` (`Markdown`, styled from Noo tokens in `_markdownStyle`), with an Edit/Preview icon toggle in the viewer's top bar (hidden for read-only offline copies). Other text files go straight to the editor.
 
 `ShareSheet`: focusing the people search field does not scroll; once the user types, `_revealPeopleSection` animates the "Share with people" section (keyed by `_peopleKey` on the `NooShareSection`, not the inner column) to just below the sheet's top edge with a small gap.
 
