@@ -113,9 +113,11 @@ in this order: a local `android/key.properties` (gitignored — points at a
 gitignored keystore file, e.g. `android/app/release-keystore.jks`), then
 CI env vars (`RELEASE_KEYSTORE_PATH`/`_PASSWORD`, `RELEASE_KEY_ALIAS`/
 `_PASSWORD`, set from the same repo secrets by both `.gitea/workflows/
-build.yml`, triggered by `RC*` tags and producing a sideloadable APK, and
-`.gitea/workflows/release.yml`, triggered by `Release-*` tags and producing
-the `.aab` Play Console wants), then falls back to the debug key if neither
+build.yml`, triggered by `RC-Android-*` tags and producing a sideloadable
+APK, and `.gitea/workflows/release.yml`, triggered by `Release-*` tags and
+producing the `.aab` Play Console wants; `.gitea/workflows/ios.yml` builds
+and uploads the signed iOS app to TestFlight on `RC-iOS-*` and `Release-*`
+tags, on a self-hosted macOS runner), then falls back to the debug key if neither
 is configured. As long as the same dedicated release keystore backs both
 `key.properties` locally and the Gitea secrets, local release builds and
 CI-built release APKs share one signature, so `adb install -r` works
