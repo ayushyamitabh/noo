@@ -7,9 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0EA689E7D32E498936A37CDC /* DavSyncClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 308A73EC19D196226AB395DC /* DavSyncClient.swift */; };
 		134157C4C8F53C9997FF265C /* TransferTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20B0C3085FA6467C1A4A2947 /* TransferTypes.swift */; };
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
 		167672C5B1FBD70656C2FEED /* TransferTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20B0C3085FA6467C1A4A2947 /* TransferTypes.swift */; };
+		187CEAB4C9995B379F33409F /* SyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57FF20A8DFA5A1A9F75A5F5A /* SyncCoordinator.swift */; };
 		223784E5DAE5A653F0F61771 /* ShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 405A5408F4071B4D12F08B21 /* ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C807B294A618700263BE5 /* RunnerTests.swift */; };
 		33B3C3BED4C1F26439DD6825 /* SharedInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = 836D37F2376AFCE0EFDD30A7 /* SharedInbox.swift */; };
@@ -18,14 +20,19 @@
 		3DEDE94F2A4C921407EF4382 /* ShareUpload.swift in Sources */ = {isa = PBXBuildFile; fileRef = B93DB1F595F44E2F2057BB2A /* ShareUpload.swift */; };
 		43DB9AB631DD359AEC613A1D /* WebDAV.swift in Sources */ = {isa = PBXBuildFile; fileRef = 871EDB5791D5B3DA0ECF3D4E /* WebDAV.swift */; };
 		44078FC9474337A0E102B524 /* TransferNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3247AAA4B65FE0F1A7279FA1 /* TransferNotifications.swift */; };
+		4618DB104BDFF73311A5DA6E /* SyncStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A39E02713460B6C7875F3278 /* SyncStore.swift */; };
+		47EF34D26CA64490D2118B0D /* SyncRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = C028B2E4E2874BB74498EABD /* SyncRunner.swift */; };
 		5694337ECF8D3ADD3695CBCD /* NativeServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 901C0CDB4FB819302E2A7563 /* NativeServices.swift */; };
 		62028E64976F15B4FDEDA9F1 /* ShareUpload.swift in Sources */ = {isa = PBXBuildFile; fileRef = B93DB1F595F44E2F2057BB2A /* ShareUpload.swift */; };
 		63229CACE4281880037D33E6 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27BDF61F5197F9B8F648E8AE /* ShareViewController.swift */; };
 		66AFC246E251554A80B2476F /* SharePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BE7B8C31FF78E212BD71DFC /* SharePickerView.swift */; };
+		721B9C528F23F144966483E0 /* SyncModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF9CFAFB2387EB4E34A992BC /* SyncModels.swift */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */; };
 		78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */ = {isa = PBXBuildFile; productRef = 78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */; };
+		804B3C9878B9A8BB30E09340 /* SyncEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2947D6E441BA30E10B1F8C17 /* SyncEngineTests.swift */; };
 		852C0C8EBA96CB6389DF6917 /* SharedAccount.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F2C956C98F58A97B5595307 /* SharedAccount.swift */; };
+		87DD0AED8048F7F7FF908FDB /* SyncDiff.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0933A96CE0B65A9A6AB2D098 /* SyncDiff.swift */; };
 		8C73B4CB445AEF383B7640E1 /* DeviceAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97ACCF43E1EC13AA2538E42C /* DeviceAuth.swift */; };
 		91C1658DC7467CACB2AAC7FF /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0AE6F681A3100A461B4A5318 /* Foundation.framework */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
@@ -33,6 +40,7 @@
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
 		A16680889B3A9D8672FA29C1 /* TransferNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3247AAA4B65FE0F1A7279FA1 /* TransferNotifications.swift */; };
 		A3B3AB501C29516E20455F23 /* DavFolders.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51604DEE43E937A5FDCA7A58 /* DavFolders.swift */; };
+		B749ED5B4464A1950E1A4B18 /* SyncConfigStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18691F7A45AD55A2246075DA /* SyncConfigStore.swift */; };
 		E295E45196E3973A5F7E1D8E /* SharedAccount.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F2C956C98F58A97B5595307 /* SharedAccount.swift */; };
 		F598B112F4D33953984FEFF4 /* WebDAV.swift in Sources */ = {isa = PBXBuildFile; fileRef = 871EDB5791D5B3DA0ECF3D4E /* WebDAV.swift */; };
 		F8D51B4045340275FBD12D16 /* SharedInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = 836D37F2376AFCE0EFDD30A7 /* SharedInbox.swift */; };
@@ -81,12 +89,16 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		0933A96CE0B65A9A6AB2D098 /* SyncDiff.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SyncDiff.swift; sourceTree = "<group>"; };
 		0AE6F681A3100A461B4A5318 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GeneratedPluginRegistrant.h; sourceTree = "<group>"; };
 		1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GeneratedPluginRegistrant.m; sourceTree = "<group>"; };
+		18691F7A45AD55A2246075DA /* SyncConfigStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SyncConfigStore.swift; sourceTree = "<group>"; };
 		1F2C956C98F58A97B5595307 /* SharedAccount.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedAccount.swift; sourceTree = "<group>"; };
 		20B0C3085FA6467C1A4A2947 /* TransferTypes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TransferTypes.swift; sourceTree = "<group>"; };
 		27BDF61F5197F9B8F648E8AE /* ShareViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
+		2947D6E441BA30E10B1F8C17 /* SyncEngineTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SyncEngineTests.swift; sourceTree = "<group>"; };
+		308A73EC19D196226AB395DC /* DavSyncClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DavSyncClient.swift; sourceTree = "<group>"; };
 		3247AAA4B65FE0F1A7279FA1 /* TransferNotifications.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TransferNotifications.swift; sourceTree = "<group>"; };
 		331C807B294A618700263BE5 /* RunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTests.swift; sourceTree = "<group>"; };
 		331C8081294A63A400263BE5 /* RunnerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunnerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -94,6 +106,7 @@
 		405A5408F4071B4D12F08B21 /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		49213989F0FA1B83B0B8A523 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		51604DEE43E937A5FDCA7A58 /* DavFolders.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DavFolders.swift; sourceTree = "<group>"; };
+		57FF20A8DFA5A1A9F75A5F5A /* SyncCoordinator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SyncCoordinator.swift; sourceTree = "<group>"; };
 		5BE7B8C31FF78E212BD71DFC /* SharePickerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharePickerView.swift; sourceTree = "<group>"; };
 		65F57A1EB0C62774E561860D /* ShareExtension.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = ShareExtension.entitlements; sourceTree = "<group>"; };
 		74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Runner-Bridging-Header.h"; sourceTree = "<group>"; };
@@ -114,7 +127,10 @@
 		97C146FD1CF9000F007C117D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A39E02713460B6C7875F3278 /* SyncStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SyncStore.swift; sourceTree = "<group>"; };
+		AF9CFAFB2387EB4E34A992BC /* SyncModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SyncModels.swift; sourceTree = "<group>"; };
 		B93DB1F595F44E2F2057BB2A /* ShareUpload.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShareUpload.swift; sourceTree = "<group>"; };
+		C028B2E4E2874BB74498EABD /* SyncRunner.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SyncRunner.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -149,6 +165,7 @@
 			isa = PBXGroup;
 			children = (
 				331C807B294A618700263BE5 /* RunnerTests.swift */,
+				2947D6E441BA30E10B1F8C17 /* SyncEngineTests.swift */,
 			);
 			path = RunnerTests;
 			sourceTree = "<group>";
@@ -171,6 +188,7 @@
 			children = (
 				8064CC1652B8F0A44E371638 /* TransferManager.swift */,
 				901C0CDB4FB819302E2A7563 /* NativeServices.swift */,
+				DDC89BA8A42212F55851CBA1 /* SyncEngine */,
 			);
 			name = Native;
 			path = Native;
@@ -250,6 +268,21 @@
 				2B7F16B0F0EA2C5A842ED860 /* iOS */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		DDC89BA8A42212F55851CBA1 /* SyncEngine */ = {
+			isa = PBXGroup;
+			children = (
+				AF9CFAFB2387EB4E34A992BC /* SyncModels.swift */,
+				A39E02713460B6C7875F3278 /* SyncStore.swift */,
+				308A73EC19D196226AB395DC /* DavSyncClient.swift */,
+				0933A96CE0B65A9A6AB2D098 /* SyncDiff.swift */,
+				C028B2E4E2874BB74498EABD /* SyncRunner.swift */,
+				18691F7A45AD55A2246075DA /* SyncConfigStore.swift */,
+				57FF20A8DFA5A1A9F75A5F5A /* SyncCoordinator.swift */,
+			);
+			name = SyncEngine;
+			path = SyncEngine;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -425,6 +458,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */,
+				804B3C9878B9A8BB30E09340 /* SyncEngineTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -461,6 +495,13 @@
 				62028E64976F15B4FDEDA9F1 /* ShareUpload.swift in Sources */,
 				A3B3AB501C29516E20455F23 /* DavFolders.swift in Sources */,
 				44078FC9474337A0E102B524 /* TransferNotifications.swift in Sources */,
+				721B9C528F23F144966483E0 /* SyncModels.swift in Sources */,
+				4618DB104BDFF73311A5DA6E /* SyncStore.swift in Sources */,
+				0EA689E7D32E498936A37CDC /* DavSyncClient.swift in Sources */,
+				87DD0AED8048F7F7FF908FDB /* SyncDiff.swift in Sources */,
+				47EF34D26CA64490D2118B0D /* SyncRunner.swift in Sources */,
+				B749ED5B4464A1950E1A4B18 /* SyncConfigStore.swift in Sources */,
+				187CEAB4C9995B379F33409F /* SyncCoordinator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

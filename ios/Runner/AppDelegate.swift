@@ -9,9 +9,23 @@ import UserNotifications
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     TransferManager.shared.reconnect()
+    // BGTask handlers have to be registered before launch finishes.
+    SyncCoordinator.shared.registerBackgroundTasks()
+    SyncCoordinator.shared.registerNotificationCategories()
     let launched = super.application(application, didFinishLaunchingWithOptions: launchOptions)
     UNUserNotificationCenter.current().delegate = self
+    SyncCoordinator.shared.scheduleBackgroundWork()
     return launched
+  }
+
+  /// Taps on a sync-conflict notification's "Keep local" / "Use server".
+  override func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping () -> Void
+  ) {
+    if SyncCoordinator.shared.handleNotificationResponse(response, completion: completionHandler) { return }
+    super.userNotificationCenter(center, didReceive: response, withCompletionHandler: completionHandler)
   }
 
   /// A transfer summary ("Downloaded 1 file") usually finishes while the app

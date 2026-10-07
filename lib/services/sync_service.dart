@@ -105,10 +105,15 @@ class SyncService {
               )
             : _SyncConfig.fromPrefs(prefs, store.accountPrefKey, account.id);
         final password = await store.readPassword(account.id);
-        if (password == null ||
-            config.paths.isEmpty ||
-            config.intervalMinutes == null) {
+        if (password == null || config.paths.isEmpty) {
           await cancelAccount(account.id);
+          continue;
+        }
+        if (config.intervalMinutes == null) {
+          // Background sync is off, but this account still has paths to sync
+          // by hand: keep its credentials (native uses them for "Sync now"
+          // and conflict notification actions).
+          await cancelAccount(account.id, forget: false);
           continue;
         }
         await invokeIfAvailable(_channel, 'reschedule', {
@@ -132,8 +137,17 @@ class SyncService {
 
   /// Stops [accountId]'s periodic job (the account was removed, or has
   /// nothing left to sync).
-  static Future<void> cancelAccount(String accountId) async {
-    await invokeIfAvailable(_channel, 'cancel', {'accountId': accountId});
+  ///
+  /// [forget] (the default) is for an account that was signed out or removed:
+  /// native also drops its stored credentials. Pass false when only the
+  /// background job is being turned off - the account's paths are still
+  /// synced by hand ("Sync now"), and a conflict notification's actions
+  /// still need its credentials.
+  static Future<void> cancelAccount(String accountId, {bool forget = true}) async {
+    await invokeIfAvailable(_channel, 'cancel', {
+      'accountId': accountId,
+      'forget': forget,
+    });
   }
 
   /// Runs a one-off sync pass immediately, independent of the periodic

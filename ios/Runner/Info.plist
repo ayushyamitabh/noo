@@ -59,6 +59,16 @@
 	<true/>
 	<key>NooKeychainAccessGroup</key>
 	<string>$(AppIdentifierPrefix)dev.ayushya.noo.shared</string>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>dev.ayushya.noo.sync.refresh</string>
+		<string>dev.ayushya.noo.sync.processing</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>processing</string>
+	</array>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Noo uses Face ID to unlock the app and to protect hidden files.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
