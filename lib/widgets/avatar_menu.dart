@@ -332,7 +332,6 @@ class _OtherAccountRow extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             NooAvatar(initials: accountInitial(name), current: false, size: 40),
-            const SizedBox(width: 44),
           ],
         ),
       ),

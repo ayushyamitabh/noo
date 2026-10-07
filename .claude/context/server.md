@@ -798,6 +798,19 @@ plugin's own manifest via merge, but kept explicit here too).
 own requirement) via `maxOf(24, flutter.minSdkVersion)` rather than trusting
 Flutter's own default to already be high enough.
 
+**The three locks are independent** (Settings -> Security;
+`SessionController`): `loginLockEnabled` (unlock to open the app - the only one
+`needsUnlock`/the lock screen look at), `lockAccountSwitching` (unlock to
+switch accounts) and `lockHiddenFiles` (unlock to turn on showing hidden
+files). Each gate works with the others off - `passGate(gate, reason)`
+prompts whenever its own `gate` is on, whether or not login lock is. Turning
+any of them on **or off** needs a successful `AppLockService.authenticate`
+(on also needs `isDeviceSupported`, so a gate nobody can pass can't be set;
+off needs it so someone with a momentarily unlocked phone can't remove it),
+and `disableLoginLock` leaves the other two untouched. The old master/sub-toggle
+dependency is gone. Tests replace the prompt through
+`AppLockService.debugAuthenticate`/`debugIsDeviceSupported`.
+
 `isRestoringSession` still gates the splash screen until the above resolves
 — see `standards.md` for why widget tests must mock both storage channels
 rather than relying on this async path throwing naturally.
@@ -903,16 +916,16 @@ Reminders/Notes - the destination is picked *inside* the sheet:
      setting of their own. `hide` (default) drops dot-folders, `only` lists
      just them, `include` lists everything; a folder is hidden when it *or
      any ancestor* starts with a dot (`HiddenFilter`, same rule as the app).
-     When the filter isn't `hide` and the app has login lock + "lock hidden
-     files" on, the sheet asks for Face ID/passcode first (`DeviceAuth`, the
+     When the filter isn't `hide` and the app's "lock hidden files" is on,
+     the sheet asks for Face ID/passcode first (`DeviceAuth`, the
      `.deviceOwnerAuthentication` policy - biometrics with passcode fallback,
      like `local_auth` with `biometricOnly: false`); cancelling falls back to
      hiding them, with a note.
    - **Account switching**: choosing any account other than the app's
-     active one asks for the same unlock when login lock + "lock account
-     switching" are on. One successful unlock covers the rest of that sheet.
+     active one asks for the same unlock when "lock account switching" is on. One successful unlock covers the rest of that sheet.
    - Opening the sheet itself is not gated - only these two actions are
-     (as in the app, where login lock guards launch and these toggles).
+     (as in the app, where login lock guards launch and these are separate
+     locks).
 3. **Upload** calls `ShareUpload.enqueue`: one `PUT` per file on a *background*
    `URLSession` (`dev.ayushya.noo.transfers.share`, with
    `sharedContainerIdentifier`) that outlives the extension, and posts

@@ -26,26 +26,28 @@ String biometricLabel(TargetPlatform platform) {
   }
 }
 
-/// Settings section 3: login lock, which gates opening the app, switching
-/// accounts, and revealing hidden files behind the device's own PIN/
+/// Settings section 3: three independent locks - opening the app, switching
+/// accounts, and revealing hidden files - each behind the device's own PIN/
 /// biometric credential (see `AppLockService` - this app never stores or
-/// handles a PIN itself).
+/// handles a PIN itself). Turning one on or off asks for that credential, and
+/// none of them requires or implies another.
 class SettingsSecuritySection extends StatelessWidget {
   const SettingsSecuritySection({super.key});
 
-  Future<void> _handleLoginLockChanged(
-    BuildContext context,
-    SessionController session,
-    bool value,
-  ) async {
-    final success = value ? await session.setupLoginLock() : await session.disableLoginLock();
+  Future<void> _handleLockChanged(
+    BuildContext context, {
+    required Future<bool> Function() change,
+    required bool turningOn,
+    required String name,
+  }) async {
+    final success = await change();
     if (!success && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            value
-                ? "Could not set up login lock - make sure this device has a PIN, pattern, password, or biometric configured"
-                : 'Could not turn off login lock',
+            turningOn
+                ? "Could not turn on $name - make sure this device has a PIN, pattern, password, or biometric configured"
+                : 'Could not turn off $name',
           ),
           behavior: SnackBarBehavior.floating,
         ),
@@ -64,10 +66,17 @@ class SettingsSecuritySection extends StatelessWidget {
         NooSettingsRow(
           icon: LucideIcons.lock,
           label: Text(biometricLabel(platform)),
-          subtitle: const Text("Require this device's PIN or biometric to open Noo"),
+          subtitle: const Text(
+            "Require this device's PIN or biometric to open Noo",
+          ),
           trailing: NooToggle(
             checked: session.loginLockEnabled,
-            onChanged: (value) => _handleLoginLockChanged(context, session, value),
+            onChanged: (value) => _handleLockChanged(
+              context,
+              change: value ? session.setupLoginLock : session.disableLoginLock,
+              turningOn: value,
+              name: 'login lock',
+            ),
           ),
         ),
         NooSettingsRow(
@@ -76,7 +85,12 @@ class SettingsSecuritySection extends StatelessWidget {
           subtitle: const Text('Unlock to switch between saved accounts'),
           trailing: NooToggle(
             checked: session.lockAccountSwitching,
-            onChanged: session.loginLockEnabled ? session.setLockAccountSwitching : null,
+            onChanged: (value) => _handleLockChanged(
+              context,
+              change: () => session.setLockAccountSwitching(value),
+              turningOn: value,
+              name: 'account switching lock',
+            ),
           ),
         ),
         NooSettingsRow(
@@ -85,7 +99,12 @@ class SettingsSecuritySection extends StatelessWidget {
           subtitle: const Text('Unlock to reveal hidden files and folders'),
           trailing: NooToggle(
             checked: session.lockHiddenFiles,
-            onChanged: session.loginLockEnabled ? session.setLockHiddenFiles : null,
+            onChanged: (value) => _handleLockChanged(
+              context,
+              change: () => session.setLockHiddenFiles(value),
+              turningOn: value,
+              name: 'hidden files lock',
+            ),
           ),
         ),
       ],

@@ -516,7 +516,7 @@ class SessionController extends ChangeNotifier with WidgetsBindingObserver {
   /// session-restore that failed, e.g. transient network trouble at cold
   /// start), this still retries rather than no-op, since that's exactly the
   /// case LoginView's "Continue as" tile exists to recover from. Gated
-  /// behind login lock when [lockAccountSwitching] is on. Returns whether
+  /// behind its own unlock when [lockAccountSwitching] is on. Returns whether
   /// the account ended up logged in, so callers (LoginView's saved-account
   /// tile) can surface a failure - e.g. a stored app password that no
   /// longer works and needs the account removed/re-added.
@@ -640,10 +640,10 @@ class SessionController extends ChangeNotifier with WidgetsBindingObserver {
     return true;
   }
 
-  /// Turns login lock off, along with both of its sub-toggles (meaningless
-  /// once the base lock is gone). Requires a successful auth first, same as
-  /// turning it on - otherwise anyone with momentary access to an unlocked
-  /// phone could just switch it off.
+  /// Turns login lock off. Requires a successful auth first, same as turning
+  /// it on - otherwise anyone with momentary access to an unlocked phone
+  /// could just switch it off. Only this lock: the account-switching and
+  /// hidden-files locks are independent and stay as they are.
   Future<bool> disableLoginLock() async {
     if (!_loginLockEnabled) return true;
     final confirmed = await AppLockService.authenticate(
@@ -651,30 +651,55 @@ class SessionController extends ChangeNotifier with WidgetsBindingObserver {
     );
     if (!confirmed) return false;
     _loginLockEnabled = false;
-    _lockAccountSwitching = false;
-    _lockHiddenFiles = false;
     _isUnlocked = false;
     notifyListeners();
-    prefsFuture.then((p) {
-      p.setBool(_prefLoginLockEnabled, false);
-      p.setBool(_prefLockAccountSwitching, false);
-      p.setBool(_prefLockHiddenFiles, false);
-    });
+    prefsFuture.then((p) => p.setBool(_prefLoginLockEnabled, false));
     return true;
   }
 
-  void setLockAccountSwitching(bool value) {
-    if (!_loginLockEnabled) return;
+  /// Turns the "unlock to switch accounts" gate on or off. Independent of
+  /// login lock. Both directions need a successful auth - enabling proves the
+  /// device can authenticate at all (a gate nobody can pass would lock the
+  /// user out of switching), disabling stops anyone with momentary access to
+  /// an unlocked phone from just removing it. Returns whether it changed.
+  Future<bool> setLockAccountSwitching(bool value) async {
+    if (value == _lockAccountSwitching) return true;
+    if (!await _confirmLockChange(
+      value,
+      'Confirm to lock account switching',
+      'Confirm to unlock account switching',
+    )) {
+      return false;
+    }
     _lockAccountSwitching = value;
     notifyListeners();
     prefsFuture.then((p) => p.setBool(_prefLockAccountSwitching, value));
+    return true;
   }
 
-  void setLockHiddenFiles(bool value) {
-    if (!_loginLockEnabled) return;
+  /// Same as [setLockAccountSwitching], for revealing hidden files.
+  Future<bool> setLockHiddenFiles(bool value) async {
+    if (value == _lockHiddenFiles) return true;
+    if (!await _confirmLockChange(
+      value,
+      'Confirm to lock hidden files',
+      'Confirm to unlock hidden files',
+    )) {
+      return false;
+    }
     _lockHiddenFiles = value;
     notifyListeners();
     prefsFuture.then((p) => p.setBool(_prefLockHiddenFiles, value));
+    return true;
+  }
+
+  Future<bool> _confirmLockChange(
+    bool enabling,
+    String enableReason,
+    String disableReason,
+  ) async {
+    if (enabling && !await AppLockService.isDeviceSupported()) return false;
+    return AppLockService.authenticate(enabling ? enableReason : disableReason);
   }
 
   /// Called by the lock screen. Returns whether it actually unlocked.
@@ -687,12 +712,12 @@ class SessionController extends ChangeNotifier with WidgetsBindingObserver {
     return success;
   }
 
-  /// Prompts for auth if [gate] is on and login lock is configured;
-  /// returns true immediately (no prompt) otherwise. Shared by the
-  /// account-switching gate above and [FilesController]'s/`PhotosController`'s
-  /// hidden-files gates.
+  /// Prompts for auth if [gate] is on; returns true immediately (no prompt)
+  /// otherwise. Each gate stands on its own - it doesn't depend on login lock
+  /// being on. Shared by the account-switching gate above and
+  /// [FilesController]'s/`PhotosController`'s hidden-files gates.
   Future<bool> passGate(bool gate, String reason) async {
-    if (!_loginLockEnabled || !gate) return true;
+    if (!gate) return true;
     return AppLockService.authenticate(reason);
   }
 

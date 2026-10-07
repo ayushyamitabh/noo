@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:local_auth/local_auth.dart';
 
 /// Thin wrapper around `local_auth`. Deliberately doesn't implement its own
@@ -8,9 +9,17 @@ import 'package:local_auth/local_auth.dart';
 class AppLockService {
   static final LocalAuthentication _auth = LocalAuthentication();
 
+  /// Replace the platform prompt in tests (null = the real one).
+  @visibleForTesting
+  static Future<bool> Function(String reason)? debugAuthenticate;
+
+  @visibleForTesting
+  static Future<bool> Function()? debugIsDeviceSupported;
+
   /// Whether this device can do *some* form of local auth - biometric
   /// enrolled, or at minimum a device PIN/pattern/password set up.
   static Future<bool> isDeviceSupported() async {
+    if (debugIsDeviceSupported != null) return debugIsDeviceSupported!();
     try {
       final canCheckBiometrics = await _auth.canCheckBiometrics;
       if (canCheckBiometrics) return true;
@@ -24,6 +33,7 @@ class AppLockService {
   /// throws) on cancellation, failure, or any platform error, so callers
   /// can treat every non-true result the same way: stay locked/blocked.
   static Future<bool> authenticate(String reason) async {
+    if (debugAuthenticate != null) return debugAuthenticate!(reason);
     try {
       return await _auth.authenticate(
         localizedReason: reason,

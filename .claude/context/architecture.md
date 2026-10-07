@@ -57,8 +57,8 @@ new provider instance):
   saved-accounts list, which one is active, `sessionGeneration` — see
   below), auth/login-flow state (`isLoggedIn`, `isRestoringSession`,
   `loginFlowStatus`), the active `NextcloudService` instance, and login lock
-  (`loginLockEnabled`/`lockAccountSwitching`/`lockHiddenFiles`/
-  `needsUnlock`/`passGate`). Exposes `addAccountClearedListener`/
+  (`loginLockEnabled`/`lockAccountSwitching`/`lockHiddenFiles` - three
+  independent locks - plus `needsUnlock`/`passGate`). Exposes `addAccountClearedListener`/
   `addAccountActivatedListener` (plain `List<VoidCallback>`) so sibling
   controllers — constructed after `SessionController` and unable to hold a
   forward reference to it — can react to login/logout/account-switch
