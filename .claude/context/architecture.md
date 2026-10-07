@@ -65,7 +65,8 @@ new provider instance):
   without a circular dependency.
 - [`SettingsController`](../../lib/providers/settings_controller.dart) —
   global UI prefs independent of login state: theme mode/seed color/dynamic
-  color, bottom-bar opacity/blur, tap-tab-to-scroll-top, seek bar style, tab
+  color, bottom-bar opacity/blur, avatar and selection action-bar positions,
+  tap-tab-to-scroll-top, seek bar style, tab
   order/visibility/default (`requestedTab`/`requestTab`/
   `consumeRequestedTab`), swipe actions.
 - [`FilesController`](../../lib/providers/files_controller.dart) — the
@@ -282,11 +283,13 @@ the sidebar):
 - **Mobile:** `AppTopBar` (`widgets/app_top_bar.dart`) wraps `NooTopBar`
   for *every* tab (previously only Files had shell-level top chrome, with
   the rest building their own via `SyncedHeaderScaffold`) - iOS gets a
-  large title, an inline search field, a `plus` action on Files only (no
-  other tab has a create/upload flow), and the account avatar; Android
+  large title with Upload and the top account avatar on the same row,
+  and an inline search field below; Android
   gets a compact title row with `search`/avatar actions, relying on an
-  extended `NooFab` ("Upload", Files/Photos only) instead of a top-bar
-  icon for upload. Rather than one shared instance in `Scaffold.appBar`,
+  extended `NooFab` instead of a top-bar upload button. Both use the same
+  size preference: Auto expands on Files/Photos and collapses elsewhere,
+  Mini always collapses, and Expanded always shows Upload. Rather than one
+  shared instance in `Scaffold.appBar`,
   `MainShellView` builds a separate `AppTopBar` per tab (labelled for that
   tab) and each tab plants its own as the first sliver in its own
   `CustomScrollView` (`topBarSliver` in `widgets/tabs/tab_state_slivers.dart`,
@@ -312,8 +315,13 @@ the sidebar):
   section yet). `SettingsController.navMenuStyle` (Settings → Appearance →
   "Navigation menu") offers an alternative to the hamburger/drawer pair:
   the avatar button opens `showAvatarMenu` (`widgets/avatar_menu.dart`)
-  instead, a dropdown holding the same hidden-tabs + Settings content -
-  see `styling.md`'s Gotchas for the wiring.
+  instead. `AvatarNavigationHost` wraps the mobile scaffold to animate a
+  card from the top or bottom avatar; `AvatarNavigationBody` moves only
+  content for the top popup. The bottom popup overlays content. Floating
+  mode moves the avatar into the popup and hands its satellite slot to
+  Search; attached mode keeps the avatar and Search in the full-width bar
+  and expands the popup upward from it. Position is a global setting.
+  See `styling.md` for motion and dismissal behavior.
 - **Desktop:** a `NooSidebar` (account card, pinned tabs, divider,
   remaining tabs, storage meter, Settings) sits beside a `NooToolbar`
   (tab title, search, an "Upload" action on Files/Photos) over the same

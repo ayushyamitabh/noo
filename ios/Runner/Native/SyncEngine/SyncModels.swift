@@ -38,10 +38,6 @@ enum SyncAction: Equatable {
   case upload(relPath: String, fileId: String)
   case delete(relPath: String, fileId: String)
   case conflict(SyncRemoteEntry, relPath: String)
-  /// Deleted on the server, but edited on this device since the last sync:
-  /// the edited copy is the only one left, so it's kept (and simply no longer
-  /// tracked) instead of being deleted with the rest. Android deletes it.
-  case orphan(relPath: String, fileId: String)
 }
 
 /// A file changed both on the device and on the server since the last sync.

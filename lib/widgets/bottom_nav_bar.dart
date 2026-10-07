@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../models/app_tab.dart';
 import 'noo/nav/noo_bottom_bar.dart';
+import 'avatar_menu.dart';
 
 /// Adapts the app's [AppTab] model onto [NooBottomBar]'s generic
 /// [NooNavDestination] list, so `MainShellView` only deals in tabs and
@@ -23,6 +24,7 @@ class BottomNavBar extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onDestinationSelected;
   final VoidCallback? onSearchTap;
+  final bool avatarInBottomBar;
 
   const BottomNavBar({
     super.key,
@@ -35,6 +37,7 @@ class BottomNavBar extends StatelessWidget {
     required this.selectedIndex,
     required this.onDestinationSelected,
     this.onSearchTap,
+    this.avatarInBottomBar = false,
   });
 
   @override
@@ -50,11 +53,27 @@ class BottomNavBar extends StatelessWidget {
           NooNavDestination(icon: tab.icon, label: tab.label),
       ],
       selectedIndex: selectedIndex,
-      onSelected: onDestinationSelected,
+      onSelected: (index) {
+        AvatarNavigationScope.maybeOf(context)?.close();
+        onDestinationSelected(index);
+      },
       searchDestination: onSearchTap == null
           ? null
           : const NooNavDestination(icon: LucideIcons.search, label: 'Search'),
-      onSearchTap: onSearchTap,
+      onSearchTap: onSearchTap == null
+          ? null
+          : () {
+              AvatarNavigationScope.maybeOf(context)?.close();
+              onSearchTap!();
+            },
+      avatarSatellite: avatarInBottomBar
+          ? AvatarNavigationSatellite(
+              size: NooBottomBar.rowHeight(style, barStyle),
+            )
+          : null,
+      avatarMenuProgress: avatarInBottomBar
+          ? AvatarNavigationScope.maybeOf(context)?.progress ?? 0
+          : 0,
     );
   }
 }

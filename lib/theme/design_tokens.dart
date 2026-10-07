@@ -366,8 +366,8 @@ class NooMotion {
 
 /// The one shadow the design system allows, from `tokens/spacing.css`'s
 /// `--shadow-dialog` - desktop dialogs, and [NooBottomBarStyle.floating]'s
-/// bar/search satellite (the only other thing in the app that's genuinely
-/// floating above other content). Nothing else should use a `BoxShadow`.
+/// bar/search satellite, and the floating selection action bar.
+/// Nothing else should use a `BoxShadow`.
 const nooDialogShadow = BoxShadow(
   color: Color(0x241E002F), // rgba(30,0,47,.14)
   blurRadius: 48,

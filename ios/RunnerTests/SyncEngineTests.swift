@@ -583,19 +583,19 @@ final class SyncEngineTests: XCTestCase {
     XCTAssertTrue(store.loadMissingRoots(accountId: "acct").isEmpty, "nor like the folder being gone")
   }
 
-  func testDeletedOnTheServerButEditedHereIsKept() async throws {
+  func testDeletedOnTheServerButEditedHereIsDeletedLikeAndroid() async throws {
     seedServer()
     _ = await runner.run(config, force: false)
     try editLocally("Docs/a.txt", "my only copy of this edit")
     FakeDav.remove("/Docs/a.txt")
 
     let summary = await runner.run(config, force: false)
-    XCTAssertEqual(summary.deleted, 0)
-    XCTAssertEqual(local("Docs/a.txt"), "my only copy of this edit")
+    XCTAssertEqual(summary.deleted, 1)
+    XCTAssertFalse(exists("Docs/a.txt"))
     XCTAssertNil(state().first { $0.value.relPath == "Docs/a.txt" }, "no longer tracked")
 
     let again = await runner.run(config, force: false)
-    XCTAssertEqual(local("Docs/a.txt"), "my only copy of this edit", "and not touched later either")
+    XCTAssertFalse(exists("Docs/a.txt"), "not restored on a later sync")
     XCTAssertFalse(again.changedAnything)
   }
 
@@ -738,6 +738,36 @@ final class SyncEngineTests: XCTestCase {
 
     bus.removeConflict(accountId: "A", fileId: "7")
     XCTAssertEqual(bus.snapshot().conflicts, [b], "removing A's leaves B's")
+  }
+
+  func testBackgroundSlotOnlyRunsAccountsWithPeriodicSyncEnabled() async {
+    seedServer()
+    let configs = SyncConfigStore(service: "test-\(UUID().uuidString)")
+    addTeardownBlock { configs.removeAll() }
+    let coordinator = SyncCoordinator(store: store, bus: bus, configs: configs, client: DavSyncClient(session: fakeSession))
+    var scheduled = config
+    scheduled.intervalMinutes = nil
+    scheduled.wifiOnly = false
+    configs.upsert(scheduled)
+
+    let skipped = expectation(description: "manual-only account skipped")
+    coordinator.startBackgroundSlot { success in
+      XCTAssertTrue(success)
+      skipped.fulfill()
+    }
+    await fulfillment(of: [skipped], timeout: 10)
+    XCTAssertFalse(exists("Docs/a.txt"))
+
+    scheduled.intervalMinutes = 30
+    configs.upsert(scheduled)
+    let completed = expectation(description: "periodic account synced")
+    coordinator.startBackgroundSlot { success in
+      XCTAssertTrue(success)
+      completed.fulfill()
+    }
+    await fulfillment(of: [completed], timeout: 15)
+    XCTAssertEqual(local("Docs/a.txt"), "alpha")
+    XCTAssertEqual(local("Docs/sub/b.txt"), "bravo")
   }
 
   func testSignOutForgetsCredentialsButTurningBackgroundOffKeepsThem() {

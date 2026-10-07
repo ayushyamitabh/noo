@@ -56,9 +56,9 @@ class SettingsAppearanceSection extends StatelessWidget {
             _BottomBarStyleRow(settings: settings),
             NooSettingsRow(
               icon: LucideIcons.glassWater,
-              label: const Text('Frosted glass bottom bar'),
+              label: const Text('Frosted glass'),
               subtitle: const Text(
-                'A translucent, blurred bottom bar - content scrolls behind it',
+                'Blurred bottom navigation, avatar menus and media viewer panels',
               ),
               trailing: NooToggle(
                 checked: settings.bottomBarFrosted,
@@ -67,6 +67,23 @@ class SettingsAppearanceSection extends StatelessWidget {
             ),
             if (settings.bottomBarFrosted) _FrostedGlassRow(settings: settings),
             _NavMenuStyleRow(settings: settings),
+            if (settings.navMenuStyle == NooNavMenuStyle.avatarMenu)
+              NooSettingsRow(
+                icon: LucideIcons.userRound,
+                label: const Text('Avatar position'),
+                trailing: NooSegmentedControl<AvatarPosition>(
+                  onSurface: true,
+                  value: settings.avatarPosition,
+                  onChanged: settings.setAvatarPosition,
+                  options: const [
+                    NooSegmentOption(value: AvatarPosition.top, label: 'Top'),
+                    NooSegmentOption(
+                      value: AvatarPosition.bottom,
+                      label: 'Bottom',
+                    ),
+                  ],
+                ),
+              ),
             NooSettingsRow(
               icon: LucideIcons.search,
               label: const Text('Search in bottom bar'),
@@ -96,14 +113,19 @@ class SettingsAppearanceSection extends StatelessWidget {
               icon: LucideIcons.palette,
               label: const Text('Accent color'),
               subtitle: Text(
-                settings.useDynamicColor
+                settings.useDynamicColor &&
+                        Theme.of(context).platform != TargetPlatform.iOS
                     ? 'Matching your wallpaper'
                     : settings.seedColor == AppTheme.defaultAccent
                     ? 'Default'
                     : 'Custom color',
               ),
               trailing: _AccentSwatchDot(
-                color: settings.useDynamicColor ? null : settings.seedColor,
+                color:
+                    settings.useDynamicColor &&
+                        Theme.of(context).platform != TargetPlatform.iOS
+                    ? null
+                    : settings.seedColor,
               ),
               onTap: () => _openAccentPicker(context, settings),
             ),
@@ -116,15 +138,16 @@ class SettingsAppearanceSection extends StatelessWidget {
                 onChanged: settings.setAmoledDark,
               ),
             ),
-            NooSettingsRow(
-              icon: LucideIcons.waves,
-              label: const Text('Seek bar style'),
-              subtitle: const Text(
-                'The progress bar style used when playing videos',
+            if (Theme.of(context).platform != TargetPlatform.iOS)
+              NooSettingsRow(
+                icon: LucideIcons.waves,
+                label: const Text('Seek bar style'),
+                subtitle: const Text(
+                  'The progress bar style used when playing videos',
+                ),
+                value: _seekBarStyleLabel(settings.mediaProgressBarStyle),
+                onTap: () => _openSeekBarPicker(context, settings),
               ),
-              value: _seekBarStyleLabel(settings.mediaProgressBarStyle),
-              onTap: () => _openSeekBarPicker(context, settings),
-            ),
           ],
         ),
       ],
@@ -168,6 +191,7 @@ class _ThemeRow extends StatelessWidget {
             const SizedBox(height: 12),
             NooSegmentedControl<ThemeMode>(
               fill: true,
+              onSurface: true,
               value: settings.themeMode,
               onChanged: settings.setThemeMode,
               options: const [
@@ -231,6 +255,7 @@ class _BottomBarStyleRow extends StatelessWidget {
             const SizedBox(height: 12),
             NooSegmentedControl<NooBottomBarStyle>(
               fill: true,
+              onSurface: true,
               value: settings.bottomBarStyle,
               onChanged: settings.setBottomBarStyle,
               options: const [
@@ -287,6 +312,7 @@ class _FrostedGlassRow extends StatelessWidget {
             const SizedBox(height: 12),
             NooSegmentedControl<FrostedGlassPreset?>(
               fill: true,
+              onSurface: true,
               // No segment selected once the sliders no longer match a preset.
               value: settings.frostedPreset,
               onChanged: (preset) {
@@ -402,6 +428,7 @@ class _NavMenuStyleRow extends StatelessWidget {
             const SizedBox(height: 12),
             NooSegmentedControl<NooNavMenuStyle>(
               fill: true,
+              onSurface: true,
               value: settings.navMenuStyle,
               onChanged: settings.setNavMenuStyle,
               options: const [
@@ -455,6 +482,7 @@ class _FabStyleRow extends StatelessWidget {
             const SizedBox(height: 12),
             NooSegmentedControl<FabStyle>(
               fill: true,
+              onSurface: true,
               value: settings.fabStyle,
               onChanged: settings.setFabStyle,
               options: const [
@@ -508,22 +536,26 @@ class _AccentSwatchDot extends StatelessWidget {
 }
 
 void _openAccentPicker(BuildContext context, SettingsController settings) {
+  final useDynamicColor =
+      settings.useDynamicColor &&
+      Theme.of(context).platform != TargetPlatform.iOS;
   Widget grid(NooColors colors) => Wrap(
     spacing: 14,
     runSpacing: 14,
     children: [
-      _AccentSwatch(
-        isSelected: settings.useDynamicColor,
-        onTap: () {
-          settings.setUseDynamicColor(true);
-          Navigator.pop(context);
-        },
-        background: colors.surface3,
-        child: Icon(LucideIcons.wallpaper, color: colors.fg2, size: 20),
-      ),
+      if (Theme.of(context).platform != TargetPlatform.iOS)
+        _AccentSwatch(
+          isSelected: settings.useDynamicColor,
+          onTap: () {
+            settings.setUseDynamicColor(true);
+            Navigator.pop(context);
+          },
+          background: colors.surface3,
+          child: Icon(LucideIcons.wallpaper, color: colors.fg2, size: 20),
+        ),
       for (final color in AppTheme.seedColors)
         _AccentSwatch(
-          isSelected: !settings.useDynamicColor && settings.seedColor == color,
+          isSelected: !useDynamicColor && settings.seedColor == color,
           onTap: () {
             settings.setSeedColor(color);
             Navigator.pop(context);

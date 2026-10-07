@@ -89,16 +89,7 @@ enum SyncDiff {
 
     for fileId in priorFolderFileIds where !seen.contains(fileId) {
       guard let prior = state[fileId] else { continue }
-      // Deleted on the server. If it was also edited here since the last sync
-      // that edit is the only copy left - keep it (untracked) instead of
-      // deleting it along with the rest.
-      if let local = LocalFS.stat(syncRoot.appendingPathComponent(prior.relPath)),
-        local.mtimeMs != prior.localMTime || local.size != prior.size
-      {
-        actions.append(.orphan(relPath: prior.relPath, fileId: fileId))
-      } else {
-        actions.append(.delete(relPath: prior.relPath, fileId: fileId))
-      }
+      actions.append(.delete(relPath: prior.relPath, fileId: fileId))
     }
     return actions
   }

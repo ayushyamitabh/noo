@@ -24,6 +24,7 @@ Widget buildAppTabView(
   AppTab tab,
   ScrollController controller, {
   PreferredSizeWidget? topBar,
+  ValueChanged<bool>? onSelectionChanged,
 }) {
   switch (tab) {
     case AppTab.files:
@@ -33,11 +34,20 @@ Widget buildAppTabView(
         key: const ValueKey('files'),
         scrollController: controller,
         topBar: topBar,
+        onSelectionChanged: onSelectionChanged,
       );
     case AppTab.photos:
-      return PhotosView(scrollController: controller, topBar: topBar);
+      return PhotosView(
+        scrollController: controller,
+        topBar: topBar,
+        onSelectionChanged: onSelectionChanged,
+      );
     case AppTab.favorites:
-      return FavoritesView(scrollController: controller, topBar: topBar);
+      return FavoritesView(
+        scrollController: controller,
+        topBar: topBar,
+        onSelectionChanged: onSelectionChanged,
+      );
     case AppTab.activity:
       return ActivityView(scrollController: controller, topBar: topBar);
     case AppTab.trash:
@@ -52,6 +62,7 @@ Widget buildAppTabView(
         scrollController: controller,
         offline: true,
         topBar: topBar,
+        onSelectionChanged: onSelectionChanged,
       );
   }
 }

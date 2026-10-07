@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
@@ -198,17 +199,73 @@ class VideoTransportControls extends StatelessWidget {
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                child: WavySeekBar(
-                  controller: controller,
-                  playedColor: fg,
-                  trackColor: fg.withValues(alpha: 0.3),
-                  style: progressBarStyle,
-                ),
+                child: Theme.of(context).platform == TargetPlatform.iOS
+                    ? IosSeekBar(controller: controller, color: fg)
+                    : WavySeekBar(
+                        controller: controller,
+                        playedColor: fg,
+                        trackColor: fg.withValues(alpha: 0.3),
+                        style: progressBarStyle,
+                      ),
               ),
             ],
           ),
         );
       },
+    );
+  }
+}
+
+class IosSeekBar extends StatefulWidget {
+  final VideoPlayerController controller;
+  final Color color;
+  const IosSeekBar({super.key, required this.controller, required this.color});
+
+  @override
+  State<IosSeekBar> createState() => _IosSeekBarState();
+}
+
+class _IosSeekBarState extends State<IosSeekBar> {
+  double? _dragRatio;
+  bool _resumeAfterScrubbing = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = widget.controller.value;
+    final durationMs = value.duration.inMilliseconds;
+    final ratio =
+        (_dragRatio ??
+                (durationMs > 0
+                    ? value.position.inMilliseconds / durationMs
+                    : 0.0))
+            .clamp(0.0, 1.0);
+    return SizedBox(
+      width: double.infinity,
+      child: CupertinoSlider(
+        value: ratio,
+        activeColor: widget.color,
+        thumbColor: CupertinoColors.white,
+        onChangeStart: durationMs <= 0
+            ? null
+            : (_) {
+                _resumeAfterScrubbing = value.isPlaying;
+                if (_resumeAfterScrubbing) widget.controller.pause();
+              },
+        onChanged: durationMs <= 0
+            ? null
+            : (ratio) {
+                setState(() => _dragRatio = ratio);
+                widget.controller.seekTo(value.duration * ratio);
+              },
+        onChangeEnd: durationMs <= 0
+            ? null
+            : (ratio) async {
+                await widget.controller.seekTo(value.duration * ratio);
+                if (!mounted) return;
+                setState(() => _dragRatio = null);
+                if (_resumeAfterScrubbing) widget.controller.play();
+              },
+      ),
     );
   }
 }

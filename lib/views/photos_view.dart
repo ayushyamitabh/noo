@@ -19,7 +19,6 @@ import '../widgets/filter_mode_rows.dart';
 import '../widgets/noo/core/noo_button.dart';
 import '../widgets/noo/core/noo_chip.dart';
 import '../widgets/noo/core/noo_segmented_control.dart';
-import '../widgets/noo/core/noo_toggle.dart';
 import '../widgets/noo/files/noo_file_kind.dart';
 import '../widgets/noo/lists/noo_grouped_list.dart';
 import '../widgets/noo/lists/noo_selection_bar.dart';
@@ -31,6 +30,7 @@ import '../widgets/noo/overlays/noo_sheet.dart';
 import '../widgets/share_sheet.dart';
 import '../widgets/sort_menu_button.dart' show sortFieldLabel;
 import '../widgets/sticky_header_delegate.dart';
+import '../widgets/selection_bar_overlay.dart';
 import '../widgets/tabs/tab_state_slivers.dart';
 import 'file_viewer_screen.dart';
 import 'move_copy_destination_picker.dart';
@@ -58,8 +58,14 @@ class PhotosView extends StatefulWidget {
   /// This tab's own shell top bar, planted as its first sliver - see
   /// `buildAppTabView`'s doc comment. Null on desktop and while picking.
   final PreferredSizeWidget? topBar;
+  final ValueChanged<bool>? onSelectionChanged;
 
-  const PhotosView({super.key, required this.scrollController, this.topBar});
+  const PhotosView({
+    super.key,
+    required this.scrollController,
+    this.topBar,
+    this.onSelectionChanged,
+  });
 
   @override
   State<PhotosView> createState() => _PhotosViewState();
@@ -82,10 +88,12 @@ class _PhotosViewState extends State<PhotosView> {
     setState(() {
       if (!_selectedIds.remove(item.id)) _selectedIds.add(item.id);
     });
+    widget.onSelectionChanged?.call(_isSelecting);
   }
 
   void _clearSelection() {
     setState(_selectedIds.clear);
+    widget.onSelectionChanged?.call(false);
   }
 
   /// Mirrors `FilesView._handlePickTap` - Photos has no folders, so this is
@@ -215,6 +223,10 @@ class _PhotosViewState extends State<PhotosView> {
 
   @override
   Widget build(BuildContext context) {
+    final selectionAtBottom =
+        _isSelecting &&
+        context.watch<SettingsController>().selectionBarPosition ==
+            SelectionBarPosition.bottom;
     final colors = context.nooColors;
     final isDesktop = NooLayout.isDesktop(context);
     final photosController = context.watch<PhotosController>();
@@ -248,23 +260,25 @@ class _PhotosViewState extends State<PhotosView> {
       if (widget.topBar != null) topBarSliver(widget.topBar!),
       // Sticky while browsing; once selecting, the selection bar takes over
       // the same slot instead.
-      SliverPersistentHeader(
-        pinned: !_isSelecting,
-        delegate: StickyHeaderDelegate(
-          height: _isSelecting ? 56 : 64,
-          child: _isSelecting
-              ? _buildSelectionBar(context, pick, selectedItems)
-              : Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    NooSpace.sm,
-                    NooSpace.sm,
-                    NooSpace.sm,
-                    NooSpace.xs,
+      if (!selectionAtBottom)
+        SliverPersistentHeader(
+          pinned: true,
+          delegate: StickyHeaderDelegate(
+            floating: _isSelecting,
+            height: _isSelecting ? 56 : 64,
+            child: _isSelecting
+                ? _buildSelectionBar(context, pick, selectedItems)
+                : Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      NooSpace.sm,
+                      NooSpace.sm,
+                      NooSpace.sm,
+                      NooSpace.xs,
+                    ),
+                    child: controlsRow,
                   ),
-                  child: controlsRow,
-                ),
+          ),
         ),
-      ),
 
       if (photosController.isLoading && allPhotos.isEmpty)
         const SliverFillRemaining(
@@ -360,7 +374,13 @@ class _PhotosViewState extends State<PhotosView> {
       // Clearance so the last row isn't hidden behind the nav bar,
       // regardless of grid length - see `bottomBarClearance`'s own doc
       // comment for why this has to be dynamic rather than a flat 100.
-      SliverToBoxAdapter(child: SizedBox(height: bottomBarClearance(context))),
+      SliverToBoxAdapter(
+        child: SizedBox(
+          height:
+              bottomBarClearance(context) +
+              (selectionAtBottom ? SelectionBarOverlay.clearance : 0),
+        ),
+      ),
     ];
 
     return PopScope(
@@ -368,24 +388,29 @@ class _PhotosViewState extends State<PhotosView> {
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop && _isSelecting) _clearSelection();
       },
-      child: ColoredBox(
-        color: colors.bg,
-        child: RefreshIndicator(
-          color: colors.accent,
-          backgroundColor: colors.surface,
-          onRefresh: photosController.fetchAllMedia,
-          // See files_view.dart's identical fix - without this, the sticky
-          // controls row rides up under the status bar once the floating
-          // top bar above it fully collapses.
-          child: SafeArea(
-            top: true,
-            bottom: false,
-            child: CustomScrollView(
-              controller: widget.scrollController,
-              // See files_view.dart's identical fix - without this, pull-to-
-              // refresh can't be triggered on an empty or single-item list.
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: contentSlivers,
+      child: SelectionBarOverlay(
+        bar: selectionAtBottom
+            ? _buildSelectionBar(context, pick, selectedItems)
+            : null,
+        child: ColoredBox(
+          color: colors.bg,
+          child: RefreshIndicator(
+            color: colors.accent,
+            backgroundColor: colors.surface,
+            onRefresh: photosController.fetchAllMedia,
+            // See files_view.dart's identical fix - without this, the sticky
+            // controls row rides up under the status bar once the floating
+            // top bar above it fully collapses.
+            child: SafeArea(
+              top: true,
+              bottom: false,
+              child: CustomScrollView(
+                controller: widget.scrollController,
+                // See files_view.dart's identical fix - without this, pull-to-
+                // refresh can't be triggered on an empty or single-item list.
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: contentSlivers,
+              ),
             ),
           ),
         ),
@@ -554,17 +579,32 @@ class _PhotosViewState extends State<PhotosView> {
                   ),
                 ),
                 const SizedBox(height: 22),
-                NooGroupedList(
-                  children: [
-                    NooSettingsRow(
-                      icon: LucideIcons.heart,
-                      label: const Text('Favorites only'),
-                      trailing: NooToggle(
-                        checked: photos.showFavoritesOnly,
-                        onChanged: (_) => photos.toggleFavoritesFilter(),
+                FilterSection(
+                  icon: LucideIcons.heart,
+                  title: 'Favorites',
+                  child: NooSegmentedControl<bool>(
+                    fill: true,
+                    onSurface: true,
+                    labelOnlySelected: true,
+                    value: photos.showFavoritesOnly,
+                    onChanged: (value) {
+                      if (value != photos.showFavoritesOnly) {
+                        photos.toggleFavoritesFilter();
+                      }
+                    },
+                    options: const [
+                      NooSegmentOption(
+                        value: false,
+                        icon: LucideIcons.layers,
+                        label: 'All',
                       ),
-                    ),
-                  ],
+                      NooSegmentOption(
+                        value: true,
+                        icon: LucideIcons.heart,
+                        label: 'Favorites only',
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 22),
                 HiddenFilesFilterRow(

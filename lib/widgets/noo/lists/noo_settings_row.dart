@@ -10,14 +10,17 @@ class NooSettingsRow extends StatelessWidget {
   final IconData? icon;
   final Widget label;
   final Widget? subtitle;
+
   /// Renders as `value` text + a trailing chevron - mutually exclusive with
   /// [trailing] (a `NooToggle`, button, badge, etc.).
   final String? value;
   final Widget? trailing;
   final bool danger;
+
   /// Accent-text action row, e.g. "Add account".
   final bool accent;
   final VoidCallback? onTap;
+  final Color? backgroundColor;
 
   const NooSettingsRow({
     super.key,
@@ -29,12 +32,15 @@ class NooSettingsRow extends StatelessWidget {
     this.danger = false,
     this.accent = false,
     this.onTap,
+    this.backgroundColor,
   });
 
   @override
   Widget build(BuildContext context) {
     final colors = context.nooColors;
-    final color = danger ? colors.danger : (accent ? colors.accentText : colors.fg1);
+    final color = danger
+        ? colors.danger
+        : (accent ? colors.accentText : colors.fg1);
     final minHeight = subtitle != null ? 60.0 : 52.0;
 
     Widget? trail = trailing;
@@ -44,7 +50,11 @@ class NooSettingsRow extends StatelessWidget {
         children: [
           Text(
             value!,
-            style: NooText.body.copyWith(fontSize: 15, height: 1, color: colors.fg3),
+            style: NooText.body.copyWith(
+              fontSize: 15,
+              height: 1,
+              color: colors.fg3,
+            ),
           ),
           const SizedBox(width: 4),
           Icon(LucideIcons.chevronRight, size: 18, color: colors.fg3),
@@ -53,7 +63,7 @@ class NooSettingsRow extends StatelessWidget {
     }
 
     return Material(
-      color: colors.surface,
+      color: backgroundColor ?? colors.surface,
       child: InkWell(
         onTap: onTap,
         child: ConstrainedBox(
@@ -66,7 +76,11 @@ class NooSettingsRow extends StatelessWidget {
             child: Row(
               children: [
                 if (icon != null) ...[
-                  Icon(icon, size: 20, color: danger || accent ? color : colors.fg2),
+                  Icon(
+                    icon,
+                    size: 20,
+                    color: danger || accent ? color : colors.fg2,
+                  ),
                   const SizedBox(width: 14),
                 ],
                 Expanded(

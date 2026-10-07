@@ -9,10 +9,15 @@ import '../widgets/noo/nav/noo_nav_style.dart';
 /// in Settings.
 enum SwipeAction { none, favorite, delete, share }
 
-/// How the Android Upload FAB is sized: [auto] expands on Files/Photos and
+/// How the mobile Upload button is sized: [auto] expands on Files/Photos and
 /// shrinks to an icon elsewhere, [mini] is always icon-only, [expanded]
 /// always shows the label.
 enum FabStyle { auto, mini, expanded }
+
+/// Where bulk selection actions float within the content pane.
+enum SelectionBarPosition { top, bottom }
+
+enum AvatarPosition { top, bottom }
 
 /// Thumb/track presets for the video player's seek bar, matching the four
 /// combinations offered by other Material You media players: a Material 3
@@ -55,6 +60,7 @@ class SettingsController extends ChangeNotifier {
   static const _prefUseDynamicColor = 'ui_use_dynamic_color';
   static const _prefSeedColor = 'ui_seed_color';
   static const _prefTabOrder = 'ui_tab_order';
+  static const _prefSelectionBarPosition = 'ui_selection_bar_position';
   static const _prefSelectionActionOrder = 'ui_selection_action_order';
   static const _prefHiddenTabs = 'ui_hidden_tabs';
   static const _prefDefaultTab = 'ui_default_tab';
@@ -65,6 +71,7 @@ class SettingsController extends ChangeNotifier {
   static const _prefBottomBarFrosted = 'ui_bottom_bar_frosted';
   static const _prefFrostedBlur = 'ui_bottom_bar_frosted_blur';
   static const _prefFrostedOpacity = 'ui_bottom_bar_frosted_opacity';
+  static const _prefAvatarPosition = 'ui_avatar_position';
   static const _prefNavMenuStyle = 'ui_nav_menu_style';
   static const _prefSearchInBottomBar = 'ui_search_in_bottom_bar';
   static const _prefAmoledDark = 'ui_amoled_dark';
@@ -78,6 +85,7 @@ class SettingsController extends ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.system;
   NooBottomBarStyle _bottomBarStyle = NooBottomBarStyle.attached;
   NooNavMenuStyle _navMenuStyle = NooNavMenuStyle.drawer;
+  AvatarPosition _avatarPosition = AvatarPosition.top;
   bool _bottomBarFrosted = false;
   double _frostedBlur = FrostedGlassPreset.standard.blur;
   double _frostedOpacity = FrostedGlassPreset.standard.opacity;
@@ -87,6 +95,7 @@ class SettingsController extends ChangeNotifier {
   MediaProgressBarStyle _mediaProgressBarStyle = MediaProgressBarStyle.wavy;
 
   bool _tapTabToScrollTop = true;
+  SelectionBarPosition _selectionBarPosition = SelectionBarPosition.top;
 
   List<AppTab> _tabOrder = AppTab.values.toList();
   Set<AppTab> _hiddenTabs = {};
@@ -134,12 +143,14 @@ class SettingsController extends ChangeNotifier {
   FrostedGlassPreset? get frostedPreset => FrostedGlassPreset.values
       .where((p) => p.blur == _frostedBlur && p.opacity == _frostedOpacity)
       .firstOrNull;
+  AvatarPosition get avatarPosition => _avatarPosition;
   NooNavMenuStyle get navMenuStyle => _navMenuStyle;
   bool get searchInBottomBar => _searchInBottomBar;
   bool get useDynamicColor => _useDynamicColor;
   bool get amoledDark => _amoledDark;
   MediaProgressBarStyle get mediaProgressBarStyle => _mediaProgressBarStyle;
   bool get tapTabToScrollTop => _tapTabToScrollTop;
+  SelectionBarPosition get selectionBarPosition => _selectionBarPosition;
 
   /// The cap a screen should actually enforce for the *regular*, user-
   /// reorderable tabs - one below [defaultMaxVisibleTabs] while
@@ -180,6 +191,11 @@ class SettingsController extends ChangeNotifier {
           orElse: () => ThemeMode.system,
         );
       }
+      _selectionBarPosition = SelectionBarPosition.values.firstWhere(
+        (position) =>
+            position.name == prefs.getString(_prefSelectionBarPosition),
+        orElse: () => SelectionBarPosition.top,
+      );
       final bottomBarStyleName = prefs.getString(_prefBottomBarStyle);
       if (bottomBarStyleName != null) {
         _bottomBarStyle = NooBottomBarStyle.values.firstWhere(
@@ -187,6 +203,10 @@ class SettingsController extends ChangeNotifier {
           orElse: () => _bottomBarStyle,
         );
       }
+      _avatarPosition = AvatarPosition.values.firstWhere(
+        (position) => position.name == prefs.getString(_prefAvatarPosition),
+        orElse: () => AvatarPosition.top,
+      );
       final navMenuStyleName = prefs.getString(_prefNavMenuStyle);
       if (navMenuStyleName != null) {
         _navMenuStyle = NooNavMenuStyle.values.firstWhere(
@@ -354,6 +374,22 @@ class SettingsController extends ChangeNotifier {
     _themeMode = mode;
     notifyListeners();
     _prefsFuture.then((p) => p.setString(_prefThemeMode, mode.name));
+  }
+
+  void setAvatarPosition(AvatarPosition position) {
+    if (_avatarPosition == position) return;
+    _avatarPosition = position;
+    notifyListeners();
+    _prefsFuture.then((p) => p.setString(_prefAvatarPosition, position.name));
+  }
+
+  void setSelectionBarPosition(SelectionBarPosition position) {
+    if (_selectionBarPosition == position) return;
+    _selectionBarPosition = position;
+    notifyListeners();
+    _prefsFuture.then(
+      (p) => p.setString(_prefSelectionBarPosition, position.name),
+    );
   }
 
   void setBottomBarStyle(NooBottomBarStyle style) {

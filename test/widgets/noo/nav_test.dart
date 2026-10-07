@@ -215,7 +215,7 @@ void main() {
       expect(opacity.opacity, 0);
     });
 
-    testNooWidgets('ios: unchanged icon-above-label layout, no indicator', (
+    testNooWidgets('ios: only selected tab has a label, no indicator', (
       tester,
       theme,
       c,
@@ -238,6 +238,8 @@ void main() {
       final iconCenter = tester.getCenter(find.byIcon(LucideIcons.images));
       final labelCenter = tester.getCenter(find.text('Photos'));
       expect(labelCenter.dy, greaterThan(iconCenter.dy));
+      expect(find.text('Files'), findsNothing);
+      expect(find.text('Favorites'), findsNothing);
     });
 
     testNooWidgets('floating: inset, rounded, bordered - not edge to edge', (

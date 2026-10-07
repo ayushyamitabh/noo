@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,7 +18,10 @@ import 'package:noo/providers/trash_controller.dart';
 import 'package:noo/theme/app_theme.dart';
 import 'package:noo/theme/design_tokens.dart';
 import 'package:noo/widgets/noo/core/noo_avatar.dart';
+import 'package:noo/widgets/noo/core/noo_button.dart';
 import 'package:noo/widgets/app_top_bar.dart';
+import 'package:noo/widgets/avatar_menu.dart';
+import 'package:noo/widgets/bottom_nav_bar.dart';
 import 'package:noo/widgets/noo/nav/noo_top_bar.dart';
 
 /// Covers `SettingsController.navMenuStyle`'s two options as wired through
@@ -86,7 +90,24 @@ void main() {
   Future<void> pumpTopBar(
     WidgetTester tester, {
     required NooNavMenuStyle navMenuStyle,
+    bool withHost = false,
+    AvatarPosition position = AvatarPosition.top,
+    bool search = false,
+    bool reducedMotion = false,
+    NooNavStyle style = NooNavStyle.android,
+    NooBottomBarStyle barStyle = NooBottomBarStyle.floating,
+    AppTab tab = AppTab.files,
+    FabStyle uploadStyle = FabStyle.auto,
+    bool frosted = false,
+    int settleFrames = 30,
   }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('ui_nav_menu_style', navMenuStyle.name);
+    await prefs.setString('ui_avatar_position', position.name);
+    await prefs.setString('ui_bottom_bar_style', barStyle.name);
+    await prefs.setBool('ui_bottom_bar_frosted', frosted);
+    await prefs.setDouble('ui_bottom_bar_frosted_blur', 19);
+    await prefs.setDouble('ui_bottom_bar_frosted_opacity', 0.45);
     await tester.binding.setSurfaceSize(const Size(400, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -110,15 +131,49 @@ void main() {
           ),
         ],
         child: MaterialApp(
-          theme: AppTheme.light(AppTheme.defaultAccent, useDynamicColor: false),
-          home: Scaffold(
-            drawer: const Drawer(child: Text('drawer open')),
-            appBar: AppTopBar(
-              style: NooNavStyle.android,
-              tab: AppTab.files,
-              navMenuStyle: navMenuStyle,
-            ),
-            body: const SizedBox(),
+          theme: AppTheme.light(AppTheme.defaultAccent, useDynamicColor: false)
+              .copyWith(
+                platform: style == NooNavStyle.ios
+                    ? TargetPlatform.iOS
+                    : TargetPlatform.android,
+              ),
+          home: Builder(
+            builder: (context) {
+              final scaffold = Scaffold(
+                drawer: const Drawer(child: Text('drawer open')),
+                appBar: AppTopBar(
+                  style: style,
+                  tab: tab,
+                  uploadButtonStyle: uploadStyle,
+                  navMenuStyle: navMenuStyle,
+                  avatarPosition: position,
+                  searchInBottomBar: search,
+                ),
+                body: const AvatarNavigationBody(
+                  child: SizedBox.expand(key: ValueKey('page content')),
+                ),
+                bottomNavigationBar: withHost
+                    ? BottomNavBar(
+                        style: style,
+                        barStyle: barStyle,
+                        tabs: const [AppTab.files, AppTab.photos],
+                        selectedIndex: 0,
+                        onDestinationSelected: (_) {},
+                        avatarInBottomBar: position == AvatarPosition.bottom,
+                        onSearchTap: search ? () {} : null,
+                      )
+                    : null,
+              );
+              final child = withHost
+                  ? AvatarNavigationHost(child: scaffold)
+                  : scaffold;
+              return MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(disableAnimations: reducedMotion),
+                child: child,
+              );
+            },
           ),
         ),
       ),
@@ -127,7 +182,7 @@ void main() {
     // Not `pumpAndSettle` - the same reasoning as `account_view_test.dart`:
     // the active account's dependent controllers start periodic
     // timers/futures that would spin it forever.
-    for (var i = 0; i < 30; i++) {
+    for (var i = 0; i < settleFrames; i++) {
       await tester.pump(const Duration(milliseconds: 10));
     }
   }
@@ -223,5 +278,321 @@ void main() {
     // each screen edge, less its 1px border and 1px inner padding per side.
     final screenWidth = tester.getSize(find.byType(MaterialApp)).width;
     expect(tester.getSize(row).width, screenWidth - 2 * NooSpace.sm - 4);
+  });
+  testWidgets(
+    'top avatar expands and pushes content down; closing restores it',
+    (tester) async {
+      await pumpTopBar(
+        tester,
+        navMenuStyle: NooNavMenuStyle.avatarMenu,
+        withHost: true,
+      );
+      final page = find.byKey(const ValueKey('page content'));
+      final before = tester.getTopLeft(page).dy;
+      await tester.tap(find.byTooltip('Menu'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+      final during = tester.getTopLeft(page).dy;
+      expect(during, greaterThan(before));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(tester.getTopLeft(page).dy, greaterThan(during));
+      expect(find.text('Settings'), findsOneWidget);
+      await tester.tap(find.bySemanticsLabel('Close menu').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(tester.getTopLeft(page).dy, before);
+      expect(find.byType(AvatarMenuCard), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final search in [false, true]) {
+    testWidgets(
+      'bottom avatar moves into card without shifting content (search=$search)',
+      (tester) async {
+        await pumpTopBar(
+          tester,
+          navMenuStyle: NooNavMenuStyle.avatarMenu,
+          withHost: true,
+          position: AvatarPosition.bottom,
+          search: search,
+        );
+        final page = find.byKey(const ValueKey('page content'));
+        final before = tester.getTopLeft(page);
+        expect(find.byTooltip('Menu'), findsOneWidget);
+        final origin = tester.getCenter(find.byTooltip('Menu'));
+        await tester.tap(find.byTooltip('Menu'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 120));
+        final moving = tester.getCenter(
+          find.bySemanticsLabel('Close menu').last,
+        );
+        expect(moving.dy, lessThan(origin.dy));
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(tester.getTopLeft(page), before);
+        final card = find.byType(AvatarMenuCard);
+        expect(card, findsOneWidget);
+        expect(tester.getBottomRight(card).dy, lessThan(origin.dy));
+        expect(tester.getSize(card).width, 376);
+        if (search) expect(find.bySemanticsLabel('Search'), findsOneWidget);
+        await tester.tap(find.bySemanticsLabel('Close menu').last);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(find.byType(AvatarMenuCard), findsNothing);
+        expect(tester.getCenter(find.byTooltip('Menu')), origin);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('reduced motion opens immediately and system back dismisses', (
+    tester,
+  ) async {
+    await pumpTopBar(
+      tester,
+      navMenuStyle: NooNavMenuStyle.avatarMenu,
+      withHost: true,
+      reducedMotion: true,
+    );
+    await tester.tap(find.byTooltip('Menu'));
+    await tester.pump();
+    expect(find.text('Settings'), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(find.byType(AvatarMenuCard), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+  for (final position in AvatarPosition.values) {
+    for (final frosted in [false, true]) {
+      testWidgets(
+        '$position popup shares frost toggle and strength ($frosted)',
+        (tester) async {
+          await pumpTopBar(
+            tester,
+            navMenuStyle: NooNavMenuStyle.avatarMenu,
+            withHost: true,
+            position: position,
+            frosted: frosted,
+          );
+          await tester.tap(find.byTooltip('Menu'));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 500));
+          final card = find.byType(AvatarMenuCard);
+          final backdrop = find.ancestor(
+            of: card,
+            matching: find.byType(BackdropFilter),
+          );
+          expect(backdrop, frosted ? findsOneWidget : findsNothing);
+          if (frosted) {
+            expect(
+              tester.widget<BackdropFilter>(backdrop).filter,
+              ImageFilter.blur(sigmaX: 19, sigmaY: 19),
+            );
+            final decorations = tester.widgetList<DecoratedBox>(
+              find.ancestor(of: card, matching: find.byType(DecoratedBox)),
+            );
+            expect(
+              decorations.any(
+                (box) =>
+                    box.decoration is BoxDecoration &&
+                    ((box.decoration as BoxDecoration).color?.a ?? 0) > 0.44 &&
+                    ((box.decoration as BoxDecoration).color?.a ?? 0) < 0.46,
+              ),
+              isTrue,
+            );
+            final materials = tester.widgetList<Material>(
+              find.descendant(of: card, matching: find.byType(Material)),
+            );
+            expect(
+              materials.every(
+                (material) => material.color == Colors.transparent,
+              ),
+              isTrue,
+            );
+          }
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
+  testWidgets('iOS upload width interpolates while its label fades', (
+    tester,
+  ) async {
+    await pumpTopBar(
+      tester,
+      navMenuStyle: NooNavMenuStyle.avatarMenu,
+      style: NooNavStyle.ios,
+      uploadStyle: FabStyle.mini,
+    );
+    final button = find.byType(NooButton);
+    final collapsedWidth = tester.getSize(button).width;
+    await pumpTopBar(
+      tester,
+      navMenuStyle: NooNavMenuStyle.avatarMenu,
+      style: NooNavStyle.ios,
+      uploadStyle: FabStyle.expanded,
+      settleFrames: 0,
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    final middleWidth = tester.getSize(button).width;
+    final labelOpacity = tester
+        .widget<Opacity>(
+          find
+              .ancestor(of: find.text('Upload'), matching: find.byType(Opacity))
+              .first,
+        )
+        .opacity;
+    expect(labelOpacity, greaterThan(0));
+    expect(labelOpacity, lessThan(1));
+    await tester.pump(const Duration(milliseconds: 300));
+    final expandedWidth = tester.getSize(button).width;
+    expect(middleWidth, greaterThan(collapsedWidth));
+    expect(middleWidth, lessThan(expandedWidth));
+    expect(tester.getSize(button).height, 32);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final uploadStyle in FabStyle.values) {
+    for (final tab in [AppTab.files, AppTab.photos, AppTab.favorites]) {
+      testWidgets('iOS title row uses $uploadStyle upload control on $tab', (
+        tester,
+      ) async {
+        await pumpTopBar(
+          tester,
+          navMenuStyle: NooNavMenuStyle.avatarMenu,
+          style: NooNavStyle.ios,
+          tab: tab,
+          uploadStyle: uploadStyle,
+        );
+        final title = find.descendant(
+          of: find.byType(AppTopBar),
+          matching: find.text(tab.label),
+        );
+        final titleY = tester.getCenter(title).dy;
+        expect(
+          tester.getCenter(find.byTooltip('Upload')).dy,
+          closeTo(titleY, 1),
+        );
+        expect(tester.getCenter(find.byTooltip('Menu')).dy, closeTo(titleY, 1));
+        final expanded =
+            uploadStyle == FabStyle.expanded ||
+            (uploadStyle == FabStyle.auto && tab != AppTab.favorites);
+        expect(find.text('Upload'), expanded ? findsOneWidget : findsNothing);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
+  testWidgets('iOS attached navigation keeps popup above its rail', (
+    tester,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    final accounts = jsonDecode(prefs.getString('accounts_list')!) as List;
+    accounts.add(
+      const SavedAccount(
+        id: 'other_example_org__bob',
+        serverUrl: 'https://other.example.org',
+        username: 'bob',
+      ).toJson(),
+    );
+    await prefs.setString('accounts_list', jsonEncode(accounts));
+    await pumpTopBar(
+      tester,
+      navMenuStyle: NooNavMenuStyle.avatarMenu,
+      withHost: true,
+      position: AvatarPosition.bottom,
+      search: true,
+      style: NooNavStyle.ios,
+      barStyle: NooBottomBarStyle.attached,
+    );
+    final origin = tester.getCenter(find.byTooltip('Menu'));
+    expect(
+      find.descendant(
+        of: find.byType(BottomNavBar),
+        matching: find.text('Files'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Photos'), findsNothing);
+    await tester.tap(find.byTooltip('Menu'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(
+      tester.getBottomLeft(find.byType(AvatarMenuCard)).dy,
+      origin.dy - 25 - 1,
+    );
+    expect(tester.getSize(find.byType(AvatarMenuCard)).width, 400);
+    expect(tester.getCenter(find.byTooltip('Menu')), origin);
+    expect(find.bySemanticsLabel('Search'), findsOneWidget);
+    await tester.tap(find.text('alice'));
+    await tester.pump();
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(
+      tester.getCenter(find.text('Settings')).dy,
+      lessThan(tester.getCenter(find.text('alice')).dy),
+    );
+    expect(
+      tester.getCenter(find.text('alice')).dy,
+      lessThan(tester.getCenter(find.text('bob')).dy),
+    );
+    expect(
+      tester.getCenter(find.text('bob')).dy,
+      lessThan(tester.getCenter(find.text('Add Account')).dy),
+    );
+    await tester.tap(find.byTooltip('Menu'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(AvatarMenuCard), findsNothing);
+    expect(tester.getCenter(find.byTooltip('Menu')), origin);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('expanding accounts also grows the top content offset', (
+    tester,
+  ) async {
+    await pumpTopBar(
+      tester,
+      navMenuStyle: NooNavMenuStyle.avatarMenu,
+      withHost: true,
+    );
+    await tester.tap(find.byTooltip('Menu'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    final before = tester
+        .getTopLeft(find.byKey(const ValueKey('page content')))
+        .dy;
+    await tester.tap(find.text('alice'));
+    await tester.pump();
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(find.text('Add Account'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.byKey(const ValueKey('page content'))).dy,
+      greaterThan(before),
+    );
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('Search satellite closes the bottom navigation popup', (
+    tester,
+  ) async {
+    await pumpTopBar(
+      tester,
+      navMenuStyle: NooNavMenuStyle.avatarMenu,
+      withHost: true,
+      position: AvatarPosition.bottom,
+      search: true,
+    );
+    await tester.tap(find.byTooltip('Menu'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.bySemanticsLabel('Search'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(AvatarMenuCard), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 }

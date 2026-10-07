@@ -1,18 +1,11 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/settings_controller.dart';
 import '../theme/design_tokens.dart';
 
-/// The blurred/translucent chrome for the media viewer's overlay bars
-/// (`file_viewer_screen.dart`'s top bar, `MediaActionBar`, the video
-/// transport row) - the one deliberate exception to the design system's
-/// flat, no-shadow product UI (DESIGN_SYSTEM.md 1.4), since this chrome
-/// floats over photo/video content rather than over the app's own
-/// surfaces. No shadow, no outline: [color] defaults to the app's own
-/// `surface` token (so this panel reads as light or dark to match the
-/// active theme, like the rest of the media viewer, instead of a fixed
-/// dark tone regardless of theme) at a higher-than-usual [opacity], since
-/// a light tint needs denser coverage than a near-black one did to stay
-/// legible over arbitrary photo/video brightness underneath.
+/// Media viewer chrome that shares the navigation frost preference.
+/// Turning frosting off produces an opaque themed surface without blur.
 class FrostedGlassContainer extends StatelessWidget {
   final Widget child;
   final double borderRadius;
@@ -20,14 +13,12 @@ class FrostedGlassContainer extends StatelessWidget {
   /// Overrides [borderRadius] for non-uniform corners (e.g. top-only).
   final BorderRadius? radius;
 
-  /// Blur sigma for the backdrop filter. Defaults to a fixed value; pass an
-  /// explicit value (e.g. from user settings) to make it adjustable.
-  final double blurSigma;
+  /// Blur sigma for the backdrop filter. Defaults to the shared frost setting.
+  final double? blurSigma;
 
-  /// Opacity (0-1) of the tonal fill behind the blur. Defaults to a fixed
-  /// value; pass an explicit value (e.g. from user settings) to make it
-  /// adjustable.
-  final double opacity;
+  /// Opacity (0-1) of the tonal fill behind the blur. Defaults to the shared frost setting.
+  final double? opacity;
+  final bool? frosted;
 
   /// The tint under the blur. Defaults to [NooColors.surface] (resolved at
   /// build time, so it always matches the active theme) - pass an explicit
@@ -39,8 +30,9 @@ class FrostedGlassContainer extends StatelessWidget {
     required this.child,
     this.borderRadius = 0,
     this.radius,
-    this.blurSigma = 20,
-    this.opacity = 0.8,
+    this.blurSigma,
+    this.opacity,
+    this.frosted,
     this.color,
   });
 
@@ -48,18 +40,28 @@ class FrostedGlassContainer extends StatelessWidget {
   Widget build(BuildContext context) {
     final shape = radius ?? BorderRadius.circular(borderRadius);
     final tint = color ?? context.nooColors.surface;
+    final settings = context.watch<SettingsController?>();
+    final enabled = frosted ?? settings?.bottomBarFrosted ?? false;
+    final sigma = blurSigma ?? settings?.bottomBarFrostedBlur ?? 20;
+    final fill = Container(
+      decoration: BoxDecoration(
+        color: enabled
+            ? tint.withValues(
+                alpha: opacity ?? settings?.bottomBarFrostedOpacity ?? 0.72,
+              )
+            : tint,
+        borderRadius: shape,
+      ),
+      child: child,
+    );
     return ClipRRect(
       borderRadius: shape,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-        child: Container(
-          decoration: BoxDecoration(
-            color: tint.withValues(alpha: opacity),
-            borderRadius: shape,
-          ),
-          child: child,
-        ),
-      ),
+      child: enabled
+          ? BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+              child: fill,
+            )
+          : fill,
     );
   }
 }

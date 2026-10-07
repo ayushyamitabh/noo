@@ -320,7 +320,13 @@ final class SyncCoordinator {
   /// exactly once - when the work ends or when the system's time does.
   private func handleBackground(_ task: BGTask) {
     scheduleBackgroundWork()  // line up the next one before this one runs
-    let gate = OnceGate { task.setTaskCompleted(success: $0) }
+    task.expirationHandler = startBackgroundSlot { task.setTaskCompleted(success: $0) }
+  }
+
+  /// Runs a background slot and returns its expiration handler.
+  @discardableResult
+  func startBackgroundSlot(completion: @escaping (Bool) -> Void) -> () -> Void {
+    let gate = OnceGate(completion)
     let accountIds = backgroundConfigs().map(\.accountId)
     let work = Task { [weak self] in
       guard let self else { return gate.finish(false) }
@@ -332,7 +338,7 @@ final class SyncCoordinator {
     }
     // The system's time is up: stop the work and the runs it started (each
     // saves what it has) and report.
-    task.expirationHandler = { [weak self] in
+    return { [weak self] in
       work.cancel()
       for id in accountIds { self?.cancelRun(accountId: id, invalidateQueued: false) }
       gate.finish(false)
