@@ -9,7 +9,7 @@ import 'package:noo/providers/item_operations.dart';
 import 'package:noo/providers/session_controller.dart';
 import 'package:noo/services/nextcloud_service.dart';
 import 'package:noo/views/file_viewer_screen.dart';
-import 'package:noo/widgets/noo/nav/noo_top_bar.dart';
+import 'package:noo/widgets/noo/core/noo_button.dart';
 import 'package:noo/widgets/viewer/media_action_bar.dart';
 import 'package:provider/provider.dart';
 
@@ -49,9 +49,11 @@ class _Operations implements ItemOperations {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-Finder _button(String tooltip) => find.byWidgetPredicate(
-  (widget) => widget is NooTopBarButton && widget.tooltip == tooltip,
-);
+Finder _button(String tooltip) => find.byTooltip(tooltip);
+
+/// The [NooButton] behind the top-bar action tagged [tooltip].
+Finder _noo(String tooltip) =>
+    find.descendant(of: _button(tooltip), matching: find.byType(NooButton));
 
 void main() {
   setUpNooTests();
@@ -118,6 +120,12 @@ void main() {
       }
 
       inHeader('Edit');
+      // A lone action is the primary one, and a compact round icon button.
+      expect(
+        tester.widget<NooButton>(_noo('Edit')).variant,
+        NooButtonVariant.primary,
+      );
+      expect(tester.getSize(_noo('Edit')), const Size(36, 36));
       expect(find.byType(Markdown), findsOneWidget);
       await tester.tap(_button('Edit'));
       await tester.pumpAndSettle();
@@ -125,6 +133,15 @@ void main() {
       await tester.enterText(find.byType(TextField), '# Changed');
       await tester.pump();
       inHeader('Save');
+      // With two, Save is primary and the toggle steps back to secondary.
+      expect(
+        tester.widget<NooButton>(_noo('Save')).variant,
+        NooButtonVariant.primary,
+      );
+      expect(
+        tester.widget<NooButton>(_noo('Preview')).variant,
+        NooButtonVariant.secondary,
+      );
       await tester.tap(_button('Preview'));
       await tester.pumpAndSettle();
       expect(tester.widget<Markdown>(find.byType(Markdown)).data, '# Changed');
@@ -156,7 +173,7 @@ void main() {
     });
   }
 
-  testWidgets('plain text has Save without the markdown toggle', (
+  testWidgets('plain text opens read-only and follows Edit -> Save too', (
     tester,
   ) async {
     final service = await mount(
@@ -166,10 +183,34 @@ void main() {
     );
     service.loaded.complete(utf8.encode('Original'));
     await tester.pumpAndSettle();
-    expect(_button('Edit'), findsNothing);
-    expect(_button('Preview'), findsNothing);
+
+    bool readOnly() =>
+        tester.widget<TextField>(find.byType(TextField)).readOnly;
+    expect(readOnly(), isTrue, reason: 'not directly editable');
+    expect(_button('Edit'), findsOneWidget);
+    expect(_button('Save'), findsNothing);
+    expect(
+      tester.widget<NooButton>(_noo('Edit')).variant,
+      NooButtonVariant.primary,
+    );
+
+    await tester.tap(_button('Edit'));
+    await tester.pumpAndSettle();
+    expect(readOnly(), isFalse);
+    expect(_button('Preview'), findsOneWidget);
     await tester.enterText(find.byType(TextField), 'Changed');
     await tester.pump();
+    expect(_button('Save'), findsOneWidget);
+    expect(
+      tester.widget<NooButton>(_noo('Save')).variant,
+      NooButtonVariant.primary,
+    );
+
+    // Preview goes back to the read-only view, keeping the change unsaved.
+    await tester.tap(_button('Preview'));
+    await tester.pumpAndSettle();
+    expect(readOnly(), isTrue);
+    expect(find.text('Changed'), findsOneWidget);
     expect(_button('Save'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
