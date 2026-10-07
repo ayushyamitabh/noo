@@ -2,11 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../models/nextcloud_item.dart';
 import '../../providers/session_controller.dart';
 import '../../theme/design_tokens.dart';
-import '../noo/core/noo_button.dart';
 
 /// Space the viewer's floating top bar and bottom action bar cover, so the
 /// text sits clear of them (and the status bar) instead of scrolling
@@ -14,15 +12,95 @@ import '../noo/core/noo_button.dart';
 const double _kTopBarClearance = 72;
 const double _kActionBarClearance = 112;
 
+/// What the viewer's top bar needs from [MediaTextPreview]: whether to show
+/// the Edit/Preview toggle and the Save button, their current state, and a way
+/// to trigger them. The preview owns the text, the editing mode and the save;
+/// this just mirrors that out so `FileViewerScreen` can draw the buttons in
+/// its own top bar (they used to float inside the preview).
+class TextPreviewController extends ChangeNotifier {
+  bool _canToggleEditing = false;
+  bool _editing = false;
+  bool _dirty = false;
+  bool _saving = false;
+  bool _disposed = false;
+  VoidCallback? _onToggleEditing;
+  Future<void> Function()? _onSave;
+
+  /// Markdown, writable (not the read-only Offline copy) and loaded - the
+  /// Edit/Preview toggle only exists then.
+  bool get canToggleEditing => _canToggleEditing;
+
+  /// Markdown is currently showing its raw text (the toggle then offers
+  /// "Preview"); false while rendered (it offers "Edit").
+  bool get editing => _editing;
+
+  /// The text differs from what's saved on the server.
+  bool get dirty => _dirty;
+  bool get saving => _saving;
+
+  /// The Save button is shown once the content has changed, and stays (as a
+  /// spinner) while the save is in flight.
+  bool get showSave => _dirty || _saving;
+
+  void toggleEditing() => _onToggleEditing?.call();
+  Future<void> save() async => _onSave?.call();
+
+  void _bind(VoidCallback toggleEditing, Future<void> Function() save) {
+    _onToggleEditing = toggleEditing;
+    _onSave = save;
+  }
+
+  /// The preview went away: nothing to toggle or save any more. Quiet (no
+  /// notification) - it happens while the tree is being torn down.
+  void _unbind() {
+    _onToggleEditing = null;
+    _onSave = null;
+    _canToggleEditing = false;
+    _editing = false;
+    _dirty = false;
+    _saving = false;
+  }
+
+  void _update({
+    required bool canToggleEditing,
+    required bool editing,
+    required bool dirty,
+    required bool saving,
+  }) {
+    if (_canToggleEditing == canToggleEditing &&
+        _editing == editing &&
+        _dirty == dirty &&
+        _saving == saving) {
+      return;
+    }
+    _canToggleEditing = canToggleEditing;
+    _editing = editing;
+    _dirty = dirty;
+    _saving = saving;
+    if (!_disposed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+}
+
 /// Text/markdown file preview and editor for [FileViewerScreen]'s static
 /// (non-swipeable) path (`_textPreviewExtensions`). Content is always
-/// editable when online; a Save button appears once it has changed. Markdown
-/// files open rendered, with an Edit/Preview toggle. Opened
-/// from the Offline tab ([localPathResolver] set) it is read-only, since the
-/// local copy has no server to write back to.
+/// editable when online; Save appears once it has changed. Markdown files open
+/// rendered, with an Edit/Preview toggle. Both controls live in the viewer's
+/// top bar, driven through [controller]. Opened from the Offline tab
+/// ([localPathResolver] set) it is read-only, since the local copy has no
+/// server to write back to.
 class MediaTextPreview extends StatefulWidget {
   final NextcloudItem item;
   final SessionController session;
+
+  /// Receives this preview's editing/save state and is how the top bar's
+  /// buttons reach it. Optional so the preview also works on its own.
+  final TextPreviewController? controller;
 
   /// When set, read bytes from the local path it resolves to instead of
   /// fetching from the server - see
@@ -33,6 +111,7 @@ class MediaTextPreview extends StatefulWidget {
     super.key,
     required this.item,
     required this.session,
+    this.controller,
     this.localPathResolver,
   });
 
@@ -60,14 +139,36 @@ class _MediaTextPreviewState extends State<MediaTextPreview> {
   @override
   void initState() {
     super.initState();
-    _controller.addListener(() => setState(() {}));
+    widget.controller?._bind(_toggleEditing, _save);
+    _controller.addListener(() {
+      setState(() {});
+      _syncToolbar();
+    });
     _load();
   }
 
   @override
   void dispose() {
+    widget.controller?._unbind();
     _controller.dispose();
     super.dispose();
+  }
+
+  /// Mirrors the editing/save state out to the viewer's top bar. Only called
+  /// from event handlers and async completions - never from build or
+  /// initState, where notifying the bar's listeners would be illegal.
+  void _syncToolbar() {
+    widget.controller?._update(
+      canToggleEditing: _saved != null && _isMarkdown && !_readOnly,
+      editing: _editing,
+      dirty: _dirty,
+      saving: _isSaving,
+    );
+  }
+
+  void _toggleEditing() {
+    setState(() => _editing = !_editing);
+    _syncToolbar();
   }
 
   Future<void> _load() async {
@@ -89,6 +190,7 @@ class _MediaTextPreviewState extends State<MediaTextPreview> {
         final text = utf8.decode(bytes, allowMalformed: true);
         _controller.text = text;
         setState(() => _saved = text);
+        _syncToolbar();
       }
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
@@ -99,6 +201,7 @@ class _MediaTextPreviewState extends State<MediaTextPreview> {
     final messenger = ScaffoldMessenger.of(context);
     final text = _controller.text;
     setState(() => _isSaving = true);
+    _syncToolbar();
     var ok = false;
     try {
       ok = await widget.session.service!.putBytes(
@@ -111,6 +214,7 @@ class _MediaTextPreviewState extends State<MediaTextPreview> {
       _isSaving = false;
       if (ok) _saved = text;
     });
+    _syncToolbar();
     messenger.showSnackBar(
       SnackBar(
         content: Text(ok ? 'Saved ${widget.item.name}' : 'Could not save file'),
@@ -171,30 +275,6 @@ class _MediaTextPreviewState extends State<MediaTextPreview> {
                     ),
                   ),
           ),
-          if (_isMarkdown && !_readOnly)
-            Positioned(
-              right: 20,
-              top: safe.top + _kTopBarClearance - 8,
-              child: NooButton(
-                variant: NooButtonVariant.tonal,
-                size: NooButtonSize.compact,
-                icon: _editing ? LucideIcons.eye : LucideIcons.pencil,
-                onTap: () => setState(() => _editing = !_editing),
-                child: Text(_editing ? 'Preview' : 'Edit'),
-              ),
-            ),
-          if (_dirty)
-            Positioned(
-              right: 20,
-              bottom: safe.bottom + _kActionBarClearance,
-              child: NooButton(
-                size: NooButtonSize.card,
-                icon: LucideIcons.save,
-                disabled: _isSaving,
-                onTap: _isSaving ? null : _save,
-                child: Text(_isSaving ? 'Saving…' : 'Save'),
-              ),
-            ),
         ],
       ),
     );
