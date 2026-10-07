@@ -73,6 +73,21 @@ struct SharedAccounts: Codable, Equatable {
   /// Showing hidden folders needs the same unlock the app asks for when you
   /// turn hidden files on.
   var needsUnlockForHidden: Bool { lockHiddenFiles }
+
+  /// What choosing [account] (with [hidden] folders to show) asks the user
+  /// to unlock. One action, one prompt - when both the account switch and
+  /// the hidden folders need it, a single authentication covers both.
+  func unlockNeeds(choosing account: SharedAccount, showing hidden: HiddenFilter) -> SelectionUnlock {
+    SelectionUnlock(
+      switchesAccount: account.id != active?.id && needsUnlockToSwitchAccount,
+      showsHidden: hidden != .hide && needsUnlockForHidden)
+  }
+
+  /// Turning hidden folders on (from `hide`) is what the app locks; going
+  /// back to `hide`, or between the two revealing modes, never asks.
+  func needsUnlockToChangeHidden(from old: HiddenFilter, to new: HiddenFilter) -> Bool {
+    old == .hide && new != .hide && needsUnlockForHidden
+  }
 }
 
 /// Keeps the [SharedAccounts] in a Keychain access group both the app and the
@@ -135,4 +150,12 @@ enum SharedAccountStore {
     legacy[kSecAttrAccount as String] = "active"
     SecItemDelete(legacy as CFDictionary)
   }
+}
+
+/// What one selection needs unlocked - see `SharedAccounts.unlockNeeds`.
+struct SelectionUnlock: Equatable {
+  let switchesAccount: Bool
+  let showsHidden: Bool
+
+  var needsPrompt: Bool { switchesAccount || showsHidden }
 }
