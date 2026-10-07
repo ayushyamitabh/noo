@@ -1,14 +1,18 @@
 name: Build iOS
 
-# Same trigger as the Play Store bundle (release.yml): a real release tag.
-#   git tag Release-1.0.0 && git push origin Release-1.0.0
-# Builds a signed .ipa, attaches it to the Gitea release, and uploads it to
-# TestFlight. Needs a Mac runner registered with the `macos` label (act_runner
-# in host mode) with Xcode installed; Linux runners cannot build iOS.
+# Tag scheme (shared with the Android workflows):
+#   Release-<version>  -> release.yml (Play bundle) AND this workflow
+#   RC-Android-<n>     -> build.yml (APK) only
+#   RC-iOS-<n>         -> this workflow only
+#   git tag RC-iOS-1 && git push origin RC-iOS-1
+# Builds a signed .ipa and uploads it to TestFlight. Needs a Mac runner
+# registered with the `macos` label (gitea-runner in host mode) with Xcode
+# installed; Linux runners cannot build iOS.
 on:
   push:
     tags:
       - "Release-*"
+      - "RC-iOS-*"
 
 jobs:
   build:
@@ -23,6 +27,8 @@ jobs:
           channel: stable
 
       - name: Check tag matches pubspec version
+        # Only Release-* tags carry a version; RC-iOS-* tags are free-form.
+        if: startsWith(github.ref_name, 'Release-')
         run: |
           VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
           if [ "${GITHUB_REF_NAME}" != "Release-${VERSION}" ]; then
