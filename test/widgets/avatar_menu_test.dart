@@ -550,6 +550,81 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Android floating popup orders navigation before accounts', (
+    tester,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    final accounts = jsonDecode(prefs.getString('accounts_list')!) as List;
+    accounts.add(
+      const SavedAccount(
+        id: 'other_example_org__bob',
+        serverUrl: 'https://other.example.org',
+        username: 'bob',
+      ).toJson(),
+    );
+    await prefs.setString('accounts_list', jsonEncode(accounts));
+    await pumpTopBar(
+      tester,
+      navMenuStyle: NooNavMenuStyle.avatarMenu,
+      withHost: true,
+      position: AvatarPosition.bottom,
+      search: true,
+      style: NooNavStyle.android,
+      barStyle: NooBottomBarStyle.floating,
+    );
+    final origin = tester.getCenter(find.byTooltip('Menu'));
+    expect(
+      find.descendant(
+        of: find.byType(BottomNavBar),
+        matching: find.text('Files'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Photos'), findsNothing);
+    await tester.tap(find.byTooltip('Menu'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(
+      tester.getBottomLeft(find.byType(AvatarMenuCard)).dy,
+      origin.dy - 32 - 12 - 1,
+    );
+    expect(tester.getSize(find.byType(AvatarMenuCard)).width, 376);
+    expect(find.bySemanticsLabel('Search'), findsOneWidget);
+    await tester.tap(find.text('alice'));
+    await tester.pump();
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(
+      tester.getCenter(find.text('Settings')).dy,
+      lessThan(tester.getCenter(find.text('alice')).dy),
+    );
+    expect(
+      tester.getCenter(find.text('alice')).dy,
+      lessThan(tester.getCenter(find.text('bob')).dy),
+    );
+    expect(
+      tester.getCenter(find.text('bob')).dy,
+      lessThan(tester.getCenter(find.text('Add Account')).dy),
+    );
+    final currentAvatar = find
+        .descendant(
+          of: find.byType(AvatarMenuCard),
+          matching: find.byType(NooAvatar),
+        )
+        .first;
+    expect(
+      tester.getCenter(currentAvatar).dy,
+      lessThan(tester.getCenter(find.text('bob')).dy),
+    );
+    await tester.tap(currentAvatar);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(AvatarMenuCard), findsNothing);
+    expect(tester.getCenter(find.byTooltip('Menu')), origin);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('expanding accounts also grows the top content offset', (
     tester,
   ) async {
