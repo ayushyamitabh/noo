@@ -2,9 +2,31 @@ import Foundation
 
 /// A folder in the account's WebDAV tree. [path] is relative to the user's
 /// root with a leading slash ("/Documents/Tax Forms"); "/" is the root.
+/// [isExternal] is true for an external-storage mount point (Nextcloud's
+/// `nc:mount-type` = `external`) - only the mount's root carries it, its
+/// children don't, so callers track mount roots to know what's inside one.
 struct DavFolder: Equatable {
   let name: String
   let path: String
+  var isExternal = false
+}
+
+/// The app's Files storage scope (`StorageScope` in Dart): internal ("cloud")
+/// folders only (the default), only external-storage ones, or both.
+enum StorageFilter: String {
+  case cloud, external, all
+
+  init(raw: String) {
+    self = StorageFilter(rawValue: raw) ?? .cloud
+  }
+
+  func shows(isExternal: Bool) -> Bool {
+    switch self {
+    case .cloud: return !isExternal
+    case .external: return isExternal
+    case .all: return true
+    }
+  }
 }
 
 /// The app's Files "hidden files" filter (`HiddenFilesFilter` in Dart):
@@ -37,6 +59,7 @@ enum DavFolderParser {
   private struct Response {
     var href = ""
     var isCollection = false
+    var mountType = ""
   }
 
   private final class Delegate: NSObject, XMLParserDelegate {
@@ -54,7 +77,7 @@ enum DavFolderParser {
     ) {
       switch local(elementName) {
       case "response": current = Response()
-      case "href": text = ""
+      case "href", "mount-type": text = ""
       case "collection": current?.isCollection = true
       default: break
       }
@@ -70,6 +93,7 @@ enum DavFolderParser {
     ) {
       switch local(elementName) {
       case "href": current?.href = text.trimmingCharacters(in: .whitespacesAndNewlines)
+      case "mount-type": current?.mountType = text.trimmingCharacters(in: .whitespacesAndNewlines)
       case "response":
         if let current { responses.append(current) }
         current = nil
@@ -109,7 +133,7 @@ enum DavFolderParser {
         guard let path = relativePath(fromHref: response.href), path != current else { return nil }
         let name = (path as NSString).lastPathComponent
         guard !name.isEmpty, hidden.shows(path: path) else { return nil }
-        return DavFolder(name: name, path: path)
+        return DavFolder(name: name, path: path, isExternal: response.mountType == "external")
       }
       .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
   }
@@ -120,10 +144,12 @@ enum DavFolderParser {
 enum DavClient {
   private static let body = """
     <?xml version="1.0"?>
-    <d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/></d:prop></d:propfind>
+    <d:propfind xmlns:d="DAV:" xmlns:nc="http://nextcloud.org/ns"><d:prop><d:resourcetype/><nc:mount-type/></d:prop></d:propfind>
     """
 
-  static func listFolders(account: SharedAccount, path: String, hidden: HiddenFilter) async throws -> [DavFolder] {
+  /// Every child folder, hidden and external ones included - the sheet's
+  /// toggles filter that list in memory, so changing one doesn't refetch.
+  static func listFolders(account: SharedAccount, path: String) async throws -> [DavFolder] {
     guard let url = WebDAV.fileURL(serverUrl: account.serverUrl, username: account.username, remotePath: path)
     else { throw TransferError(message: "Invalid server address.") }
     var request = URLRequest(url: url)
@@ -139,6 +165,6 @@ enum DavClient {
     guard status == 207 else {
       throw TransferError(message: status == 401 ? "Signed out - open Noo to sign in again." : "Server returned \(status).")
     }
-    return DavFolderParser.folders(from: data, excluding: path, hidden: hidden)
+    return DavFolderParser.folders(from: data, excluding: path, hidden: .include)
   }
 }

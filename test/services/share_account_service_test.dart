@@ -11,6 +11,7 @@ void main() {
     username: 'alice',
     password: 's3cret',
     hiddenFilter: 'include',
+    storageScope: 'all',
   );
   const bob = ShareAccountEntry(
     id: 'nc_home_lan__bob',
@@ -18,6 +19,7 @@ void main() {
     username: 'bob',
     password: 'pw',
     hiddenFilter: 'hide',
+    storageScope: 'cloud',
   );
 
   Map<String, dynamic> build({
@@ -52,10 +54,12 @@ void main() {
     );
     expect(accounts[0]['displayName'], 'alice@cloud.example.com');
     expect(accounts[0]['hiddenFilter'], 'include');
+    expect(accounts[0]['storageScope'], 'all');
     // The display name uses the host only - not the port or sub-path.
     expect(accounts[1]['displayName'], 'bob@nc.home.lan');
     expect(accounts[1]['serverUrl'], 'https://nc.home.lan:8443/nextcloud');
     expect(accounts[1]['hiddenFilter'], 'hide');
+    expect(accounts[1]['storageScope'], 'cloud');
   });
 
   test('the active account and the lock settings are passed through', () {

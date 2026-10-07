@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import '../providers/files_controller.dart';
 import '../providers/session_controller.dart';
@@ -16,12 +17,16 @@ class ShareAccountEntry {
   /// The account's Files "hidden files" filter: `hide`, `only` or `include`.
   final String hiddenFilter;
 
+  /// The account's Files storage scope: `cloud`, `external` or `all`.
+  final String storageScope;
+
   const ShareAccountEntry({
     required this.id,
     required this.serverUrl,
     required this.username,
     required this.password,
     required this.hiddenFilter,
+    required this.storageScope,
   });
 }
 
@@ -57,6 +62,7 @@ class ShareAccountService {
             'displayName':
                 '${a.username}@${Uri.tryParse(a.serverUrl)?.host ?? a.serverUrl}',
             'hiddenFilter': a.hiddenFilter,
+            'storageScope': a.storageScope,
           },
       ],
       'activeId': activeId,
@@ -68,8 +74,8 @@ class ShareAccountService {
 
   /// Publishes every saved account that can actually upload (has a stored
   /// password and isn't signed out), with the active one's hidden-files
-  /// filter taken live from [files] - its saved pref is written
-  /// asynchronously, so it can lag a change that just happened.
+  /// filter and storage scope taken live from [files] - the saved prefs are
+  /// written asynchronously, so they can lag a change that just happened.
   static Future<void> publish(
     SessionController session,
     FilesController files,
@@ -82,12 +88,28 @@ class ShareAccountService {
     final signedOut = store.loadSignedOut(prefs);
     final entries = <ShareAccountEntry>[];
     for (final account in session.accounts) {
-      if (signedOut.contains(account.id)) continue;
+      if (signedOut.contains(account.id)) {
+        debugPrint('[ShareAccounts] skipping ${account.id}: signed out');
+        continue;
+      }
       final password = await store.readPassword(account.id);
-      if (password == null) continue;
-      final filter = account.id == activeId
+      if (password == null) {
+        debugPrint(
+          '[ShareAccounts] skipping ${account.id}: no stored password',
+        );
+        continue;
+      }
+      final isActive = account.id == activeId;
+      final filter = isActive
           ? files.hiddenFilter
           : FilesController.savedHiddenFilter(
+              prefs,
+              store.accountPrefKey,
+              account.id,
+            );
+      final scope = isActive
+          ? files.storageScope
+          : FilesController.savedStorageScope(
               prefs,
               store.accountPrefKey,
               account.id,
@@ -99,9 +121,15 @@ class ShareAccountService {
           username: account.username,
           password: password,
           hiddenFilter: filter.name,
+          storageScope: scope.name,
         ),
       );
     }
+    debugPrint(
+      '[ShareAccounts] publishing ${entries.length} of '
+      '${session.accounts.length} saved accounts, active=$activeId '
+      '(${signedOut.length} signed out)',
+    );
     if (entries.isEmpty) return clear();
 
     await invokeIfAvailable(_channel, 'setAccounts', {
@@ -152,6 +180,7 @@ class ShareAccountSync {
     session.lockAccountSwitching,
     session.lockHiddenFiles,
     files.hiddenFilter.name,
+    files.storageScope.name,
   ].join('|');
 
   void _onChange() {

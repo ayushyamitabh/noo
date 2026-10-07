@@ -247,4 +247,44 @@ class RunnerTests: XCTestCase {
     XCTAssertEqual(TransferNotifications.files(1), "1 file")
     XCTAssertEqual(TransferNotifications.files(3), "3 files")
   }
+
+  // MARK: - External storage + tolerant decoding
+
+  func testFoldersFlagExternalMountsAndStorageFilterAppliesToThem() {
+    let xml = Data(
+      """
+      <?xml version="1.0"?><d:multistatus xmlns:d="DAV:" xmlns:nc="http://nextcloud.org/ns">
+      <d:response><d:href>/remote.php/dav/files/a/</d:href><d:propstat><d:prop>
+        <d:resourcetype><d:collection/></d:resourcetype></d:prop></d:propstat></d:response>
+      <d:response><d:href>/remote.php/dav/files/a/NAS/</d:href><d:propstat><d:prop>
+        <d:resourcetype><d:collection/></d:resourcetype><nc:mount-type>external</nc:mount-type>
+        </d:prop></d:propstat></d:response>
+      <d:response><d:href>/remote.php/dav/files/a/Docs/</d:href><d:propstat><d:prop>
+        <d:resourcetype><d:collection/></d:resourcetype></d:prop></d:propstat></d:response>
+      <d:response><d:href>/remote.php/dav/files/a/Shared/</d:href><d:propstat><d:prop>
+        <d:resourcetype><d:collection/></d:resourcetype><nc:mount-type>shared</nc:mount-type>
+        </d:prop></d:propstat></d:response>
+      </d:multistatus>
+      """.utf8)
+    let folders = DavFolderParser.folders(from: xml, excluding: "/")
+    XCTAssertEqual(folders.map(\.name), ["Docs", "NAS", "Shared"])
+    XCTAssertEqual(folders.map(\.isExternal), [false, true, false], "only mount-type=external counts")
+
+    XCTAssertTrue(StorageFilter.cloud.shows(isExternal: false))
+    XCTAssertFalse(StorageFilter.cloud.shows(isExternal: true))
+    XCTAssertTrue(StorageFilter.external.shows(isExternal: true))
+    XCTAssertFalse(StorageFilter.external.shows(isExternal: false))
+    XCTAssertTrue(StorageFilter.all.shows(isExternal: true) && StorageFilter.all.shows(isExternal: false))
+    XCTAssertEqual(StorageFilter(raw: "bogus"), .cloud)
+  }
+
+  func testSharedAccountDecodesDataWrittenBeforeNewFieldsExisted() throws {
+    let old = Data(
+      """
+      {"id":"a","serverUrl":"https://x","username":"u","authHeader":"Basic x","displayName":"u@x"}
+      """.utf8)
+    let decoded = try JSONDecoder().decode(SharedAccount.self, from: old)
+    XCTAssertEqual(decoded.hiddenFilter, "hide")
+    XCTAssertEqual(decoded.storageScope, "cloud")
+  }
 }
