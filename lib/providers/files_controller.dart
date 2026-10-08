@@ -9,10 +9,16 @@ import 'session_controller.dart';
 
 enum FileSortField { name, dateCreated, dateModified, size }
 
-/// Which storage a listing shows — always exactly one, like the list/grid
-/// view toggle, not an optional filter. Shared across Files/Photos/
-/// Favorites (see [applyCommonFilters]'s doc comment).
-enum StorageScope { cloud, external }
+/// Which storage a listing shows: [cloud] (the default - external mounts
+/// hidden), only [external] ones, or [all] of both (Files shows the
+/// external items in their own collapsible section then). Shared across
+/// Files/Photos/Favorites (see [applyCommonFilters]'s doc comment).
+enum StorageScope { cloud, external, all }
+
+/// Which dotfile/dotfolder items a listing shows: [hide] them (the
+/// default), show [only] them, or [include] them alongside everything else.
+/// Files and Photos each keep their own (see [applyCommonFilters]).
+enum HiddenFilesFilter { hide, only, include }
 
 /// The Files tab's files/folders/both filter — independent of and applied
 /// after [StorageScope]/favorites/hidden filtering.
@@ -72,6 +78,7 @@ class FilesController extends ChangeNotifier
   static const _prefStorageScope = 'ui_storage_scope';
   static const _prefFilesTypeFilter = 'ui_files_type_filter';
   static const _prefShowHiddenFiles = 'ui_show_hidden';
+  static const _prefHiddenFilter = 'ui_hidden_filter';
   static const _prefFolderSort = 'ui_folder_sort';
   static const prefCachePolicy = 'ui_cache_policy';
   static const prefCacheIntervalMinutes = 'ui_cache_interval_minutes';
@@ -82,7 +89,7 @@ class FilesController extends ChangeNotifier
   bool _isGridView = false;
   StorageScope _storageScope = StorageScope.cloud;
   FilesTypeFilter _filesTypeFilter = FilesTypeFilter.all;
-  bool _showHiddenFiles = false;
+  HiddenFilesFilter _hiddenFilter = HiddenFilesFilter.hide;
 
   final Map<String, FileSortField> _folderSortField = {};
   final Map<String, bool> _folderSortAscending = {};
@@ -135,7 +142,7 @@ class FilesController extends ChangeNotifier
   bool get isGridView => _isGridView;
   StorageScope get storageScope => _storageScope;
   FilesTypeFilter get filesTypeFilter => _filesTypeFilter;
-  bool get showHiddenFiles => _showHiddenFiles;
+  HiddenFilesFilter get hiddenFilter => _hiddenFilter;
   FileSortField get filesSortField => sortFieldFor(_currentFolderPath);
   bool get filesSortAscending => sortAscendingFor(_currentFolderPath);
 
@@ -188,24 +195,30 @@ class FilesController extends ChangeNotifier
   List<NextcloudItem> applyCommonFilters(
     List<NextcloudItem> source, {
     required bool showFavoritesOnly,
-    required bool showHidden,
+    required HiddenFilesFilter hidden,
     bool applyStorageScope = true,
   }) {
     var filtered = source;
     if (showFavoritesOnly) {
       filtered = filtered.where((item) => item.isFavorite).toList();
     }
-    if (!showHidden) {
-      filtered = filtered.where((item) => !_isHiddenItem(item)).toList();
+    switch (hidden) {
+      case HiddenFilesFilter.hide:
+        filtered = filtered.where((item) => !_isHiddenItem(item)).toList();
+      case HiddenFilesFilter.only:
+        filtered = filtered.where(_isHiddenItem).toList();
+      case HiddenFilesFilter.include:
+        break;
     }
     if (applyStorageScope) {
-      filtered = filtered
-          .where(
-            (item) => _storageScope == StorageScope.external
-                ? item.isExternalStorage
-                : !item.isExternalStorage,
-          )
-          .toList();
+      switch (_storageScope) {
+        case StorageScope.cloud:
+          filtered = filtered.where((i) => !i.isExternalStorage).toList();
+        case StorageScope.external:
+          filtered = filtered.where((i) => i.isExternalStorage).toList();
+        case StorageScope.all:
+          break;
+      }
     }
     return filtered;
   }
@@ -231,7 +244,7 @@ class FilesController extends ChangeNotifier
       // Files itself doesn't filter by favorite - that's the dedicated
       // Favorites tab's job.
       showFavoritesOnly: false,
-      showHidden: _showHiddenFiles,
+      hidden: _hiddenFilter,
       applyStorageScope: applyStorageScope,
     );
     switch (_filesTypeFilter) {
@@ -270,7 +283,7 @@ class FilesController extends ChangeNotifier
     _isGridView = false;
     _storageScope = StorageScope.cloud;
     _filesTypeFilter = FilesTypeFilter.all;
-    _showHiddenFiles = false;
+    _hiddenFilter = HiddenFilesFilter.hide;
     _cachePolicy = defaultCachePolicy;
     _cacheIntervalMinutes = defaultCacheIntervalMinutes;
     _isLoading = false;
@@ -321,7 +334,11 @@ class FilesController extends ChangeNotifier
           (f) => f.name == filesTypeFilterName,
           orElse: () => FilesTypeFilter.all,
         );
-        _showHiddenFiles = prefs.getBool(k(_prefShowHiddenFiles)) ?? false;
+        _hiddenFilter = loadHiddenFilter(
+          prefs,
+          k(_prefHiddenFilter),
+          k(_prefShowHiddenFiles),
+        );
 
         final folderSortJson = prefs.getString(k(_prefFolderSort));
         if (folderSortJson != null) {
@@ -639,10 +656,12 @@ class FilesController extends ChangeNotifier
     );
   }
 
-  /// Only *enabling* hidden-files visibility is gated - hiding them again
-  /// never exposes anything, so that direction is always allowed instantly.
-  Future<void> toggleShowHiddenFiles() async {
-    if (!_showHiddenFiles) {
+  /// Only *leaving* [HiddenFilesFilter.hide] is gated - going back to it
+  /// never exposes anything, so that direction is always allowed instantly
+  /// (and switching between the two revealing modes needs no second prompt).
+  Future<void> setHiddenFilter(HiddenFilesFilter filter) async {
+    if (_hiddenFilter == filter) return;
+    if (_hiddenFilter == HiddenFilesFilter.hide) {
       if (!await session.passGate(
         session.lockHiddenFiles,
         'Unlock to show hidden files',
@@ -650,12 +669,59 @@ class FilesController extends ChangeNotifier
         return;
       }
     }
-    _showHiddenFiles = !_showHiddenFiles;
+    _hiddenFilter = filter;
     notifyListeners();
     _persistAccountPref(
-      _prefShowHiddenFiles,
-      (p, key) => p.setBool(key, _showHiddenFiles),
+      _prefHiddenFilter,
+      (p, key) => p.setString(key, filter.name),
     );
+  }
+
+  /// The storage scope saved for [accountId] (see [savedHiddenFilter]).
+  static StorageScope savedStorageScope(
+    SharedPreferences prefs,
+    String Function(String accountId, String baseKey) accountPrefKey,
+    String accountId,
+  ) {
+    final name = prefs.getString(accountPrefKey(accountId, _prefStorageScope));
+    return StorageScope.values.firstWhere(
+      (s) => s.name == name,
+      orElse: () => StorageScope.cloud,
+    );
+  }
+
+  /// The hidden-files filter saved for [accountId] - not just the active
+  /// account's, which is all [hiddenFilter] holds. For iOS's Share Extension,
+  /// which follows each account's own setting.
+  static HiddenFilesFilter savedHiddenFilter(
+    SharedPreferences prefs,
+    String Function(String accountId, String baseKey) accountPrefKey,
+    String accountId,
+  ) => loadHiddenFilter(
+    prefs,
+    accountPrefKey(accountId, _prefHiddenFilter),
+    accountPrefKey(accountId, _prefShowHiddenFiles),
+  );
+
+  /// Reads a persisted [HiddenFilesFilter], falling back to the old
+  /// show-hidden bool (`true` meant everything incl. hidden) so a pref
+  /// saved before the three-way filter keeps its meaning. [key]s are
+  /// already account-namespaced by the caller.
+  static HiddenFilesFilter loadHiddenFilter(
+    SharedPreferences prefs,
+    String key,
+    String legacyBoolKey,
+  ) {
+    final name = prefs.getString(key);
+    if (name != null) {
+      return HiddenFilesFilter.values.firstWhere(
+        (f) => f.name == name,
+        orElse: () => HiddenFilesFilter.hide,
+      );
+    }
+    return (prefs.getBool(legacyBoolKey) ?? false)
+        ? HiddenFilesFilter.include
+        : HiddenFilesFilter.hide;
   }
 
   void _persistFolderSort() {

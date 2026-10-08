@@ -1,7 +1,15 @@
 import 'package:flutter/material.dart';
 import '../../../theme/design_tokens.dart';
 
-enum NooButtonVariant { primary, tonal, secondary, danger, outline, text, textDanger }
+enum NooButtonVariant {
+  primary,
+  tonal,
+  secondary,
+  danger,
+  outline,
+  text,
+  textDanger,
+}
 
 enum NooButtonSize { cta, card, field, toolbar, compact, xs }
 
@@ -37,6 +45,14 @@ class NooButton extends StatefulWidget {
   final bool disabled;
   final VoidCallback? onTap;
 
+  /// A round, icon-only button (no label) - [icon] centred in a circle as
+  /// wide as the size's height, instead of the pill's side padding. Callers
+  /// are responsible for a tooltip/semantic label, since there's no text.
+  final bool iconOnly;
+
+  /// Continuous icon-only to labelled expansion for animated shell actions.
+  final double? expansion;
+
   const NooButton({
     super.key,
     this.variant = NooButtonVariant.primary,
@@ -46,6 +62,8 @@ class NooButton extends StatefulWidget {
     this.fullWidth = false,
     this.disabled = false,
     this.onTap,
+    this.iconOnly = false,
+    this.expansion,
   });
 
   @override
@@ -87,17 +105,29 @@ class _NooButtonState extends State<NooButton> {
     final colors = context.nooColors;
     final s = _sizes[widget.size]!;
     final (bg, fg, border) = _colors(colors);
-    final hasLeadingIcon = widget.icon != null && widget.child != null && !_isTextVariant;
+    final hasLeadingIcon =
+        widget.icon != null && widget.child != null && !_isTextVariant;
 
     final content = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         if (widget.icon != null) Icon(widget.icon, size: s.icon, color: fg),
-        if (widget.icon != null && widget.child != null) SizedBox(width: s.gap),
-        if (widget.child != null)
-          DefaultTextStyle(
-            style: NooText.buttonSm.copyWith(fontSize: s.font, color: fg),
-            child: widget.child!,
+        if (widget.icon != null && widget.child != null)
+          SizedBox(width: s.gap * (widget.expansion ?? 1)),
+        if (widget.child != null && widget.expansion != 0)
+          ClipRect(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              widthFactor: widget.expansion ?? 1,
+              heightFactor: 1,
+              child: Opacity(
+                opacity: widget.expansion ?? 1,
+                child: DefaultTextStyle(
+                  style: NooText.buttonSm.copyWith(fontSize: s.font, color: fg),
+                  child: widget.child!,
+                ),
+              ),
+            ),
           ),
       ],
     );
@@ -107,7 +137,9 @@ class _NooButtonState extends State<NooButton> {
       child: GestureDetector(
         onTapDown: widget.disabled ? null : (_) => setState(() => _down = true),
         onTapUp: widget.disabled ? null : (_) => setState(() => _down = false),
-        onTapCancel: widget.disabled ? null : () => setState(() => _down = false),
+        onTapCancel: widget.disabled
+            ? null
+            : () => setState(() => _down = false),
         onTap: widget.disabled ? null : widget.onTap,
         child: AnimatedScale(
           scale: _down && !widget.disabled ? NooMotion.pressScale : 1,
@@ -115,8 +147,20 @@ class _NooButtonState extends State<NooButton> {
           curve: NooMotion.ease,
           child: Container(
             height: s.height,
-            width: widget.fullWidth ? double.infinity : null,
-            padding: _isTextVariant
+            width: widget.iconOnly
+                ? s.height
+                : (widget.fullWidth ? double.infinity : null),
+            padding: widget.expansion != null
+                ? EdgeInsets.only(
+                    left:
+                        (s.height - s.icon) / 2 +
+                        (s.px - 4 - (s.height - s.icon) / 2) *
+                            widget.expansion!,
+                    right:
+                        (s.height - s.icon) / 2 +
+                        (s.px - (s.height - s.icon) / 2) * widget.expansion!,
+                  )
+                : _isTextVariant || widget.iconOnly
                 ? EdgeInsets.zero
                 : EdgeInsets.only(
                     left: hasLeadingIcon ? s.px - 4 : s.px,
@@ -128,7 +172,9 @@ class _NooButtonState extends State<NooButton> {
             // of shrink-wrapping to it, which is what stretched this button
             // edge-to-edge instead of sizing to its content (see NooFab's
             // doc comment for the same bug).
-            alignment: widget.fullWidth ? Alignment.center : null,
+            alignment: widget.fullWidth || widget.iconOnly
+                ? Alignment.center
+                : null,
             decoration: BoxDecoration(
               color: bg,
               borderRadius: BorderRadius.circular(NooRadii.pill),

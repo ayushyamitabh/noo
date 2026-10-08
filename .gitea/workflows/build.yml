@@ -1,12 +1,13 @@
 name: Build APK
 
-# Deliberately not "on every push" - only when a release-candidate tag
-# (RC1, RC2, RC2026.1, ...) is pushed. Tag the commit you want built:
-#   git tag RC1 && git push origin RC1
+# Deliberately not "on every push" - only when an Android release-candidate
+# tag (RC-Android-1, RC-Android-2, ...) is pushed. Tag the commit you want built:
+#   git tag RC-Android-1 && git push origin RC-Android-1
+# iOS has its own RC-iOS-* tags (ios.yml); Release-* builds both platforms.
 on:
   push:
     tags:
-      - "RC*"
+      - "RC-Android-*"
 
 jobs:
   build:
@@ -72,7 +73,7 @@ jobs:
         # talks to this same Gitea instance automatically via the
         # `github.token`/`github.server_url` context Gitea Actions
         # provides for compatibility. Release is named/tagged after
-        # whatever tag triggered this run (e.g. "RC1").
+        # whatever tag triggered this run (e.g. "RC-Android-1").
         uses: akkuman/gitea-release-action@v1
         with:
           files: ${{ env.APK_PATH }}

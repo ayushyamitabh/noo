@@ -798,6 +798,19 @@ plugin's own manifest via merge, but kept explicit here too).
 own requirement) via `maxOf(24, flutter.minSdkVersion)` rather than trusting
 Flutter's own default to already be high enough.
 
+**The three locks are independent** (Settings -> Security;
+`SessionController`): `loginLockEnabled` (unlock to open the app - the only one
+`needsUnlock`/the lock screen look at), `lockAccountSwitching` (unlock to
+switch accounts) and `lockHiddenFiles` (unlock to turn on showing hidden
+files). Each gate works with the others off - `passGate(gate, reason)`
+prompts whenever its own `gate` is on, whether or not login lock is. Turning
+any of them on **or off** needs a successful `AppLockService.authenticate`
+(on also needs `isDeviceSupported`, so a gate nobody can pass can't be set;
+off needs it so someone with a momentarily unlocked phone can't remove it),
+and `disableLoginLock` leaves the other two untouched. The old master/sub-toggle
+dependency is gone. Tests replace the prompt through
+`AppLockService.debugAuthenticate`/`debugIsDeviceSupported`.
+
 `isRestoringSession` still gates the splash screen until the above resolves
 — see `standards.md` for why widget tests must mock both storage channels
 rather than relying on this async path throwing naturally.
@@ -811,3 +824,243 @@ rather than relying on this async path throwing naturally.
 bitmask (1 read, 2 update, 4 create, 8 delete, 16 reshare). The share
 sheet's per-person pill opens a menu with Can view (1) / Can edit (3 for
 files, 15 for folders), keeping the existing reshare bit, plus Remove access.
+
+## Native services on iOS (in progress)
+
+The five `dev.ayushya.noo/*` channels (`share_intent`, `pick_intent`,
+`upload_service`, `download_service`, `sync_service`, plus their status
+`EventChannel`s) were written for Android in Kotlin. iOS implements
+`upload_service` (+ its status stream), `download_service` and
+`share_intent` and `sync_service` so far (`ios/Runner/Native/` +
+`ios/ShareExtension/`, see below); for `pick_intent` there's no handler, so
+calls throw `MissingPluginException`. `lib/services/native_channel.dart`
+makes that safe until each one is built in Swift:
+
+- `invokeIfAvailable` - a missing implementation returns null. For cold-start
+  checks (`getInitialShare`, `getPickRequest`, `getSyncStatus`) and
+  scheduling/cleanup (`reschedule`, `cancel`, `removeLocalSync`,
+  `finishPick`/`cancelPick`).
+- `invokeOrExplain` - throws `NativeServiceUnavailable("<Feature>")`, whose
+  message callers already show in a snackbar ("Uploading isn't available on
+  this platform yet."). For things the user just asked for: `startUpload`,
+  `startDownload`, `syncNow`, `resolveConflict`.
+- `quietEvents` - wraps an `EventChannel` so the missing-implementation error
+  is dropped instead of surfacing as an unhandled stream error.
+
+When a channel gets a real iOS implementation nothing changes on the Dart
+side - the helpers only act on `MissingPluginException`.
+
+`SyncService.baseDirectory()` is where the `sync/<accountId>/...` mirror
+lives: `getExternalStorageDirectory()` on Android (what `SyncEngine.kt`
+writes), the app support directory elsewhere, because that call throws on
+iOS. `OfflineController` and `localSyncedFilePath` both go through it.
+### iOS upload/download (`ios/Runner/Native/`)
+
+- `NativeServices.swift` registers the channels from
+  `AppDelegate.didInitializeImplicitFlutterEngine` (via
+  `engineBridge.applicationRegistrar.messenger()`) and forwards
+  `startUpload`/`startDownload` to `TransferManager`; a batch's completion
+  goes back over `upload_service/status` so `FilesController` refreshes the
+  folder like on Android.
+- `TransferManager.swift` runs everything on one *background* `URLSession`
+  (`dev.ayushya.noo.transfers`, `sessionSendsLaunchEvents`), so transfers
+  finish after the app is suspended/closed; `AppDelegate` hands the system's
+  `handleEventsForBackgroundURLSession` completion handler to it and calls
+  `reconnect()` at launch. Each task carries its info in `taskDescription`
+  and its batch's running totals live in `UserDefaults`, so the one summary
+  local notification ("Uploaded 3 files") still fires after a relaunch.
+- Uploads: one `PUT` per file to `<server>/remote.php/dav/files/<user>/...`
+  from a staged copy in Caches (no chunking, so very large files are bound by
+  the server's single-request limit; an existing file with the same name is
+  overwritten). Sends `X-OC-Mtime`. Downloads: `GET` into
+  `Documents/Downloads`, with `UIFileSharingEnabled` +
+  `LSSupportsOpeningDocumentsInPlace` set so it shows in the Files app under
+  "On My iPhone > Noo"; a name clash becomes `a (1).txt`.
+- Notifications (`ios/Shared/TransferNotifications.swift`): "Uploading 3
+  files..." when a batch starts, replaced in place (same request id =
+  `transfer.<batch>`) by "Uploaded 3 files" when it ends. iOS can't show live
+  byte progress from a background session the way Android's foreground
+  service does (a Live Activity would, but needs a widget extension), and
+  there's no cancel yet. The Dart snackbar text still says "see the
+  notification for progress".
+- `WebDAV.swift` (URL building) and `LocalFiles.uniqueURL` are pure and
+  covered by `ios/RunnerTests` (`xcodebuild test -workspace
+  ios/Runner.xcworkspace -scheme Runner -destination 'platform=iOS
+  Simulator,id=<udid>'`).
+
+### iOS Share Extension (`ios/ShareExtension/`, `ios/Shared/`)
+
+"Share to Noo" from any app's share sheet. A Share Extension can't open its
+host app (`extensionContext.open` is Today-widget-only), so - like
+Reminders/Notes - the destination is picked *inside* the sheet:
+
+1. `ShareViewController` copies each shared file (`NSItemProvider.
+   loadFileRepresentation`, public.item) into the App Group container
+   (`group.dev.ayushya.noo`, `SharedInbox/<batch>/`) and hosts the SwiftUI
+   `SharePickerView` (`ShareModel` holds its state).
+2. It reads the accounts from the shared Keychain (`SharedAccountStore` ->
+   `SharedAccounts`) and lists folders over WebDAV (`DavClient` `PROPFIND`
+   Depth 1, parsed by `DavFolderParser`). With **several accounts an account
+   list comes first** (the app's active one is marked "Active"; "Change
+   account" returns to it); with one it goes straight to its folders. The
+   Dart side keeps the keychain data current: `ShareAccountSync`
+   (`lib/services/share_account_service.dart`, started from the shell's
+   `initState`) republishes - through the native `share_account` channel's
+   `setAccounts` - when an account becomes ready or when its change
+   signature moves: the account list/active account, the three lock
+   settings, or the active account's hidden-files filter / storage scope;
+   sign-out calls
+   `clearAccount`. It publishes every saved account that has a stored
+   password and isn't signed out, each with its **own Files hidden-files
+   filter** (`FilesController.savedHiddenFilter`).
+   - **Toggles**: the folder list has two menu chips, **Hidden** (hide / only
+     hidden / all) and **Storage** (cloud only / only external / all +
+     external), each starting at the chosen account's own app setting
+     (`hiddenFilter`, `storageScope` published per account) and changeable for
+     this share only - nothing is written back. The list is fetched once per
+     folder (`DavClient.listFolders` returns everything, hidden and external
+     included, with `nc:mount-type` requested) and filtered in memory
+     (`ShareModel.visibleFolders`), so flipping a toggle just returns to the
+     top. Hidden uses the app's rule (`HiddenFilter`): a folder is hidden when
+     it *or any ancestor* starts with a dot. External storage: only a mount's
+     *root* has `mount-type=external`, so `ShareModel` remembers the roots it
+     has seen and treats anything under one as external too (the app's own
+     filter doesn't, which empties its list inside a mount). "All" lists
+     external folders in their own "External storage" group.
+   - **Hidden unlock**: turning hidden folders *on* (from `hide`), or opening
+     the sheet with the account's filter already not `hide`, asks for
+     Face ID/passcode when "lock hidden files" is on (`DeviceAuth`, the
+     `.deviceOwnerAuthentication` policy - biometrics with passcode fallback,
+     like `local_auth` with `biometricOnly: false`); cancelling keeps them
+     hidden, with a note. Switching `only` <-> `all`, or back to `hide`, never
+     asks.
+   - **Account switching**: choosing any account other than the app's
+     active one asks for the same unlock when "lock account switching" is on.
+     **Every gated action prompts every time**, exactly like the app - no
+     unlock is remembered for the sheet (an earlier version cached one, so
+     later account picks / hidden toggles skipped Face ID). The only
+     merging is within one action: picking another account whose own filter
+     already shows hidden folders is a single prompt covering both
+     (`SharedAccounts.unlockNeeds` / `SelectionUnlock`, unit-tested).
+     Declining the account unlock cancels the pick; declining only the
+     hidden unlock shows the account with hidden folders hidden.
+   - Opening the sheet itself is not gated - only these two actions are
+     (as in the app, where login lock guards launch and these are separate
+     locks).
+3. **Upload** calls `ShareUpload.enqueue`: one `PUT` per file on a *background*
+   `URLSession` (`dev.ayushya.noo.transfers.share`, with
+   `sharedContainerIdentifier`) that outlives the extension, and posts
+   "Uploading N files...". Results go to whichever process is alive:
+   files that finish while the sheet is still open are counted by the
+   extension's `ShareUploadDelegate`; the rest by the app, which recreates
+   that session at launch (`TransferManager.reconnect`) and is relaunched by
+   the system. Either way `UploadResults.handle` deletes the staged copy,
+   counts the file in `TransferBatchStore` (batch totals live in the App
+   Group's `UserDefaults` because the two are different processes) and
+   posts the "Uploaded N files" summary on the last one; an upload the
+   extension finished leaves a note (`noteFinishedUpload`) so the app
+   refreshes that folder on its next activation. **Don't give the
+   extension's session no delegate** - a fast upload then finishes unseen and
+   the invalidated session is discarded before the app can ever hear of it
+   (found the hard way: no notification, no count).
+4. Fallbacks: with no account (or the user taps "Choose a folder later in
+   Noo") the files go into `SharedInbox/pending.json` instead and a local
+   notification asks the user to open Noo; the app consumes that through
+   `share_intent` (`getInitialShare` at cold start, `share_intent/new` on
+   `UIApplication.didBecomeActiveNotification`) into the same Dart
+   `ShareUploadView` flow as an Android share, and `TransferManager.
+   startUpload` deletes the inbox copy once staged.
+
+The keychain group is `$(AppIdentifierPrefix)dev.ayushya.noo.shared`
+(`keychain-access-groups` in both `.entitlements`); both Info.plists also
+carry it as `NooKeychainAccessGroup`, which `SharedAccountStore` reads, so the
+two processes always agree on the team-prefixed id. Everything is stored as
+JSON in one generic-password item (`kSecAttrAccessibleAfterFirstUnlock`).
+
+`ios/Shared/` (compiled into both targets): `SharedInbox`, `SharedAccount`,
+`ShareUpload`, `DavFolders`, `TransferTypes`, `WebDAV`. Everything in it that
+isn't UI is unit-tested in `RunnerTests`. The extension's bundle id is
+`dev.ayushya.noo.ShareExtension` and its version/build come from the same
+`FLUTTER_BUILD_NAME`/`FLUTTER_BUILD_NUMBER` xcconfig as the app (iOS rejects a
+mismatch); it's embedded by an "Embed Foundation Extensions" phase placed
+*before* Flutter's script phases (after them Xcode reports a dependency
+cycle). The simulator honours the App Group and keychain group without a
+signing team; a real device needs a team that owns both ids.
+
+### iOS device sync (`ios/Runner/Native/SyncEngine/`)
+
+A Swift port of Android's `SyncEngine.kt`/`SyncWorker.kt`/
+`ConflictResolveWorker.kt`/`SyncStatusBus.kt`, behind the same `sync_service`
+channel (+ `/status` event stream) so the Dart side is unchanged apart from
+`cancelAccount`'s `forget` flag (below). Same rules: only paths the user
+synced are mirrored; brand-new local files are never uploaded (only edits to
+already-synced files are); a file edited on both sides is a conflict (neither
+copy is touched, "Keep local"/"Use server" resolves it); a local deletion is
+repaired by re-downloading; the mirror lives at
+`<Application Support>/sync/<accountId>/...` (what Dart's
+`SyncService.baseDirectory()` reads for the Offline tab, excluded from
+backup) with state in `<...>/sync-state/<accountId>/*.json`.
+
+- `SyncDiff` (pure decisions, mirrors `diffFolder`), `DavSyncClient`
+  (PROPFIND/GET/PUT on a cookie-less ephemeral session), `SyncRunner` (one
+  account's pass), `SyncStore`, `SyncConfigStore` (Keychain), `SyncCoordinator`
+  (runs, `BGTaskScheduler`, notifications), and the `registerSync` channel
+  handlers in `NativeServices.swift`.
+- **Safeguards (each has a regression test in `SyncEngineTests`, which drives
+  the real runner against an in-memory fake Nextcloud):** an unreachable
+  server, a non-207, or a PROPFIND answer that is truncated, not a
+  `multistatus`, empty, or has an href outside the account root / with dot
+  components throws `SyncRemoteUnavailable` and the path is skipped - never
+  diffed as empty or partial (which would delete local files); unreadable
+  recorded state makes the run do nothing (`SyncStateUnreadable`) instead of
+  treating every file as untracked and overwriting local edits; every
+  server-supplied path is resolved through `LocalFS.resolve` (no escaping the
+  mirror) and entries that would land on the same local file (case or Unicode
+  spellings) are skipped, not downloaded over each other; downloads go to a
+  temp file and replace atomically, never replacing a folder; empty-folder
+  pruning uses `rmdir` and only on a successful empty read; a root's etag
+  shortcut marker is only written when the path synced cleanly *and* the state
+  was saved.
+- **Server deletions:** remove the local copy even if edited locally, matching
+  Android.
+- **Deliberate differences from Android:** after our own upload the file's
+  etag is re-read so it isn't downloaded back; state is flushed every 20 transfers; conflicts are kept
+  per account on the status bus; downloads write to a temp file first. No
+  ongoing progress notification (a run posts a summary, and conflict
+  notifications with Keep local / Use server actions).
+- **Running:** every run - "Sync now", the in-app refresh, and background -
+  goes through `SyncCoordinator.startRun`: one tracked run per account
+  (`force` supersedes it, a quiet check leaves it alone), serialised by one
+  cancellable `AsyncMutex`, tagged with a per-account *generation* so a run
+  that was only queued never starts for an account that was cancelled or had a
+  path removed meanwhile. `removeLocalSync` cancels the run and takes the same
+  mutex, so a finishing run can't write stale state back over it.
+- **Background:** `BGAppRefreshTask` + `BGProcessingTask`
+  (`dev.ayushya.noo.sync.refresh`/`.processing`, `UIBackgroundModes` fetch +
+  processing, `BGTaskSchedulerPermittedIdentifiers` in Info.plist; handlers
+  registered before launch finishes). `intervalMinutes` (floored at 15, like
+  Android) is only the *earliest* start - iOS picks when. The Files cache
+  settings explain this on iOS; the 15-minute Android warning appears only
+  on Android for intervals below 15 minutes. Wi-Fi-only is
+  checked with `NWPathMonitor` (`isExpensive`) since a BGTask can't require
+  it. An expiring task cancels its runs (they save state as they go) and is
+  completed exactly once (`OnceGate`). **Not testable in the simulator**
+  (needs a real device and the Xcode `_simulateLaunchForTaskWithIdentifier`
+  debugger command).
+- **Simulator verification:** a temporary debug control ran the native
+  background slot and confirmed files update for a non-active saved account.
+  The control and its channel handler were removed after verification.
+  `startBackgroundSlot` retains a regression test for periodic eligibility.
+  OS wake-up delivery and background execution time limits remain unverified.
+- **Credentials:** `SyncConfigStore` keeps each account's server, auth header,
+  paths, interval and notify flag as one Keychain item
+  (`AfterFirstUnlock`, so a background run works with the phone locked).
+  Conflict notification actions look the account up there - nothing secret is
+  in a notification. `sync_service.cancel` takes `forget` (default true:
+  signed out/removed -> credentials dropped; false: only background sync was
+  turned off -> kept for manual runs and conflict actions). Dart sends
+  `forget: false` only for "paths configured but no background interval".
+- **Gotcha:** `ios/.gitignore` has `**/*sync/`, which (case-insensitively on
+  macOS) swallows any directory named `Sync` - hence `SyncEngine/`.
+
+Not built on iOS yet: the picker (File Provider) - see the iOS handoff notes.

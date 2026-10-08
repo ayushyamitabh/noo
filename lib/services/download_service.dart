@@ -38,6 +38,9 @@ class DownloadService {
           .toList(),
     );
 
-    await _channel.invokeMethod('startDownload', {...args, 'files': filesJson});
+    await invokeOrExplain(_channel, 'startDownload', 'Downloading', {
+      ...args,
+      'files': filesJson,
+    });
   }
 }

@@ -4,8 +4,11 @@ import '../../models/selection_action.dart';
 import '../../providers/settings_controller.dart';
 import '../../theme/design_tokens.dart';
 import '../noo/lists/noo_tab_order_row.dart';
+import '../noo/lists/noo_selection_bar.dart';
+import '../noo/lists/noo_settings_row.dart';
+import '../noo/lists/noo_grouped_list.dart';
+import '../noo/core/noo_segmented_control.dart';
 import '../noo/noo_layout.dart';
-import 'settings_section.dart';
 
 /// Settings section: the priority order bulk actions (favorite, share,
 /// download, ...) show in on the Files/Photos/Favorites multi-select
@@ -13,7 +16,7 @@ import 'settings_section.dart';
 /// which ones land in `NooSelectionBar`'s fixed inline slots (3 mobile / 4
 /// desktop, see its own doc comment) vs. behind its trailing "More" -
 /// there's no pin/hide concept here the way Tabs has, so this is just a
-/// reorder list, not a whole section of its own option rows.
+/// position choice followed by a reorder list.
 class SettingsActionBarSection extends StatelessWidget {
   const SettingsActionBarSection({super.key});
 
@@ -33,18 +36,34 @@ class SettingsActionBarSection extends StatelessWidget {
     final desktop = NooLayout.isDesktop(context);
 
     final orderList = _ActionOrderList(
+      rounded: desktop,
       order: settings.selectionActionOrder,
       onReorder: (oldIndex, newIndex) =>
           _handleReorder(settings, oldIndex, newIndex),
     );
 
+    final positionRow = NooSettingsRow(
+      label: const Text('Position'),
+      trailing: NooSegmentedControl<SelectionBarPosition>(
+        onSurface: true,
+        value: settings.selectionBarPosition,
+        onChanged: settings.setSelectionBarPosition,
+        options: const [
+          NooSegmentOption(value: SelectionBarPosition.top, label: 'Top'),
+          NooSegmentOption(value: SelectionBarPosition.bottom, label: 'Bottom'),
+        ],
+      ),
+    );
     final colors = context.nooColors;
 
     if (!desktop) {
-      return SettingsSection(
-        title: 'Action bar',
-        subtitle: _subtitle,
-        children: [orderList],
+      return NooGroupedList(
+        footer: const Text(_subtitle),
+        children: [
+          _ActionBarPreview(order: settings.selectionActionOrder),
+          positionRow,
+          orderList,
+        ],
       );
     }
 
@@ -65,7 +84,60 @@ class SettingsActionBarSection extends StatelessWidget {
           const SizedBox(height: 4),
           Text(_subtitle, style: NooText.meta.copyWith(color: colors.fg3)),
           const SizedBox(height: NooSpace.md),
+          _ActionBarPreview(order: settings.selectionActionOrder),
+          const SizedBox(height: NooSpace.md),
+          positionRow,
+          const SizedBox(height: NooSpace.md),
           orderList,
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionBarPreview extends StatelessWidget {
+  final List<SelectionActionKind> order;
+
+  const _ActionBarPreview({required this.order});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.nooColors;
+    final desktop = NooLayout.isDesktop(context);
+    return Container(
+      padding: const EdgeInsets.all(NooSpace.sm),
+      color: colors.surface2,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Preview', style: NooText.meta.copyWith(color: colors.fg3)),
+          const SizedBox(height: NooSpace.xs),
+          // Settings has a narrower column than the file browser. Scale the
+          // real bar to fit rather than changing its inline/overflow split.
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: SizedBox(
+              width: desktop ? 1000 : 400,
+              child: NooSelectionBar(
+                count: 1,
+                isDesktop: desktop,
+                iosStyle: NooLayout.iosStyle(context),
+                onClose: () {},
+                actions: [
+                  for (final kind in order)
+                    SelectionAction(
+                      kind: kind,
+                      icon: kind.icon,
+                      label: kind.label,
+                      onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('${kind.label} preview')),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -79,8 +151,13 @@ class SettingsActionBarSection extends StatelessWidget {
 class _ActionOrderList extends StatelessWidget {
   final List<SelectionActionKind> order;
   final void Function(int oldIndex, int newIndex) onReorder;
+  final bool rounded;
 
-  const _ActionOrderList({required this.order, required this.onReorder});
+  const _ActionOrderList({
+    required this.order,
+    required this.onReorder,
+    required this.rounded,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -105,12 +182,14 @@ class _ActionOrderList extends StatelessWidget {
         );
       },
     );
+    final rows = DecoratedBox(
+      decoration: BoxDecoration(color: colors.line),
+      child: list,
+    );
+    if (!rounded) return rows;
     return ClipRRect(
       borderRadius: BorderRadius.circular(NooRadii.card),
-      child: DecoratedBox(
-        decoration: BoxDecoration(color: colors.line),
-        child: list,
-      ),
+      child: rows,
     );
   }
 }

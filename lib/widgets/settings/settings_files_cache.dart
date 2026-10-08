@@ -125,12 +125,16 @@ class _CacheIntervalRow extends StatelessWidget {
                 onChanged: (value) => onChanged(value.round()),
               ),
             ),
-            if (minutes < 15)
+            if (Theme.of(context).platform == TargetPlatform.iOS ||
+                (Theme.of(context).platform == TargetPlatform.android && minutes < 15))
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
-                  'While the app is closed, synced files refresh at most every '
-                  '15 min (an Android limit).',
+                  Theme.of(context).platform == TargetPlatform.iOS
+                      ? 'iOS decides when background sync runs; the refresh '
+                          'interval is a request, not a guaranteed schedule.'
+                      : 'While the app is closed, synced files refresh at most every '
+                          '15 min (an Android limit).',
                   style: NooText.meta.copyWith(color: colors.fg3),
                 ),
               ),

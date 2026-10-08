@@ -29,6 +29,13 @@ widgets. Key points:
   whole app in `main.dart`. When available and `useDynamicColor` is on, the
   OS-provided `ColorScheme` wins over the seed color — always thread both
   `dynamicScheme` and `useDynamicColor` through when adding a theme knob.
+  `NooColors.fromDynamicScheme` keeps `bg` on the OS `surface` but picks
+  `surface` (cards, selection bar, rows) from the container roles so it
+  stays lighter than `bg`: `surfaceContainerLowest` (white) in light,
+  `surfaceContainer` in dark. The dynamic_color package seeds the container
+  roles from the primary color rather than the OS palette, and in light mode
+  `surfaceContainerLow` is slightly *darker* than the OS `surface`, which
+  made cards blend into the page ("the selection bar has no background").
 - **Font**: Inter via `google_fonts`, applied through
   `GoogleFonts.interTextTheme(...)`. Font files ship in
   `assets/google_fonts/` (Instrument Sans, Schibsted Grotesk) and
@@ -79,7 +86,7 @@ Catalog:
 
 | Folder | Components |
 |---|---|
-| `core/` | `NooButton`, `NooFab`, `NooChip`, `NooSegmentedControl`, `NooToggle`, `NooSearchField`, `NooAvatar`, `NooBadge`, `NooProgressBar` |
+| `core/` | `NooButton`, `NooFab`, `NooChip`, `NooSegmentedControl`, `NooToggle`, `NooSlider`, `NooSearchField`, `NooAvatar`, `NooBadge`, `NooProgressBar` |
 | `lists/` | `NooGroupedList`, `NooSettingsRow`, `NooTabOrderRow`, `NooBanner`, `NooInfoNote` (tinted info callout; `SettingsSection(notice:)`), `NooSummaryCard`, `NooSelectionBar` |
 | `files/` | `NooFileKind` (spec §1.2 tiles; `NooFileKind.from(name:, mimeType:, isDirectory:)`), `NooFileTile`, `NooStatusIcon`/`NooSyncStatus`, `NooFileRow` (mobile 64px), `NooFileTableHeader`/`NooFileTableRow` (wide tablet), `NooSwipeAction` |
 | `media/` | `NooGridCard`, `NooPhotoTile` (video badge, selection), `NooPhotoGroupHeader`/`NooPhotoGrid` (sliver, or `.box`), `NooActivityItem`, `NooStatCard` |
@@ -102,6 +109,17 @@ Gotchas:
   trigger it) but also fires it directly if the drag goes far enough (past
   1.8x the block's width) before release - a full swipe-through does delete
   in one gesture, it's not tap-only anymore.
+- Swipe settings offer every `SelectionActionKind` plus None. `SwipeAction`
+  persists the existing enum names and maps to that shared action catalog;
+  `FilesView` uses the single-item action-bar handlers, with the existing
+  delete confirmation retained. Labels/icons update for favorited and synced
+  items. Swipes remain disabled during selection, picking, and offline browsing.
+- Settings → Action bar shows the real `NooSelectionBar` above its reorder
+  list. It updates immediately and supports the same More sheet; preview
+  actions only show feedback, never operate on files. The bar scales down
+  inside Settings' narrower column while keeping the mobile/tablet split.
+- The Security setting is labelled **App lock** on every platform; its
+  subtitle still explains device PIN or biometric authentication.
 - Always read colors through `context.nooColors`, never
   `Theme.of(context).colorScheme` - the latter is Flutter's own Material 3
   scheme, reseeded by the user's accent color choice (`AppTheme.light`/
@@ -114,7 +132,8 @@ Gotchas:
   toggle, Shares' scope switcher), but pass `onSurface: true` for one
   placed inside a sheet or dialog (already `colors.surface`), or its pill
   track blends invisibly into the sheet instead of reading as a grouped
-  control (Files'/Photos' sort and type-filter sheets do this).
+  control (Files'/Photos' filter sheets and Settings controls on surface
+  rows use the same `surface2` track).
 - Any `RefreshIndicator` needs `physics: const AlwaysScrollableScrollPhysics()`
   on its scrollable child, or pull-to-refresh silently can't be triggered
   once the list is short enough to fit the viewport (empty, or one item) -
@@ -133,6 +152,32 @@ blocks are noted where they matter:
   `NooChip`/`NooSegmentedControl`; still the sort/hidden/scope/type-filter/
   view-mode row shared by Files and Offline (`showStorageScope: false` for
   Offline), and reused as-is by Favorites.
+- Selection action bars in Files, Photos, and Favorites have a global
+  Settings → Action bar → Position choice: Top (default) or Bottom,
+  persisted as `ui_selection_bar_position`. Top stays pinned in the content
+  header; Bottom uses `SelectionBarOverlay` above navigation (or the content
+  pane's bottom on desktop), with extra list clearance. The overlay uses
+  Scaffold's MediaQuery bottom padding so attached/floating/frosted navigation
+  and safe areas are accounted for without counting their height twice.
+  The shell hides Android's Upload FAB during selection via view callbacks.
+  The mobile Action bar settings use one grouped card for Position and
+  the reorder list, with no nested rounded corners or repeated page title.
+  Their header backdrop is transparent, so content scrolls behind the inset
+  `surface` card. A `line` border and `nooDialogShadow` match the floating
+  bottom bar's solid treatment.
+- Hidden files and external storage are each a three-way segmented row
+  (`HiddenFilesFilterRow`/`StorageScopeRow`, `lib/widgets/filter_mode_rows.dart`,
+  in both the Files and Photos filter sheets), not toggles:
+  `HiddenFilesFilter` hide (default) / only / include, and `StorageScope`
+  cloud (default) / external / all. Files and Photos each persist their own
+  hidden filter (`ui_hidden_filter`, `ui_hidden_filter_photos`; the old
+  `ui_show_hidden*` bools are still read as a fallback, `true` → include);
+  `StorageScope` stays shared. Photos uses the same segmented pill for
+  Favorites (All / Favorites only). Leaving `hide` is still behind the
+  hidden-files lock gate. With `StorageScope.all`, Files splits the listing:
+  regular items first, then a collapsible "External storage" section
+  (`_ExternalStorageHeader`, local `_externalExpanded` state, default open)
+  holding the external ones; Photos/Favorites just merge them into one list.
 - `lib/widgets/files/file_breadcrumb_row.dart` — the noo-styled breadcrumb
   trail Files uses in place of the shared
   [`Breadcrumbs`](../../lib/widgets/breadcrumbs.dart) widget. `Breadcrumbs`
@@ -227,9 +272,27 @@ blocks are noted where they matter:
   instead of a corner badge. `NooBottomBar` later gained its own, unrelated
   `NooBottomBarStyle.floating` (Settings → Appearance → "Bottom bar") -
   don't confuse the two: this one is still non-blurred, just inset with a
-  `line` border and `nooDialogShadow` (the app's one other shadow user - see
+  `line` border and `nooDialogShadow` (also used by floating selection bars - see
   that constant's doc comment) instead of edge to edge (no opacity/blur knob
-  either). The host `Scaffold` needs `extendBody: true` while it's active
+  either). `floating` ignores `NooNavStyle` and always uses the Android row
+  (icon-only idle tabs, sliding pill, 64px), so iOS matches Android there;
+  only the attached bar still has a distinct iOS row. A separate, orthogonal
+  `SettingsController.bottomBarFrosted` toggle (Settings → Appearance →
+  "Frosted glass bottom bar", off by default, both platforms and both bar
+  styles) swaps the bar's solid `surface` for a translucent one over a
+  `BackdropFilter` blur and drops
+  `nooDialogShadow` (it would show through the glass). Strength is user-set:
+  `FrostedGlassPreset` Less (blur 10 / opacity 0.88), Default (20 / 0.72, the
+  old fixed values) and More (32 / 0.55), plus Blur (0-40) and Opacity
+  (0.3-1.0) sliders (`NooSlider`, `core/`) in Settings -> Appearance, shown
+  only while frosted glass is on; both persist
+  (`ui_bottom_bar_frosted_blur`/`_opacity`) and reach the bar as
+  `NooBottomBar.frostedBlur`/`frostedOpacity`. No preset is highlighted once
+  the sliders are moved off all three. A frosted bar only
+  reads as glass with content behind it, so the shell uses
+  `NooBottomBar.drawsBehindBody(barStyle, frosted)` for `extendBody`, and
+  `bottomBarClearance` (and Files' own trailing sliver) reserve the bar's
+  footprint for attached+frosted too, not just floating. The host `Scaffold` needs `extendBody: true` while it's active
   (`main.dart` already wires this off `SettingsController.bottomBarStyle`),
   which also means every tab's own scrollable list has to reserve enough
   bottom padding to clear the bar - nothing does that automatically once the
@@ -242,44 +305,50 @@ blocks are noted where they matter:
   `onSearchTap`) and lowers `SettingsController.maxVisibleTabs` by one -
   use that getter, not `defaultMaxVisibleTabs` from `models/app_tab.dart`,
   anywhere that needs the *current* cap on regular tabs.
-- `SettingsController.navMenuStyle` (`NooNavMenuStyle.drawer`/`avatarMenu`,
-  Settings → Appearance → "Navigation menu") picks what opens hidden tabs +
-  Settings on mobile: the original hamburger-opens-`AppDrawer` pattern, or
-  the avatar button opens [`showAvatarMenu`](../../lib/widgets/avatar_menu.dart)
-  instead. Wired through `AppTopBar`→`NooTopBar.onMenu` (null in `avatarMenu`
-  mode - no menu icon renders at all, see `NooTopBar`'s `lead` logic) and
-  `ShellAvatarButton`'s new `onTap`/`label` overrides (`shell_common.dart`) -
-  a caller passing a custom `onTap` *must* also pass a matching `label`, or
-  the tooltip/semantics still say "Accounts" for a button that no longer
-  opens the account switcher. In `avatarMenu` mode `main.dart` also sets
-  `Scaffold.drawerEnableOpenDragGesture: false` so the edge swipe can't open
-  the drawer. The menu header has a chevron that expands an account section
-  (other saved accounts to switch to, "Add Account", "Manage Accounts")
-  above the hidden tabs/Settings. `showAvatarMenu` is this app's first use of
-  `showGeneralDialog` directly (`barrierColor: Colors.transparent` +
-  `barrierDismissible: true` for a non-dimming click-outside-to-close menu,
-  not a modal flow) - there's no existing anchored-popup primitive here
-  (`PopupMenuButton`'s own width doesn't stretch to a full content column),
-  so don't reach for `showNooSheet`/`showNooDialog` for something shaped
-  like this. It's positioned just past the status bar (`SafeArea`'s own
-  inset, not the top bar's full height on top of that) so it covers the
-  top bar - including the tab title - rather than sitting below it, and
-  its card carries two stacked `boxShadow`s rather than just
-  `nooDialogShadow` alone: that one shadow's blur is wide and soft enough
-  to read as basically invisible on a small card over a dark theme's
-  near-black `bg` (a dark, diffuse shadow needs real density close to the
-  edge to be visible against an already-dark backdrop), so a second,
-  tighter, more opaque contact shadow underneath it gives real elevation
-  in both themes. The card's border can go missing wherever an opaque row
-  sits against it too (every corner but the header's, which has no
-  full-bleed fill of its own) if a `Container` combines `border` with its
-  own `clipBehavior` - that paints the border as part of the *outer*
-  decoration, then the clipped child on top right up to the same boundary,
-  with no gap for the border's own stroke to show through. Fixed the same
-  way any bordered-and-clipped `Container` should be: no `clipBehavior` on
-  the bordered `Container` itself, and a 1px-inset `ClipRRect` (radius
-  reduced by that same 1px) around the filled, clipped content instead, so
-  it never paints over the border. Also added
+- `SettingsController.navMenuStyle` chooses hamburger/drawer or avatar popup
+  navigation (Settings → Appearance → Navigation menu). Avatar mode exposes
+  a persisted Avatar position choice (`ui_avatar_position`, Top by default).
+  `AvatarNavigationHost` owns one 420ms open / 320ms close animation using
+  `easeInOutCubicEmphasized`. The card expands from the real avatar anchor;
+  its controls fade in after the expansion starts. Top moves the content pane
+  down through `AvatarNavigationBody`, keeping bottom navigation stationary.
+  Bottom moves the avatar upward into the card's bottom-right corner and
+  overlays the list immediately above navigation. Both use the Files gutter.
+  The floating rail beside a bottom avatar shows text only on the selected
+  tab. Attached iOS also shows text only for the selected tab and keeps the full-width bar,
+  with the avatar inside the trailing end. Its popup expands upward with
+  full screen width, rounded top corners and no gap above the bar; the
+  avatar stays in the bar, and Search keeps its inline position.
+  The attached popup has no outer border or shadow, blending into the bar.
+  All bottom popups order navigation (including Settings), current account,
+  then expanded secondary accounts and Add/Manage Account controls.
+  The iOS shell places Upload and the top avatar on the large-title row.
+  Upload uses the shared `ui_fab_style` preference: Auto expands on Files
+  and Photos and collapses elsewhere; Mini is icon-only; Expanded always
+  shows the plus-and-Upload button. Upload uses the folder icon's tonal
+  `accentSoft` background and `accentText` foreground. Search stays below.
+  Upload uses the compact 32px size to match the visible top avatar.
+  On iOS the accent picker hides the unsupported wallpaper color option;
+  the accent subtitle, swatch and selection always reflect the seed color.
+  Upload's width, padding and label opacity interpolate over `NooMotion.base`.
+  A shared shell animation keeps separately mounted tab headers in sync
+  during Auto tab changes; reduced motion skips the transition.
+  Avatar navigation and its bottom satellite share the bottom bar's frost
+  toggle, blur and opacity, including throughout the popup animation.
+  The setting is labelled "Frosted glass" and also controls both media
+  viewer panels through `FrostedGlassContainer`. Off uses an opaque surface
+  without a backdrop filter; On uses the shared blur and tint opacity.
+  Search starts inside the rail when a bottom avatar occupies the satellite;
+  its row slot smoothly collapses as Search fades into that satellite while
+  the avatar moves into the popup. Closing reverses the same path. The card
+  retains hidden tabs, Settings, account switching, Add Account, and Manage
+  Accounts. Account controls scroll on short screens. Tap outside, tap the
+  popup avatar, or system Back to close. Reduced motion opens/closes without
+  the transition. Drawer gestures are disabled in avatar mode. Standalone
+  top bars outside the shell retain `showGeneralDialog` as a fallback.
+  `ShellAvatarButton` keeps its vertical-swipe account shortcuts in either
+  position. Its onTap override must have a matching tooltip/semantics label.
+  Also added
   `NooTopBar.androidTitleTrailing`: Android has no large title to put a
   second search row under the way iOS's `search:` slot does, so an inline
   search bar (`AppTopBar` passes a plain `ShellSearchLauncher()` when
@@ -309,11 +378,13 @@ blocks are noted where they matter:
   `FileBreadcrumbRow` proved the same trail is still wanted elsewhere.
 - [`SeekBarPainter`/`SeekBarPreview`](../../lib/widgets/seek_bar_painter.dart)
   — the four `MediaProgressBarStyle` presets (Default/Wavy/Slim/Squiggly)
-  for the video player's seek bar, plus a perpetually-animated
+  for the non-iOS video player's seek bar, plus a perpetually-animated
   `SeekBarPreview` wrapper used by the Settings style picker so every
   preview always matches the real widget exactly (same painter, just fed
   demo `progress`/`phase` values). Add new seek-bar presets here, not by
   forking the painter.
+  iOS uses `IosSeekBar` with `CupertinoSlider` instead and hides the style
+  picker. Scrubbing pauses playback temporarily and restores its prior state.
 - Chrome inside the media viewer (`file_viewer_screen.dart` — the top bar's
   back button + filename, the bottom action bar, the video transport
   controls) all share one small hand-rolled icon-button pattern
@@ -352,11 +423,11 @@ blocks are noted where they matter:
 
 ## Text/markdown viewer
 
-`MediaTextPreview` is an editable monospace `TextField` padded clear of the status bar, top bar and action bar; a Save button appears when dirty (read-only for offline copies). `NooPersonAccessRow.trailing` replaces the owner label/permission pill (used by share-search results). Sheets whose close button lives in `showNooSheet` children must pop via a `Builder` context, not the caller's.
+`MediaTextPreview` is an editable monospace `TextField` padded clear of the status bar, top bar and action bar; every text file opens read-only (plain text as-is, Markdown rendered) and follows Edit -> Save: an Edit/Preview toggle and, once dirty, a Save button live in the viewer's top bar as round icon-only `NooButton`s (`iconOnly`, 36px; a lone button is primary, with two Edit/Preview is secondary and Save primary; Save becomes a primary circle with a spinner while it saves). Offline copies are read-only with no buttons. The preview owns the text, the editing mode and the save; a `TextPreviewController` (owned by `FileViewerScreen`, passed to `MediaTextPreview`) mirrors that state out so the screen's top bar can draw - and trigger - the buttons, which keeps the preview's widget tree unchanged. `NooPersonAccessRow.trailing` replaces the owner label/permission pill (used by share-search results). Sheets whose close button lives in `showNooSheet` children must pop via a `Builder` context, not the caller's.
 
 `showNooSheet` insets its body by the keyboard (`viewInsets.bottom`) so focused fields stay visible; the body's widget structure must not change when the keyboard opens, or the sheet content is rebuilt and loses focus.
 
-Markdown files (`.md`/`.markdown`) in `MediaTextPreview` open rendered via `flutter_markdown_plus` (`Markdown`, styled from Noo tokens in `_markdownStyle`), with a top-right Edit/Preview toggle (hidden for read-only offline copies). Other text files go straight to the editor.
+Markdown files (`.md`/`.markdown`) in `MediaTextPreview` open rendered via `flutter_markdown_plus` (`Markdown`, styled from Noo tokens in `_markdownStyle`), with the same Edit/Preview toggle in the viewer's top bar (hidden for read-only offline copies). Other text files go straight to the editor.
 
 `ShareSheet`: focusing the people search field does not scroll; once the user types, `_revealPeopleSection` animates the "Share with people" section (keyed by `_peopleKey` on the `NooShareSection`, not the inner column) to just below the sheet's top edge with a small gap.
 

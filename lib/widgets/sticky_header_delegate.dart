@@ -10,8 +10,13 @@ import '../theme/design_tokens.dart';
 class StickyHeaderDelegate extends SliverPersistentHeaderDelegate {
   final double height;
   final Widget child;
+  final bool floating;
 
-  const StickyHeaderDelegate({required this.height, required this.child});
+  const StickyHeaderDelegate({
+    required this.height,
+    required this.child,
+    this.floating = false,
+  });
 
   @override
   double get minExtent => height;
@@ -38,7 +43,7 @@ class StickyHeaderDelegate extends SliverPersistentHeaderDelegate {
     // Colors.transparent` guards against the same M3 elevation-tint
     // behavior even if this ever gets a non-zero elevation.
     return Material(
-      color: context.nooColors.bg,
+      color: floating ? Colors.transparent : context.nooColors.bg,
       surfaceTintColor: Colors.transparent,
       child: child,
     );
@@ -46,6 +51,8 @@ class StickyHeaderDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   bool shouldRebuild(covariant StickyHeaderDelegate oldDelegate) {
-    return oldDelegate.height != height || oldDelegate.child != child;
+    return oldDelegate.height != height ||
+        oldDelegate.child != child ||
+        oldDelegate.floating != floating;
   }
 }

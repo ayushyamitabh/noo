@@ -178,6 +178,10 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
 
   final _panelKey = GlobalKey<MediaDetailsPanelState>();
 
+  /// Edit/Preview + Save for a text/markdown file: the preview owns the
+  /// editing, this just lets the top bar draw (and trigger) its buttons.
+  final _textActions = TextPreviewController();
+
   void _openDetails() {
     if (NooLayout.isDesktop(context)) {
       DetailsSheet.show(context, _currentItem);
@@ -229,6 +233,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
 
   @override
   void dispose() {
+    _textActions.dispose();
     _pageController.dispose();
     super.dispose();
   }
@@ -423,9 +428,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
     // The stage follows the app's own theme (`bg`) rather than being pinned
     // to black - a black stage in light mode read as jarringly out of place
     // next to the rest of the light-themed app. The floating top/action
-    // bars now follow the theme too (FrostedGlassContainer's own `surface`
-    // default), at a higher blur opacity to stay legible over arbitrary
-    // photo/video brightness underneath.
+    // bars follow the theme and share the navigation frost preference.
     final stageColor = colors.bg;
 
     return Scaffold(
@@ -532,7 +535,14 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 10),
+                            // Edit/Preview and Save for text/markdown files -
+                            // empty (zero-width) for every other file type.
+                            ListenableBuilder(
+                              listenable: _textActions,
+                              builder: (context, _) =>
+                                  _TextActions(controller: _textActions),
+                            ),
+                            const SizedBox(width: 4),
                           ],
                         ),
                       ),
@@ -731,6 +741,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
           return MediaTextPreview(
             item: widget.item,
             session: session,
+            controller: _textActions,
             localPathResolver: widget.localPathResolver,
           );
         }
@@ -741,5 +752,105 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
           onOpenDetails: () => DetailsSheet.show(context, widget.item),
         );
     }
+  }
+}
+
+/// The text viewer's top-bar buttons: Edit/Preview (markdown only) and Save
+/// (once the content changed; a spinner while it saves). Same
+/// round [NooButton] look (primary for the main action, secondary beside it).
+class _TextActions extends StatelessWidget {
+  final TextPreviewController controller;
+
+  const _TextActions({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    final toggle = controller.canToggleEditing;
+    final save = controller.saving || controller.showSave;
+    // One button is the primary action; with two, Save is and Edit/Preview
+    // steps back to secondary.
+    final both = toggle && save;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (toggle)
+          _ActionButton(
+            icon: controller.editing ? LucideIcons.eye : LucideIcons.pencil,
+            tooltip: controller.editing ? 'Preview' : 'Edit',
+            variant: both
+                ? NooButtonVariant.secondary
+                : NooButtonVariant.primary,
+            onTap: controller.toggleEditing,
+          ),
+        if (both) const SizedBox(width: 8),
+        if (controller.saving)
+          const _SavingIndicator()
+        else if (save)
+          _ActionButton(
+            icon: LucideIcons.save,
+            tooltip: 'Save',
+            variant: NooButtonVariant.primary,
+            onTap: controller.save,
+          ),
+      ],
+    );
+  }
+}
+
+/// A round icon-only [NooButton] with the tooltip and semantic label an
+/// icon-only button needs.
+class _ActionButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final NooButtonVariant variant;
+  final VoidCallback onTap;
+
+  const _ActionButton({
+    required this.icon,
+    required this.tooltip,
+    required this.variant,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Semantics(
+        button: true,
+        label: tooltip,
+        excludeSemantics: true,
+        child: NooButton(
+          icon: icon,
+          iconOnly: true,
+          variant: variant,
+          onTap: onTap,
+        ),
+      ),
+    );
+  }
+}
+
+/// Stands in for the Save button while it saves: the same primary circle,
+/// with a spinner, so it can't be tapped twice.
+class _SavingIndicator extends StatelessWidget {
+  const _SavingIndicator();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.nooColors;
+    return Semantics(
+      label: 'Saving',
+      child: Container(
+        width: 36,
+        height: 36,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(color: colors.accent, shape: BoxShape.circle),
+        child: const SizedBox.square(
+          dimension: 16,
+          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+        ),
+      ),
+    );
   }
 }

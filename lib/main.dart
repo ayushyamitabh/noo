@@ -22,6 +22,7 @@ import 'providers/shares_controller.dart';
 import 'providers/sync_status_controller.dart';
 import 'providers/trash_controller.dart';
 import 'services/pick_intent_service.dart';
+import 'services/share_account_service.dart';
 import 'services/share_intent_service.dart';
 import 'theme/app_theme.dart';
 import 'theme/design_tokens.dart';
@@ -31,12 +32,13 @@ import 'views/share_upload_view.dart';
 import 'widgets/app_drawer.dart';
 import 'widgets/app_tab_view_builder.dart';
 import 'widgets/app_top_bar.dart';
+import 'widgets/avatar_menu.dart';
 import 'widgets/bottom_nav_bar.dart';
 import 'widgets/create_menu.dart';
 import 'widgets/noo/core/noo_avatar.dart';
 import 'widgets/noo/core/noo_button.dart';
 import 'widgets/noo/core/noo_fab.dart';
-import 'widgets/noo/nav/noo_nav_style.dart';
+import 'widgets/noo/nav/noo_bottom_bar.dart';
 import 'widgets/noo/nav/noo_sidebar.dart';
 import 'widgets/noo/nav/noo_toolbar.dart';
 import 'widgets/noo/noo_layout.dart';
@@ -58,7 +60,14 @@ void main() {
       providers: [
         ChangeNotifierProvider(create: (_) => ConnectivityController()),
         ChangeNotifierProvider(
-          create: (context) => SessionController(context.read()),
+          create: (context) {
+            final session = SessionController(context.read());
+            // iOS's Share Extension has no Flutter engine; sign-out must wipe
+            // what it was given. (Publishing happens in the shell - see
+            // ShareAccountSync - once there's a FilesController to read.)
+            session.addAccountClearedListener(ShareAccountService.clear);
+            return session;
+          },
         ),
         ChangeNotifierProvider(create: (_) => SettingsController()),
         // Before SyncStatusController, which follows its Files Cache rule
@@ -202,9 +211,11 @@ class MainShellView extends StatefulWidget {
 
 class _MainShellViewState extends State<MainShellView> {
   late AppTab _currentTab;
+  final Set<AppTab> _selectionActiveTabs = {};
   late final Map<AppTab, ScrollController> _scrollControllers;
   StreamSubscription<List<SharedFileRef>>? _shareSub;
   StreamSubscription<PickRequest>? _pickSub;
+  ShareAccountSync? _shareAccountSync;
 
   @override
   void initState() {
@@ -225,6 +236,13 @@ class _MainShellViewState extends State<MainShellView> {
     // file's actual bytes, so a large shared file can't block startup.
     ShareIntentService.getInitialShare().then(_handleSharedFiles);
     _shareSub = ShareIntentService.onNewShare.listen(_handleSharedFiles);
+
+    // iOS's Share Extension picks accounts/folders on its own, so it's kept
+    // supplied with the accounts, lock settings and hidden-files filters.
+    _shareAccountSync = ShareAccountSync(
+      context.read<SessionController>(),
+      context.read<FilesController>(),
+    )..start();
 
     // Same cold-start-vs-already-running split as the share intent above:
     // another app may have launched Noo as its GET_CONTENT picker.
@@ -310,6 +328,7 @@ class _MainShellViewState extends State<MainShellView> {
     }
     _shareSub?.cancel();
     _pickSub?.cancel();
+    _shareAccountSync?.dispose();
     super.dispose();
   }
 
@@ -413,24 +432,41 @@ class _MainShellViewState extends State<MainShellView> {
     // null`).
     final tabStack = Stack(
       children: [
-        IndexedStack(
-          index: selectedIndex,
-          children: displayTabs
-              .map(
-                (tab) => buildAppTabView(
-                  tab,
-                  _scrollControllers[tab]!,
-                  topBar: isDesktop || pickRequest != null
-                      ? null
-                      : AppTopBar(
-                          style: navStyle,
-                          tab: tab,
-                          searchInBottomBar: showBottomBarSearch,
-                          navMenuStyle: settings.navMenuStyle,
-                        ),
-                ),
-              )
-              .toList(),
+        AvatarNavigationBody(
+          child: IndexedStack(
+            index: selectedIndex,
+            children: displayTabs
+                .map(
+                  (tab) => buildAppTabView(
+                    tab,
+                    _scrollControllers[tab]!,
+                    onSelectionChanged: (selecting) {
+                      if (!mounted ||
+                          selecting == _selectionActiveTabs.contains(tab)) {
+                        return;
+                      }
+                      setState(() {
+                        if (selecting) {
+                          _selectionActiveTabs.add(tab);
+                        } else {
+                          _selectionActiveTabs.remove(tab);
+                        }
+                      });
+                    },
+                    topBar: isDesktop || pickRequest != null
+                        ? null
+                        : AppTopBar(
+                            style: navStyle,
+                            tab: tab,
+                            searchInBottomBar: showBottomBarSearch,
+                            navMenuStyle: settings.navMenuStyle,
+                            avatarPosition: settings.avatarPosition,
+                            uploadButtonStyle: settings.fabStyle,
+                          ),
+                  ),
+                )
+                .toList(),
+          ),
         ),
         if (pick.isDownloadingForPick) const _PickingProgressOverlay(),
       ],
@@ -526,15 +562,21 @@ class _MainShellViewState extends State<MainShellView> {
             settings.navMenuStyle == NooNavMenuStyle.drawer,
         // Floating needs the body to draw behind the bar's own transparent
         // margin (see NooBottomBarStyle's doc comment) instead of stopping
-        // short of it like attached does.
-        extendBody: bottomBarStyle == NooBottomBarStyle.floating,
-        // Android-only extended Upload FAB - iOS uses the top bar's `plus`
+        // short of it like attached does; a frosted bar needs it too, or
+        // there'd be nothing behind it to blur.
+        extendBody: NooBottomBar.drawsBehindBody(
+          bottomBarStyle,
+          settings.bottomBarFrosted,
+        ),
+        // Android-only extended Upload FAB - iOS uses the top bar's Upload
         // instead (see AppTopBar). Stays mounted across every tab (picking
         // aside) and collapses to an icon-only circle off Files/Photos,
         // rather than the Scaffold popping it fully in/out on every tab
         // switch - see NooFab's [collapsed].
         floatingActionButton:
-            pickRequest == null && navStyle == NooNavStyle.android
+            pickRequest == null &&
+                navStyle == NooNavStyle.android &&
+                !_selectionActiveTabs.contains(selectedTab)
             ? NooFab(
                 collapsed: switch (settings.fabStyle) {
                   FabStyle.auto => !canUpload,
@@ -545,13 +587,35 @@ class _MainShellViewState extends State<MainShellView> {
                 onTap: () => showCreateMenu(context),
               )
             : null,
-        body: tabStack,
+        body: TweenAnimationBuilder<double>(
+          tween: Tween(
+            end: switch (settings.fabStyle) {
+              FabStyle.auto => canUpload ? 1.0 : 0.0,
+              FabStyle.mini => 0.0,
+              FabStyle.expanded => 1.0,
+            },
+          ),
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : NooMotion.base,
+          curve: NooMotion.ease,
+          child: tabStack,
+          builder: (context, progress, child) =>
+              UploadButtonAnimation(progress: progress, child: child!),
+        ),
         bottomNavigationBar: BottomNavBar(
           style: navStyle,
           barStyle: bottomBarStyle,
+          frosted: settings.bottomBarFrosted,
+          frostedBlur: settings.bottomBarFrostedBlur,
+          frostedOpacity: settings.bottomBarFrostedOpacity,
           tabs: pinnedTabs,
           selectedIndex: pinnedIndex,
           onSearchTap: showBottomBarSearch ? () => openSearch(context) : null,
+          avatarInBottomBar:
+              pickRequest == null &&
+              settings.navMenuStyle == NooNavMenuStyle.avatarMenu &&
+              settings.avatarPosition == AvatarPosition.bottom,
           onDestinationSelected: (index) {
             final tappedTab = pinnedTabs[index];
             if (tappedTab == _currentTab) {
@@ -591,7 +655,7 @@ class _MainShellViewState extends State<MainShellView> {
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop && pickRequest != null) pick.cancelPick();
       },
-      child: scaffold,
+      child: isDesktop ? scaffold : AvatarNavigationHost(child: scaffold),
     );
   }
 }

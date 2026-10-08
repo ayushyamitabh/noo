@@ -4,14 +4,8 @@ import '../../theme/design_tokens.dart';
 import '../frosted_glass_container.dart';
 import 'viewer_icon_button.dart';
 
-/// The bottom panel overlaid on the media viewer: an optional transport row
-/// ([transportControls], video only) above the action row
-/// (share/favorite/open/download/delete/details) - one continuous flush,
-/// full-width `FrostedGlassContainer` panel, not two separate floating
-/// pills. Kept on that blurred chrome as a deliberate exception to the
-/// design system's flat product UI (see `file_viewer_screen.dart`'s
-/// build() comment for why), unlike the now-flat bottom nav bar
-/// (`bottom_nav_bar.dart`) this screen sits above.
+/// A full-width media panel containing transport, actions and details.
+/// Its solid/frosted surface follows the shared appearance preference.
 class MediaActionBar extends StatelessWidget {
   final bool isFavorite;
   final bool isBusy;

@@ -53,6 +53,26 @@
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+	<key>NooKeychainAccessGroup</key>
+	<string>$(AppIdentifierPrefix)dev.ayushya.noo.shared</string>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>dev.ayushya.noo.sync.refresh</string>
+		<string>dev.ayushya.noo.sync.processing</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>processing</string>
+	</array>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Noo uses Face ID to unlock the app and to protect hidden files.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Noo needs access to your photos and videos so you can choose which ones to upload to your server.</string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
@@ -66,5 +86,7 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

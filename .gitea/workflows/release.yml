@@ -3,7 +3,7 @@ name: Build App Bundle
 # Deliberately not "on every push" - only when a real release tag (Release-1.0.0,
 # Release-1.2.3, ...) is pushed. Tag the commit you want built:
 #   git tag Release-1.0.0 && git push origin Release-1.0.0
-# Unlike the RC* flow (build.yml), this builds the .aab Play Console wants,
+# Unlike the RC-Android-* flow (build.yml), this builds the .aab Play Console wants,
 # not a sideloadable .apk.
 on:
   push:
@@ -56,7 +56,7 @@ jobs:
         run: flutter analyze
 
       - name: Decode release keystore
-        # Same key as the RC* APK builds, so a Play Store upload's signature
+        # Same key as the RC-Android-* APK builds, so a Play Store upload's signature
         # matches anything sideloaded from a release build. See
         # android/app/build.gradle.kts.
         run: echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > "${{ runner.temp }}/release-keystore.jks"

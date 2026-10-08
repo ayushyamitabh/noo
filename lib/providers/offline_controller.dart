@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import '../models/nextcloud_item.dart';
 import '../services/sync_service.dart';
 import 'files_controller.dart';
@@ -132,7 +131,7 @@ class OfflineController extends ChangeNotifier
     notifyListeners();
 
     try {
-      _syncBasePath ??= (await getExternalStorageDirectory())?.path;
+      _syncBasePath ??= (await SyncService.baseDirectory())?.path;
       // A sync can delete the very folder being browsed (deleted on the
       // server) - step out to the nearest ancestor that still exists rather
       // than showing a phantom empty folder.
@@ -186,7 +185,7 @@ class OfflineController extends ChangeNotifier
   Future<String?> localPathFor(NextcloudItem item) async {
     final accountId = session.activeAccountId;
     if (accountId == null) return null;
-    final base = await getExternalStorageDirectory();
+    final base = await SyncService.baseDirectory();
     if (base == null) return null;
     final relPath = item.path.startsWith('/')
         ? item.path.substring(1)
@@ -199,7 +198,7 @@ class OfflineController extends ChangeNotifier
     String accountId,
     String folderPath,
   ) async {
-    final base = await getExternalStorageDirectory();
+    final base = await SyncService.baseDirectory();
     if (base == null) return [];
     final relFolder = folderPath == '/' ? '' : folderPath.replaceFirst('/', '');
     final dir = Directory(p.join(base.path, 'sync', accountId, relFolder));

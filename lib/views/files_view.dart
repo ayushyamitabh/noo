@@ -44,6 +44,7 @@ import '../widgets/noo/noo_layout.dart';
 import '../widgets/noo/overlays/noo_sheet.dart';
 import '../widgets/share_sheet.dart';
 import '../widgets/sticky_header_delegate.dart';
+import '../widgets/selection_bar_overlay.dart';
 import '../widgets/tabs/tab_state_slivers.dart';
 import '../widgets/synced_header_scaffold.dart' show formatBytes;
 import 'file_viewer_screen.dart';
@@ -64,16 +65,69 @@ class FilesView extends StatefulWidget {
   /// This tab's own shell top bar, planted as its first sliver - see
   /// `buildAppTabView`'s doc comment. Null on desktop and while picking.
   final PreferredSizeWidget? topBar;
+  final ValueChanged<bool>? onSelectionChanged;
 
   const FilesView({
     super.key,
     required this.scrollController,
     this.offline = false,
     this.topBar,
+    this.onSelectionChanged,
   });
 
   @override
   State<FilesView> createState() => _FilesViewState();
+}
+
+/// The collapsible "External storage" header [StorageScope.all] puts above
+/// the external items.
+class _ExternalStorageHeader extends StatelessWidget {
+  final int count;
+  final bool expanded;
+  final VoidCallback onTap;
+
+  const _ExternalStorageHeader({
+    required this.count,
+    required this.expanded,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.nooColors;
+    return Semantics(
+      button: true,
+      expanded: expanded,
+      label: 'External storage',
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: NooSpace.md,
+            vertical: 14,
+          ),
+          child: Row(
+            children: [
+              Icon(LucideIcons.hardDrive, size: 18, color: colors.fg2),
+              const SizedBox(width: 10),
+              Text(
+                'External storage',
+                style: NooText.bodyL.copyWith(color: colors.fg1),
+              ),
+              const SizedBox(width: 8),
+              Text('$count', style: NooText.body.copyWith(color: colors.fg3)),
+              const Spacer(),
+              Icon(
+                expanded ? LucideIcons.chevronUp : LucideIcons.chevronDown,
+                size: 18,
+                color: colors.fg3,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Slides+fades its child in on first build. Give it a [Key] that changes
@@ -236,6 +290,9 @@ class _GridThumbnail extends StatelessWidget {
 
 class _FilesViewState extends State<FilesView> {
   final Set<String> _selectedIds = {};
+
+  /// Whether [StorageScope.all]'s external-storage section is open.
+  bool _externalExpanded = true;
   int _lastPathDepth = 1;
 
   bool get _isSelecting => _selectedIds.isNotEmpty;
@@ -245,9 +302,19 @@ class _FilesViewState extends State<FilesView> {
   /// The folder data source for this tab. Watches the concrete controller
   /// (that's what's registered as a provider), then hands it back as the
   /// [FolderBrowser] the rest of the view actually needs.
-  FolderBrowser _browserOf(BuildContext context) => _offline
-      ? context.watch<OfflineController>()
-      : context.watch<FilesController>();
+  ///
+  /// Pass `listen: false` from tap/gesture callbacks: `context.watch` outside
+  /// of `build` asserts in debug builds (silently swallowing the tap).
+  FolderBrowser _browserOf(BuildContext context, {bool listen = true}) {
+    if (listen) {
+      return _offline
+          ? context.watch<OfflineController>()
+          : context.watch<FilesController>();
+    }
+    return _offline
+        ? context.read<OfflineController>()
+        : context.read<FilesController>();
+  }
 
   /// The on-device copy of [item] for the Offline tab; null online, where
   /// thumbnails come from server previews instead.
@@ -273,10 +340,12 @@ class _FilesViewState extends State<FilesView> {
     setState(() {
       if (!_selectedIds.remove(item.id)) _selectedIds.add(item.id);
     });
+    widget.onSelectionChanged?.call(_isSelecting);
   }
 
   void _clearSelection() {
     setState(_selectedIds.clear);
+    widget.onSelectionChanged?.call(false);
   }
 
   /// Routes a tap on an item, in picking, selecting or plain-browsing mode
@@ -287,7 +356,7 @@ class _FilesViewState extends State<FilesView> {
     NextcloudItem item, {
     required bool picking,
   }) {
-    final browser = _browserOf(context);
+    final browser = _browserOf(context, listen: false);
     if (picking) {
       _handlePickTap(context, item);
     } else if (_isSelecting) {
@@ -560,34 +629,31 @@ class _FilesViewState extends State<FilesView> {
     );
   }
 
-  /// The user's configured swipe action for one side of a row, or null if
-  /// that side is off or set to an action the design's two-slot
-  /// `NooSwipeAction` has no room for (`SwipeAction.share` - still reachable
-  /// via the row's overflow menu / the "Share" bulk action).
-  NooSwipeActionSpec? _swipeSpec(
-    SwipeAction action,
-    NextcloudItem item,
-    ItemOperations ops,
-  ) {
-    switch (action) {
-      case SwipeAction.favorite:
-        return NooSwipeActionSpec(
-          kind: NooSwipeActionKind.favorite,
-          onTriggered: () => ops.toggleItemFavorite(item),
-        );
-      case SwipeAction.delete:
-        return NooSwipeActionSpec(
-          kind: NooSwipeActionKind.delete,
-          onTriggered: () => _confirmAndDeleteViaSwipe(item),
-        );
-      case SwipeAction.share:
-      case SwipeAction.none:
-        return null;
-    }
+  /// Reuse the single-item action handlers so swipe gestures and the action
+  /// bar agree on labels, sheets and mutations. Delete retains its swipe
+  /// confirmation before making any server changes.
+  NooSwipeActionSpec? _swipeSpec(SwipeAction action, NextcloudItem item) {
+    final kind = action.selectionKind;
+    if (kind == null) return null;
+    final selectedAction = _buildSelectionActions(context, [
+      item,
+    ]).firstWhere((candidate) => candidate.kind == kind);
+    return NooSwipeActionSpec(
+      kind: kind,
+      label: selectedAction.label,
+      icon: selectedAction.icon,
+      onTriggered: kind == SelectionActionKind.delete
+          ? () => _confirmAndDeleteViaSwipe(item)
+          : selectedAction.onTap,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final selectionAtBottom =
+        _isSelecting &&
+        context.watch<SettingsController>().selectionBarPosition ==
+            SelectionBarPosition.bottom;
     final colors = context.nooColors;
     // Display prefs (grid/list, filters, sort) live on FilesController for
     // both tabs; `browser` is the tab's own folder listing.
@@ -659,23 +725,149 @@ class _FilesViewState extends State<FilesView> {
             ),
           );
 
+    // One sliver group per layout (grid / desktop table / mobile list) for
+    // an arbitrary slice of items - [StorageScope.all] renders two of them,
+    // the regular items and then the external ones under a collapsible
+    // header, instead of one list over `browser.items`.
+    List<Widget> itemSlivers(
+      List<NextcloudItem> items, {
+      required String section,
+      bool tableHeader = true,
+    }) {
+      if (files.isGridView) {
+        return [
+          SliverPadding(
+            key: ValueKey('files-grid-$section'),
+            padding: EdgeInsets.fromLTRB(
+              gutter,
+              NooSpace.xs,
+              gutter,
+              NooSpace.lg,
+            ),
+            sliver: SliverGrid(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: isDesktop
+                    ? 5
+                    : NooLayout.gridColumns(context, phone: 2, minTile: 180),
+                childAspectRatio: isDesktop ? 1.05 : 0.92,
+                crossAxisSpacing: isDesktop ? 16 : 10,
+                mainAxisSpacing: isDesktop ? 16 : 10,
+              ),
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final item = items[index];
+                return _FolderEnterAnimation(
+                  key: ValueKey('${browser.currentFolderPath}::${item.id}'),
+                  index: index,
+                  fromRight: navigatingDeeper,
+                  child: _buildGridCard(context, item),
+                );
+              }, childCount: items.length),
+            ),
+          ),
+        ];
+      }
+      if (isDesktop) {
+        return [
+          if (tableHeader)
+            SliverPadding(
+              key: const ValueKey('files-table-header'),
+              padding: EdgeInsets.fromLTRB(gutter, NooSpace.xs, gutter, 0),
+              sliver: SliverToBoxAdapter(
+                child: _buildDesktopHeader(
+                  context,
+                  files,
+                  browser.currentFolderPath,
+                ),
+              ),
+            ),
+          SliverPadding(
+            key: ValueKey('files-table-$section'),
+            padding: EdgeInsets.fromLTRB(gutter, 0, gutter, NooSpace.lg),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final item = items[index];
+                return _FolderEnterAnimation(
+                  key: ValueKey('${browser.currentFolderPath}::${item.id}'),
+                  index: index,
+                  fromRight: navigatingDeeper,
+                  child: _buildDesktopRow(context, item),
+                );
+              }, childCount: items.length),
+            ),
+          ),
+        ];
+      }
+      return [
+        SliverPadding(
+          key: ValueKey('files-list-$section'),
+          padding: const EdgeInsets.fromLTRB(
+            NooSpace.sm,
+            NooSpace.xs,
+            NooSpace.sm,
+            NooSpace.lg,
+          ),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate((context, index) {
+              final item = items[index];
+              return _FolderEnterAnimation(
+                key: ValueKey('${browser.currentFolderPath}::${item.id}'),
+                index: index,
+                fromRight: navigatingDeeper,
+                child: _buildMobileRow(context, item, index, items.length),
+              );
+            }, childCount: items.length),
+          ),
+        ),
+      ];
+    }
+
+    // "All + external": external items leave the main list for their own
+    // collapsible section below it. Offline has no such distinction.
+    final splitExternal = !_offline && files.storageScope == StorageScope.all;
+    final mainItems = splitExternal
+        ? browser.items.where((i) => !i.isExternalStorage).toList()
+        : browser.items;
+    final externalItems = splitExternal
+        ? browser.items.where((i) => i.isExternalStorage).toList()
+        : const <NextcloudItem>[];
+    final bodySlivers = <Widget>[
+      if (mainItems.isNotEmpty) ...itemSlivers(mainItems, section: 'main'),
+      if (externalItems.isNotEmpty) ...[
+        SliverToBoxAdapter(
+          child: _ExternalStorageHeader(
+            count: externalItems.length,
+            expanded: _externalExpanded,
+            onTap: () => setState(() => _externalExpanded = !_externalExpanded),
+          ),
+        ),
+        if (_externalExpanded)
+          ...itemSlivers(
+            externalItems,
+            section: 'external',
+            tableHeader: mainItems.isEmpty,
+          ),
+      ],
+    ];
+
     final List<Widget> contentSlivers = [
       if (widget.topBar != null) topBarSliver(widget.topBar!),
       // Pinned in both states - while browsing this is the controls row
       // (+ breadcrumbs), while selecting it's the selection bar (see
       // `topRow` above): either way it's the one thing that always stays
       // at the very top of the scroll view.
-      SliverPersistentHeader(
-        pinned: true,
-        delegate: StickyHeaderDelegate(
-          // 20 (topRow's own top+bottom padding) + 44 (FilesControlsRow's
-          // fixed height) [+ 10 gap + 32 breadcrumbs height, if present].
-          // Getting this wrong overflows the sliver header by exactly the
-          // shortfall - a real bug this shipped with once already.
-          height: _isSelecting ? 56 : (hasBreadcrumbs ? 106 : 64),
-          child: topRow,
+      if (!selectionAtBottom)
+        SliverPersistentHeader(
+          pinned: true,
+          delegate: StickyHeaderDelegate(
+            floating: _isSelecting,
+            // 20 (topRow's own top+bottom padding) + 44 (FilesControlsRow's
+            // fixed height) [+ 10 gap + 32 breadcrumbs height, if present].
+            // Getting this wrong overflows the sliver header by exactly the
+            // shortfall - a real bug this shipped with once already.
+            height: _isSelecting ? 56 : (hasBreadcrumbs ? 106 : 64),
+            child: topRow,
+          ),
         ),
-      ),
       if (_offline)
         SliverToBoxAdapter(child: _buildOfflineSummary(context, sync)),
       // Files List / Grid
@@ -743,96 +935,24 @@ class _FilesViewState extends State<FilesView> {
             ),
           ),
         )
-      else if (files.isGridView)
-        SliverPadding(
-          key: const ValueKey('files-grid'),
-          padding: EdgeInsets.fromLTRB(
-            gutter,
-            NooSpace.xs,
-            gutter,
-            NooSpace.lg,
-          ),
-          sliver: SliverGrid(
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: isDesktop
-                  ? 5
-                  : NooLayout.gridColumns(context, phone: 2, minTile: 180),
-              childAspectRatio: isDesktop ? 1.05 : 0.92,
-              crossAxisSpacing: isDesktop ? 16 : 10,
-              mainAxisSpacing: isDesktop ? 16 : 10,
-            ),
-            delegate: SliverChildBuilderDelegate((context, index) {
-              final item = browser.items[index];
-              return _FolderEnterAnimation(
-                key: ValueKey('${browser.currentFolderPath}::${item.id}'),
-                index: index,
-                fromRight: navigatingDeeper,
-                child: _buildGridCard(context, item),
-              );
-            }, childCount: browser.items.length),
-          ),
-        )
-      else if (isDesktop) ...[
-        SliverPadding(
-          key: const ValueKey('files-table-header'),
-          padding: EdgeInsets.fromLTRB(gutter, NooSpace.xs, gutter, 0),
-          sliver: SliverToBoxAdapter(
-            child: _buildDesktopHeader(
-              context,
-              files,
-              browser.currentFolderPath,
-            ),
-          ),
-        ),
-        SliverPadding(
-          key: const ValueKey('files-table'),
-          padding: EdgeInsets.fromLTRB(gutter, 0, gutter, NooSpace.lg),
-          sliver: SliverList(
-            delegate: SliverChildBuilderDelegate((context, index) {
-              final item = browser.items[index];
-              return _FolderEnterAnimation(
-                key: ValueKey('${browser.currentFolderPath}::${item.id}'),
-                index: index,
-                fromRight: navigatingDeeper,
-                child: _buildDesktopRow(context, item),
-              );
-            }, childCount: browser.items.length),
-          ),
-        ),
-      ] else
-        SliverPadding(
-          key: const ValueKey('files-list'),
-          padding: const EdgeInsets.fromLTRB(
-            NooSpace.sm,
-            NooSpace.xs,
-            NooSpace.sm,
-            NooSpace.lg,
-          ),
-          sliver: SliverList(
-            delegate: SliverChildBuilderDelegate((context, index) {
-              final item = browser.items[index];
-              return _FolderEnterAnimation(
-                key: ValueKey('${browser.currentFolderPath}::${item.id}'),
-                index: index,
-                fromRight: navigatingDeeper,
-                child: _buildMobileRow(
-                  context,
-                  item,
-                  index,
-                  browser.items.length,
-                ),
-              );
-            }, childCount: browser.items.length),
-          ),
-        ),
+      else
+        ...bodySlivers,
       // List/grid/table above only pad NooSpace.lg at the bottom - plenty
       // once Scaffold shrinks the body above an attached bar, but floating
-      // draws the body behind the bar instead, so it needs the bar's own
-      // footprint added on top or the last row ends up under it.
-      if (context.watch<SettingsController>().bottomBarStyle ==
-          NooBottomBarStyle.floating)
+      // draws the body behind the bar instead (as does a frosted bar), so it
+      // needs the bar's own footprint added on top or the last row ends up
+      // under it.
+      if (selectionAtBottom ||
+          NooBottomBar.drawsBehindBody(
+            context.watch<SettingsController>().bottomBarStyle,
+            context.watch<SettingsController>().bottomBarFrosted,
+          ))
         SliverToBoxAdapter(
-          child: SizedBox(height: bottomBarClearance(context)),
+          child: SizedBox(
+            height:
+                bottomBarClearance(context) +
+                (selectionAtBottom ? SelectionBarOverlay.clearance : 0),
+          ),
         ),
     ];
 
@@ -846,38 +966,43 @@ class _FilesViewState extends State<FilesView> {
           browser.navigateUp();
         }
       },
-      child: ColoredBox(
-        color: colors.bg,
-        child: RefreshIndicator(
-          color: colors.accent,
-          backgroundColor: colors.surface,
-          onRefresh: () {
-            unawaited(sync.syncOnPull());
-            return browser.reload();
-          },
-          // `topBarSliver`'s floating header can collapse all the way to
-          // zero height (fully scrolled away), at which point the sticky
-          // controls row right below it in `contentSlivers` would otherwise
-          // ride up underneath the status bar instead of stopping below it
-          // - the floating top bar used to be the only thing reserving that
-          // space (via its own internal `SafeArea`), and that reservation
-          // disappears along with it once it's fully hidden. Wrapping the
-          // whole scroll view keeps the inset outside the scrolling region
-          // entirely, so it's never implicated in the floating header's own
-          // collapse/reveal math - safe to apply unconditionally, since
-          // desktop's `MediaQuery.padding.top` is 0 anyway (no topBar / no
-          // status bar there).
-          child: SafeArea(
-            top: true,
-            bottom: false,
-            child: CustomScrollView(
-              controller: widget.scrollController,
-              // Pull-to-refresh needs a scroll physics that allows dragging
-              // past the edge even when content doesn't fill the viewport -
-              // an empty or single-item list otherwise can't be pulled at
-              // all under the platform default physics.
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: contentSlivers,
+      child: SelectionBarOverlay(
+        bar: selectionAtBottom
+            ? _buildSelectionBar(context, selectedItems)
+            : null,
+        child: ColoredBox(
+          color: colors.bg,
+          child: RefreshIndicator(
+            color: colors.accent,
+            backgroundColor: colors.surface,
+            onRefresh: () {
+              unawaited(sync.syncOnPull());
+              return browser.reload();
+            },
+            // `topBarSliver`'s floating header can collapse all the way to
+            // zero height (fully scrolled away), at which point the sticky
+            // controls row right below it in `contentSlivers` would otherwise
+            // ride up underneath the status bar instead of stopping below it
+            // - the floating top bar used to be the only thing reserving that
+            // space (via its own internal `SafeArea`), and that reservation
+            // disappears along with it once it's fully hidden. Wrapping the
+            // whole scroll view keeps the inset outside the scrolling region
+            // entirely, so it's never implicated in the floating header's own
+            // collapse/reveal math - safe to apply unconditionally, since
+            // desktop's `MediaQuery.padding.top` is 0 anyway (no topBar / no
+            // status bar there).
+            child: SafeArea(
+              top: true,
+              bottom: false,
+              child: CustomScrollView(
+                controller: widget.scrollController,
+                // Pull-to-refresh needs a scroll physics that allows dragging
+                // past the edge even when content doesn't fill the viewport -
+                // an empty or single-item list otherwise can't be pulled at
+                // all under the platform default physics.
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: contentSlivers,
+              ),
             ),
           ),
         ),
@@ -1211,7 +1336,6 @@ class _FilesViewState extends State<FilesView> {
     final sync = context.watch<SyncStatusController>();
     final session = context.watch<SessionController>();
     final settings = context.watch<SettingsController>();
-    final ops = context.read<ItemOperations>();
     final isSelected = _selectedIds.contains(item.id);
     // Pick mode and selection are server-side features - never on Offline.
     final picking = !_offline && pick.isPicking;
@@ -1249,8 +1373,8 @@ class _FilesViewState extends State<FilesView> {
     final swipeable = _isSelecting || picking || _offline
         ? row
         : NooSwipeAction(
-            startAction: _swipeSpec(settings.swipeRightAction, item, ops),
-            endAction: _swipeSpec(settings.swipeLeftAction, item, ops),
+            startAction: _swipeSpec(settings.swipeRightAction, item),
+            endAction: _swipeSpec(settings.swipeLeftAction, item),
             child: row,
           );
 

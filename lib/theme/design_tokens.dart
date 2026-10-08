@@ -139,11 +139,20 @@ class NooColors extends ThemeExtension<NooColors> {
   /// paints it, not painted directly - using it as-is for a sheet/dialog's
   /// `barrierColor` hid the screen behind completely instead of dimming it,
   /// so this uses the fixed palette's already-translucent scrim instead.
+  ///
+  /// `surface` (cards, bars, rows) has to read as lighter than `bg`, like
+  /// the fixed palettes' white-on-beige / lifted-on-near-black. In light
+  /// mode `surfaceContainerLow` is a hair *darker* than the OS-provided
+  /// `surface` that [bg] uses, so cards (the selection bar, list rows)
+  /// vanished into the page; `surfaceContainerLowest` (white) doesn't. Dark
+  /// mode uses `surfaceContainer` rather than `...Low` for a bigger step
+  /// off the page.
   factory NooColors.fromDynamicScheme(ColorScheme cs) {
-    final fixed = cs.brightness == Brightness.dark ? dark : light;
+    final dark = cs.brightness == Brightness.dark;
+    final fixed = dark ? NooColors.dark : NooColors.light;
     return NooColors(
       bg: cs.surface,
-      surface: cs.surfaceContainerLow,
+      surface: dark ? cs.surfaceContainer : cs.surfaceContainerLowest,
       surface2: cs.surfaceContainerHigh,
       surface3: cs.surfaceContainerHighest,
       line: cs.outlineVariant,
@@ -357,8 +366,8 @@ class NooMotion {
 
 /// The one shadow the design system allows, from `tokens/spacing.css`'s
 /// `--shadow-dialog` - desktop dialogs, and [NooBottomBarStyle.floating]'s
-/// bar/search satellite (the only other thing in the app that's genuinely
-/// floating above other content). Nothing else should use a `BoxShadow`.
+/// bar/search satellite, and the floating selection action bar.
+/// Nothing else should use a `BoxShadow`.
 const nooDialogShadow = BoxShadow(
   color: Color(0x241E002F), // rgba(30,0,47,.14)
   blurRadius: 48,

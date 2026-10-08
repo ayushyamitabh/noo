@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../models/app_tab.dart';
 import 'noo/nav/noo_bottom_bar.dart';
+import 'avatar_menu.dart';
 
 /// Adapts the app's [AppTab] model onto [NooBottomBar]'s generic
 /// [NooNavDestination] list, so `MainShellView` only deals in tabs and
@@ -16,19 +17,27 @@ import 'noo/nav/noo_bottom_bar.dart';
 class BottomNavBar extends StatelessWidget {
   final NooNavStyle style;
   final NooBottomBarStyle barStyle;
+  final bool frosted;
+  final double frostedBlur;
+  final double frostedOpacity;
   final List<AppTab> tabs;
   final int selectedIndex;
   final ValueChanged<int> onDestinationSelected;
   final VoidCallback? onSearchTap;
+  final bool avatarInBottomBar;
 
   const BottomNavBar({
     super.key,
     required this.style,
     this.barStyle = NooBottomBarStyle.attached,
+    this.frosted = false,
+    this.frostedBlur = NooBottomBar.defaultFrostedBlur,
+    this.frostedOpacity = NooBottomBar.defaultFrostedOpacity,
     required this.tabs,
     required this.selectedIndex,
     required this.onDestinationSelected,
     this.onSearchTap,
+    this.avatarInBottomBar = false,
   });
 
   @override
@@ -36,16 +45,35 @@ class BottomNavBar extends StatelessWidget {
     return NooBottomBar(
       style: style,
       barStyle: barStyle,
+      frosted: frosted,
+      frostedBlur: frostedBlur,
+      frostedOpacity: frostedOpacity,
       destinations: [
         for (final tab in tabs)
           NooNavDestination(icon: tab.icon, label: tab.label),
       ],
       selectedIndex: selectedIndex,
-      onSelected: onDestinationSelected,
+      onSelected: (index) {
+        AvatarNavigationScope.maybeOf(context)?.close();
+        onDestinationSelected(index);
+      },
       searchDestination: onSearchTap == null
           ? null
           : const NooNavDestination(icon: LucideIcons.search, label: 'Search'),
-      onSearchTap: onSearchTap,
+      onSearchTap: onSearchTap == null
+          ? null
+          : () {
+              AvatarNavigationScope.maybeOf(context)?.close();
+              onSearchTap!();
+            },
+      avatarSatellite: avatarInBottomBar
+          ? AvatarNavigationSatellite(
+              size: NooBottomBar.rowHeight(style, barStyle),
+            )
+          : null,
+      avatarMenuProgress: avatarInBottomBar
+          ? AvatarNavigationScope.maybeOf(context)?.progress ?? 0
+          : 0,
     );
   }
 }

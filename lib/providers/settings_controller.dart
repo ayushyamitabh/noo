@@ -7,12 +7,34 @@ import '../widgets/noo/nav/noo_nav_style.dart';
 
 /// What swiping a Files list-view item left/right does, user-configurable
 /// in Settings.
-enum SwipeAction { none, favorite, delete, share }
+enum SwipeAction {
+  none(null),
+  favorite(SelectionActionKind.favorite),
+  delete(SelectionActionKind.delete),
+  share(SelectionActionKind.share),
+  download(SelectionActionKind.download),
+  copy(SelectionActionKind.copy),
+  move(SelectionActionKind.move),
+  rename(SelectionActionKind.rename),
+  sync(SelectionActionKind.sync),
+  details(SelectionActionKind.details);
 
-/// How the Android Upload FAB is sized: [auto] expands on Files/Photos and
+  const SwipeAction(this.selectionKind);
+
+  final SelectionActionKind? selectionKind;
+
+  String get label => selectionKind?.label ?? 'None';
+}
+
+/// How the mobile Upload button is sized: [auto] expands on Files/Photos and
 /// shrinks to an icon elsewhere, [mini] is always icon-only, [expanded]
 /// always shows the label.
 enum FabStyle { auto, mini, expanded }
+
+/// Where bulk selection actions float within the content pane.
+enum SelectionBarPosition { top, bottom }
+
+enum AvatarPosition { top, bottom }
 
 /// Thumb/track presets for the video player's seek bar, matching the four
 /// combinations offered by other Material You media players: a Material 3
@@ -20,6 +42,30 @@ enum FabStyle { auto, mini, expanded }
 /// thumb ([wavy]), a thin flat bar with no distinct thumb ([slim]), and an
 /// animated wave with a tick-mark thumb ([squiggly]).
 enum MediaProgressBarStyle { classic, wavy, slim, squiggly }
+
+/// The frosted-glass bottom bar's blur sigma and surface opacity, in three
+/// ready-made strengths (Settings, Appearance). Moving either slider off all
+/// three leaves no preset selected (a custom mix).
+enum FrostedGlassPreset {
+  less(blur: 10, opacity: 0.88, label: 'Less'),
+  standard(blur: 20, opacity: 0.72, label: 'Default'),
+  more(blur: 32, opacity: 0.55, label: 'More');
+
+  final double blur;
+  final double opacity;
+  final String label;
+
+  const FrostedGlassPreset({
+    required this.blur,
+    required this.opacity,
+    required this.label,
+  });
+}
+
+const double minFrostedBlur = 0;
+const double maxFrostedBlur = 40;
+const double minFrostedOpacity = 0.3;
+const double maxFrostedOpacity = 1.0;
 
 /// Global (not per-account) UI settings: theme, bottom-nav appearance, tab
 /// configuration, swipe actions. Independent of login state - these mean
@@ -31,6 +77,7 @@ class SettingsController extends ChangeNotifier {
   static const _prefUseDynamicColor = 'ui_use_dynamic_color';
   static const _prefSeedColor = 'ui_seed_color';
   static const _prefTabOrder = 'ui_tab_order';
+  static const _prefSelectionBarPosition = 'ui_selection_bar_position';
   static const _prefSelectionActionOrder = 'ui_selection_action_order';
   static const _prefHiddenTabs = 'ui_hidden_tabs';
   static const _prefDefaultTab = 'ui_default_tab';
@@ -38,6 +85,10 @@ class SettingsController extends ChangeNotifier {
   static const _prefSwipeRightAction = 'ui_swipe_right_action';
   static const _prefFabStyle = 'ui_fab_style';
   static const _prefBottomBarStyle = 'ui_bottom_bar_style';
+  static const _prefBottomBarFrosted = 'ui_bottom_bar_frosted';
+  static const _prefFrostedBlur = 'ui_bottom_bar_frosted_blur';
+  static const _prefFrostedOpacity = 'ui_bottom_bar_frosted_opacity';
+  static const _prefAvatarPosition = 'ui_avatar_position';
   static const _prefNavMenuStyle = 'ui_nav_menu_style';
   static const _prefSearchInBottomBar = 'ui_search_in_bottom_bar';
   static const _prefAmoledDark = 'ui_amoled_dark';
@@ -51,12 +102,17 @@ class SettingsController extends ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.system;
   NooBottomBarStyle _bottomBarStyle = NooBottomBarStyle.attached;
   NooNavMenuStyle _navMenuStyle = NooNavMenuStyle.drawer;
+  AvatarPosition _avatarPosition = AvatarPosition.top;
+  bool _bottomBarFrosted = false;
+  double _frostedBlur = FrostedGlassPreset.standard.blur;
+  double _frostedOpacity = FrostedGlassPreset.standard.opacity;
   bool _searchInBottomBar = false;
   bool _useDynamicColor = true;
   bool _amoledDark = false;
   MediaProgressBarStyle _mediaProgressBarStyle = MediaProgressBarStyle.wavy;
 
   bool _tapTabToScrollTop = true;
+  SelectionBarPosition _selectionBarPosition = SelectionBarPosition.top;
 
   List<AppTab> _tabOrder = AppTab.values.toList();
   Set<AppTab> _hiddenTabs = {};
@@ -95,12 +151,23 @@ class SettingsController extends ChangeNotifier {
   Color get seedColor => _seedColor;
   ThemeMode get themeMode => _themeMode;
   NooBottomBarStyle get bottomBarStyle => _bottomBarStyle;
+  bool get bottomBarFrosted => _bottomBarFrosted;
+  double get bottomBarFrostedBlur => _frostedBlur;
+  double get bottomBarFrostedOpacity => _frostedOpacity;
+
+  /// The preset the current blur/opacity match exactly, or null when the
+  /// sliders have been moved to something custom.
+  FrostedGlassPreset? get frostedPreset => FrostedGlassPreset.values
+      .where((p) => p.blur == _frostedBlur && p.opacity == _frostedOpacity)
+      .firstOrNull;
+  AvatarPosition get avatarPosition => _avatarPosition;
   NooNavMenuStyle get navMenuStyle => _navMenuStyle;
   bool get searchInBottomBar => _searchInBottomBar;
   bool get useDynamicColor => _useDynamicColor;
   bool get amoledDark => _amoledDark;
   MediaProgressBarStyle get mediaProgressBarStyle => _mediaProgressBarStyle;
   bool get tapTabToScrollTop => _tapTabToScrollTop;
+  SelectionBarPosition get selectionBarPosition => _selectionBarPosition;
 
   /// The cap a screen should actually enforce for the *regular*, user-
   /// reorderable tabs - one below [defaultMaxVisibleTabs] while
@@ -141,6 +208,11 @@ class SettingsController extends ChangeNotifier {
           orElse: () => ThemeMode.system,
         );
       }
+      _selectionBarPosition = SelectionBarPosition.values.firstWhere(
+        (position) =>
+            position.name == prefs.getString(_prefSelectionBarPosition),
+        orElse: () => SelectionBarPosition.top,
+      );
       final bottomBarStyleName = prefs.getString(_prefBottomBarStyle);
       if (bottomBarStyleName != null) {
         _bottomBarStyle = NooBottomBarStyle.values.firstWhere(
@@ -148,6 +220,10 @@ class SettingsController extends ChangeNotifier {
           orElse: () => _bottomBarStyle,
         );
       }
+      _avatarPosition = AvatarPosition.values.firstWhere(
+        (position) => position.name == prefs.getString(_prefAvatarPosition),
+        orElse: () => AvatarPosition.top,
+      );
       final navMenuStyleName = prefs.getString(_prefNavMenuStyle);
       if (navMenuStyleName != null) {
         _navMenuStyle = NooNavMenuStyle.values.firstWhere(
@@ -155,6 +231,17 @@ class SettingsController extends ChangeNotifier {
           orElse: () => _navMenuStyle,
         );
       }
+      _bottomBarFrosted =
+          prefs.getBool(_prefBottomBarFrosted) ?? _bottomBarFrosted;
+      _frostedBlur = (prefs.getDouble(_prefFrostedBlur) ?? _frostedBlur).clamp(
+        minFrostedBlur,
+        maxFrostedBlur,
+      );
+      _frostedOpacity =
+          (prefs.getDouble(_prefFrostedOpacity) ?? _frostedOpacity).clamp(
+            minFrostedOpacity,
+            maxFrostedOpacity,
+          );
       _searchInBottomBar =
           prefs.getBool(_prefSearchInBottomBar) ?? _searchInBottomBar;
       _useDynamicColor =
@@ -306,11 +393,55 @@ class SettingsController extends ChangeNotifier {
     _prefsFuture.then((p) => p.setString(_prefThemeMode, mode.name));
   }
 
+  void setAvatarPosition(AvatarPosition position) {
+    if (_avatarPosition == position) return;
+    _avatarPosition = position;
+    notifyListeners();
+    _prefsFuture.then((p) => p.setString(_prefAvatarPosition, position.name));
+  }
+
+  void setSelectionBarPosition(SelectionBarPosition position) {
+    if (_selectionBarPosition == position) return;
+    _selectionBarPosition = position;
+    notifyListeners();
+    _prefsFuture.then(
+      (p) => p.setString(_prefSelectionBarPosition, position.name),
+    );
+  }
+
   void setBottomBarStyle(NooBottomBarStyle style) {
     if (_bottomBarStyle == style) return;
     _bottomBarStyle = style;
     notifyListeners();
     _prefsFuture.then((p) => p.setString(_prefBottomBarStyle, style.name));
+  }
+
+  void setFrostedBlur(double value) {
+    final v = value.clamp(minFrostedBlur, maxFrostedBlur);
+    if (_frostedBlur == v) return;
+    _frostedBlur = v;
+    notifyListeners();
+    _prefsFuture.then((p) => p.setDouble(_prefFrostedBlur, v));
+  }
+
+  void setFrostedOpacity(double value) {
+    final v = value.clamp(minFrostedOpacity, maxFrostedOpacity);
+    if (_frostedOpacity == v) return;
+    _frostedOpacity = v;
+    notifyListeners();
+    _prefsFuture.then((p) => p.setDouble(_prefFrostedOpacity, v));
+  }
+
+  void setFrostedPreset(FrostedGlassPreset preset) {
+    setFrostedBlur(preset.blur);
+    setFrostedOpacity(preset.opacity);
+  }
+
+  void setBottomBarFrosted(bool value) {
+    if (_bottomBarFrosted == value) return;
+    _bottomBarFrosted = value;
+    notifyListeners();
+    _prefsFuture.then((p) => p.setBool(_prefBottomBarFrosted, value));
   }
 
   void setNavMenuStyle(NooNavMenuStyle style) {

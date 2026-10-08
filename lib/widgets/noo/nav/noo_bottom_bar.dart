@@ -1,3 +1,4 @@
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import '../../../theme/design_tokens.dart';
 import 'noo_nav_style.dart';
@@ -18,13 +19,16 @@ const double _kAndroidPillHeight = 32;
 /// what order, is the caller's business; this only draws [destinations].
 ///
 /// - [NooNavStyle.ios]: surface fill, 1px top `line`, a 50px row (8px top
-///   padding) of icon 24 over a 10px label. Active: accent-text, 600.
-///   Idle: fg-3, 500. No ripple.
+///   padding) of icon 24 over a 10px selected label. Active: accent-text, 600.
+///   Idle: centered fg-3 icon, no label. No ripple.
 /// - [NooNavStyle.android]: surface fill, 80px. Every tab shows its 24px
 ///   icon over a 12px label (label only visible - not removed from layout,
 ///   so the row never resizes - once selected). The active icon sits in a
 ///   56x32 accent-soft pill that slides between tabs as selection moves,
 ///   rather than popping in/out on the destination item itself.
+///
+/// [NooBottomBarStyle.floating] ignores [style] and always uses the Android
+/// row below, so iOS gets the same icon-only idle tabs.
 ///
 /// [barStyle] (user-configurable in Settings, Appearance) picks between
 /// that edge-to-edge [NooBottomBarStyle.attached] bar and
@@ -45,6 +49,13 @@ const double _kAndroidPillHeight = 32;
 /// body draws behind it - see `tab_state_slivers.dart`'s
 /// `bottomBarClearance`.
 ///
+/// [frosted] (Settings, Appearance) swaps the solid `surface` fill for a
+/// translucent one over a backdrop blur, on both bar styles and both nav
+/// styles, and drops [nooDialogShadow] (a shadow would show through the
+/// glass). It only reads as glass if content draws behind the bar, so the
+/// host `Scaffold` needs `extendBody: true` and each scrollable body needs
+/// the same trailing clearance floating does - see [drawsBehindBody].
+///
 /// [searchDestination]/[onSearchTap] (set together, from Settings'
 /// "Search in bottom bar" - see `DESIGN_SYSTEM.md`'s floating bottom bar
 /// entry) add a Search entry that's never highlighted (tapping it pushes
@@ -54,30 +65,58 @@ const double _kAndroidPillHeight = 32;
 class NooBottomBar extends StatelessWidget {
   final NooNavStyle style;
   final NooBottomBarStyle barStyle;
+  final bool frosted;
+
+  /// Backdrop blur sigma and surface-fill opacity while [frosted] (user-
+  /// adjustable in Settings; the defaults match [FrostedGlassContainer]'s
+  /// blur).
+  final double frostedBlur;
+  final double frostedOpacity;
   final List<NooNavDestination> destinations;
   final int selectedIndex;
   final ValueChanged<int> onSelected;
   final NooNavDestination? searchDestination;
   final VoidCallback? onSearchTap;
 
+  /// Bottom-avatar navigation occupies this slot while closed. Search moves
+  /// from the row into the slot as the avatar expands into its popup.
+  final Widget? avatarSatellite;
+  final double avatarMenuProgress;
+
   const NooBottomBar({
     super.key,
     required this.style,
     this.barStyle = NooBottomBarStyle.attached,
+    this.frosted = false,
+    this.frostedBlur = defaultFrostedBlur,
+    this.frostedOpacity = defaultFrostedOpacity,
     required this.destinations,
     required this.selectedIndex,
     required this.onSelected,
     this.searchDestination,
     this.onSearchTap,
+    this.avatarSatellite,
+    this.avatarMenuProgress = 0,
   });
 
   /// The row height [build] draws for [style]/[barStyle] - exposed so a
   /// scrollable body sharing the same `Scaffold` can reserve exactly this
   /// much clearance (see the class doc comment) instead of guessing.
   static double rowHeight(NooNavStyle style, NooBottomBarStyle barStyle) {
-    if (style == NooNavStyle.ios) return 50;
+    if (style == NooNavStyle.ios && barStyle != NooBottomBarStyle.floating) {
+      return 50;
+    }
     return barStyle == NooBottomBarStyle.floating ? 64 : 80;
   }
+
+  static const double defaultFrostedBlur = 20;
+  static const double defaultFrostedOpacity = 0.72;
+
+  /// Whether the host `Scaffold` must draw its body behind the bar
+  /// (`extendBody`) - true for floating (its transparent margin) and for any
+  /// frosted bar (there's nothing to blur otherwise).
+  static bool drawsBehindBody(NooBottomBarStyle barStyle, bool frosted) =>
+      frosted || barStyle == NooBottomBarStyle.floating;
 
   /// Gap between the floating bar's bottom edge and the safe area below it
   /// (itself inside the [SafeArea] that consumes the actual device inset).
@@ -86,13 +125,20 @@ class NooBottomBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.nooColors;
-    final ios = style == NooNavStyle.ios;
     final floating = barStyle == NooBottomBarStyle.floating;
+    // Floating always gets the Android row (icon-only idle tabs, sliding
+    // pill) - iOS's icon-over-label row doesn't fit a pill that short.
+    final ios = style == NooNavStyle.ios && !floating;
     final hasSearch = searchDestination != null && onSearchTap != null;
     // Attached folds Search into the row itself (last item); floating
     // gives it a separate satellite circle instead (built below), so the
     // row builders only ever see it as a trailing item in the former case.
-    final rowSearch = hasSearch && !floating ? searchDestination : null;
+    final rowSearch =
+        hasSearch &&
+            (!floating || avatarSatellite != null) &&
+            (avatarSatellite == null || !floating || avatarMenuProgress < 1)
+        ? searchDestination
+        : null;
 
     final row = ios
         ? _buildIosRow(trailingSearch: rowSearch)
@@ -104,17 +150,21 @@ class NooBottomBar extends StatelessWidget {
     final barHeight = NooBottomBar.rowHeight(style, barStyle);
 
     if (floating) {
-      final pill = Container(
+      final pillRadius = BorderRadius.circular(28);
+      final pillBox = Container(
         height: barHeight,
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          color: colors.surface,
+          color: _fill(colors),
           border: Border.all(color: colors.line),
-          borderRadius: BorderRadius.circular(28),
-          boxShadow: const [nooDialogShadow],
+          borderRadius: pillRadius,
+          boxShadow: frosted ? null : const [nooDialogShadow],
         ),
         child: row,
       );
+      final pill = frosted
+          ? _blurred(pillBox, pillRadius, frostedBlur)
+          : pillBox;
       return SafeArea(
         top: false,
         child: Padding(
@@ -124,7 +174,9 @@ class NooBottomBar extends StatelessWidget {
             16,
             NooBottomBar.floatingBottomMargin,
           ),
-          child: hasSearch
+          child: avatarSatellite != null
+              ? _withAvatar(pill, barHeight, hasSearch)
+              : hasSearch
               // A fixed-height SizedBox, not just a Row with
               // crossAxisAlignment.stretch - the bottomNavigationBar slot
               // gives this widget a *loose* (unbounded-max) height
@@ -145,6 +197,9 @@ class NooBottomBar extends StatelessWidget {
                         destination: searchDestination!,
                         onTap: onSearchTap!,
                         size: barHeight,
+                        frosted: frosted,
+                        frostedBlur: frostedBlur,
+                        frostedOpacity: frostedOpacity,
                       ),
                     ],
                   ),
@@ -154,39 +209,133 @@ class NooBottomBar extends StatelessWidget {
       );
     }
 
-    return Container(
+    final bar = Container(
       decoration: BoxDecoration(
-        color: colors.surface,
+        color: _fill(colors),
         border: ios ? Border(top: BorderSide(color: colors.line)) : null,
       ),
       child: SafeArea(
         top: false,
-        child: SizedBox(height: barHeight, child: row),
+        child: SizedBox(
+          height: barHeight,
+          child: avatarSatellite == null
+              ? row
+              : Row(
+                  children: [
+                    Expanded(child: row),
+                    SizedBox(
+                      width: barHeight,
+                      height: barHeight,
+                      child: avatarSatellite,
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                ),
+        ),
+      ),
+    );
+    return frosted ? _blurred(bar, BorderRadius.zero, frostedBlur) : bar;
+  }
+
+  Widget _withAvatar(Widget rail, double height, bool hasSearch) {
+    final satelliteWidth = hasSearch
+        ? height
+        : height * (1 - avatarMenuProgress);
+    return SizedBox(
+      height: height,
+      child: Row(
+        children: [
+          Expanded(child: rail),
+          SizedBox(width: 8 * (hasSearch ? 1 : 1 - avatarMenuProgress)),
+          SizedBox(
+            width: satelliteWidth,
+            height: height,
+            child: ClipRect(
+              child: OverflowBox(
+                alignment: Alignment.centerRight,
+                minWidth: height,
+                maxWidth: height,
+                child: Stack(
+                  children: [
+                    avatarSatellite!,
+                    if (hasSearch && avatarMenuProgress > 0)
+                      Opacity(
+                        opacity: avatarMenuProgress,
+                        child: _SearchSatellite(
+                          destination: searchDestination!,
+                          onTap: onSearchTap!,
+                          size: height,
+                          frosted: frosted,
+                          frostedBlur: frostedBlur,
+                          frostedOpacity: frostedOpacity,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
+  Color _fill(NooColors colors) => frosted
+      ? colors.surface.withValues(alpha: frostedOpacity)
+      : colors.surface;
+
+  double get _rowSearchFraction =>
+      avatarSatellite == null || barStyle == NooBottomBarStyle.attached
+      ? 1
+      : 1 - avatarMenuProgress;
+
+  Widget _searchRowItem(Widget child, double width) => SizedBox(
+    width: width * _rowSearchFraction,
+    child: IgnorePointer(
+      ignoring: _rowSearchFraction < .95,
+      child: ClipRect(
+        child: OverflowBox(
+          minWidth: width,
+          maxWidth: width,
+          child: Opacity(opacity: _rowSearchFraction, child: child),
+        ),
+      ),
+    ),
+  );
+
   Widget _buildIosRow({NooNavDestination? trailingSearch}) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (var i = 0; i < destinations.length; i++)
-          Expanded(
-            child: _IosItem(
-              destination: destinations[i],
-              selected: i == selectedIndex,
-              onTap: () => onSelected(i),
-            ),
-          ),
-        if (trailingSearch != null)
-          Expanded(
-            child: _IosItem(
-              destination: trailingSearch,
-              selected: false,
-              onTap: onSearchTap!,
-            ),
-          ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width =
+            constraints.maxWidth /
+            (destinations.length +
+                (trailingSearch == null ? 0 : _rowSearchFraction));
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < destinations.length; i++)
+              SizedBox(
+                width: width,
+                child: _IosItem(
+                  destination: destinations[i],
+                  selected: i == selectedIndex,
+                  selectedLabelOnly: true,
+                  onTap: () => onSelected(i),
+                ),
+              ),
+            if (trailingSearch != null)
+              _searchRowItem(
+                _IosItem(
+                  destination: trailingSearch,
+                  selected: false,
+                  selectedLabelOnly: true,
+                  onTap: onSearchTap!,
+                ),
+                width,
+              ),
+          ],
+        );
+      },
     );
   }
 
@@ -196,7 +345,8 @@ class NooBottomBar extends StatelessWidget {
     NooNavDestination? trailingSearch,
   }) {
     final pillTop = floating ? _kFloatingPillTop : _kAttachedPillTop;
-    final itemCount = destinations.length + (trailingSearch != null ? 1 : 0);
+    final itemCount =
+        destinations.length + (trailingSearch != null ? _rowSearchFraction : 0);
     return LayoutBuilder(
       builder: (context, constraints) {
         final itemWidth = constraints.maxWidth / itemCount;
@@ -222,7 +372,8 @@ class NooBottomBar extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 for (var i = 0; i < destinations.length; i++)
-                  Expanded(
+                  SizedBox(
+                    width: itemWidth,
                     child: _AndroidItem(
                       destination: destinations[i],
                       selected: i == selectedIndex,
@@ -231,13 +382,14 @@ class NooBottomBar extends StatelessWidget {
                     ),
                   ),
                 if (trailingSearch != null)
-                  Expanded(
-                    child: _AndroidItem(
+                  _searchRowItem(
+                    _AndroidItem(
                       destination: trailingSearch,
                       selected: false,
                       floating: floating,
                       onTap: onSearchTap!,
                     ),
+                    itemWidth,
                   ),
               ],
             ),
@@ -248,6 +400,16 @@ class NooBottomBar extends StatelessWidget {
   }
 }
 
+/// Clips [child] to [radius] and blurs whatever is drawn behind it - the
+/// frosted bar's backdrop. [child] supplies the translucent fill on top.
+Widget _blurred(Widget child, BorderRadius radius, double sigma) => ClipRRect(
+  borderRadius: radius,
+  child: BackdropFilter(
+    filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+    child: child,
+  ),
+);
+
 /// The floating bar's own Search entry point, next to the pill rather than
 /// inside it - always fully round (see [NooBottomBar]'s doc comment),
 /// same fill/border as the pill so the two still read as one family.
@@ -255,11 +417,17 @@ class _SearchSatellite extends StatelessWidget {
   final NooNavDestination destination;
   final VoidCallback onTap;
   final double size;
+  final bool frosted;
+  final double frostedBlur;
+  final double frostedOpacity;
 
   const _SearchSatellite({
     required this.destination,
     required this.onTap,
     required this.size,
+    required this.frosted,
+    required this.frostedBlur,
+    required this.frostedOpacity,
   });
 
   @override
@@ -271,31 +439,42 @@ class _SearchSatellite extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: Container(
-          width: size,
-          height: size,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: colors.surface,
-            border: Border.all(color: colors.line),
-            shape: BoxShape.circle,
-            boxShadow: const [nooDialogShadow],
-          ),
-          child: Icon(destination.icon, size: 24, color: colors.fg1),
-        ),
+        child: _satelliteBody(colors),
       ),
     );
+  }
+
+  Widget _satelliteBody(NooColors colors) {
+    final disc = Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: frosted
+            ? colors.surface.withValues(alpha: frostedOpacity)
+            : colors.surface,
+        border: Border.all(color: colors.line),
+        shape: BoxShape.circle,
+        boxShadow: frosted ? null : const [nooDialogShadow],
+      ),
+      child: Icon(destination.icon, size: 24, color: colors.fg1),
+    );
+    return frosted
+        ? _blurred(disc, BorderRadius.circular(size / 2), frostedBlur)
+        : disc;
   }
 }
 
 class _IosItem extends StatelessWidget {
   final NooNavDestination destination;
   final bool selected;
+  final bool selectedLabelOnly;
   final VoidCallback onTap;
 
   const _IosItem({
     required this.destination,
     required this.selected,
+    this.selectedLabelOnly = false,
     required this.onTap,
   });
 
@@ -306,30 +485,35 @@ class _IosItem extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
+      label: selectedLabelOnly && !selected ? destination.label : null,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.start,
-            children: [
-              Icon(destination.icon, size: 24, color: fg),
-              const SizedBox(height: 4),
-              Text(
-                destination.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: NooText.navLabel.copyWith(
-                  fontSize: 10,
-                  height: 1,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                  color: fg,
+        child: selectedLabelOnly && !selected
+            ? Center(child: Icon(destination.icon, size: 24, color: fg))
+            : Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    Icon(destination.icon, size: 24, color: fg),
+                    const SizedBox(height: 4),
+                    Text(
+                      destination.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: NooText.navLabel.copyWith(
+                        fontSize: 10,
+                        height: 1,
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.w500,
+                        color: fg,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-        ),
       ),
     );
   }

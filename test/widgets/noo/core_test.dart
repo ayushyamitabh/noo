@@ -10,6 +10,7 @@ import 'package:noo/widgets/noo/core/noo_chip.dart';
 import 'package:noo/widgets/noo/core/noo_fab.dart';
 import 'package:noo/widgets/noo/core/noo_progress_bar.dart';
 import 'package:noo/widgets/noo/core/noo_search_field.dart';
+import 'package:noo/widgets/noo/core/noo_slider.dart';
 import 'package:noo/widgets/noo/core/noo_segmented_control.dart';
 import 'package:noo/widgets/noo/core/noo_toggle.dart';
 import 'package:noo/widgets/noo/nav/noo_nav_style.dart';
@@ -71,6 +72,59 @@ void main() {
       final nooColors = NooColors.fromDynamicScheme(dynamicScheme);
       expect(nooColors.scrim, NooColors.light.scrim);
       expect(nooColors.scrim.a, lessThan(1.0));
+    });
+  });
+
+  group('NooColors.fromDynamicScheme surfaces', () {
+    for (final brightness in Brightness.values) {
+      test('cards are clearly lighter than the page (${brightness.name})', () {
+        // The OS palette overrides `surface` (what `bg` maps to) but not the
+        // seeded container roles - mimic that mismatch.
+        final seeded = ColorScheme.fromSeed(
+          seedColor: const Color(0xFF3F6B8F),
+          brightness: brightness,
+        );
+        final os = seeded.copyWith(
+          surface: brightness == Brightness.light
+              ? const Color(0xFFF7F9FC)
+              : const Color(0xFF101417),
+        );
+        final c = NooColors.fromDynamicScheme(os);
+        // WCAG-style contrast ratio between the card and the page.
+        final hi = c.surface.computeLuminance();
+        final lo = c.bg.computeLuminance();
+        expect(hi, greaterThan(lo));
+        expect((hi + 0.05) / (lo + 0.05), greaterThan(1.04));
+      });
+    }
+  });
+
+  group('NooSlider', () {
+    testNooWidgets('dragging reports a value within min..max', (
+      tester,
+      theme,
+      c,
+    ) async {
+      var value = 10.0;
+      await pumpNoo(
+        tester,
+        StatefulBuilder(
+          builder: (context, setState) => SizedBox(
+            width: 300,
+            child: NooSlider(
+              value: value,
+              min: 0,
+              max: 40,
+              onChanged: (v) => setState(() => value = v),
+            ),
+          ),
+        ),
+        theme: theme,
+      );
+      await tester.drag(find.byType(Slider), const Offset(150, 0));
+      await tester.pump();
+      expect(value, greaterThan(10));
+      expect(value, lessThanOrEqualTo(40));
     });
   });
 

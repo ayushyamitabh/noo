@@ -1,23 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../../../models/selection_action.dart';
 import '../../../theme/design_tokens.dart';
 
-/// The two swipe actions the design system defines (`DESIGN_SYSTEM.md` 2,
-/// "Swipe action"); which one sits on which side is a user setting
-/// (Settings -> Swipe on a file).
-enum NooSwipeActionKind { delete, favorite }
+/// Swipe blocks share the action bar's identities, icons and default labels.
+typedef NooSwipeActionKind = SelectionActionKind;
 
 /// One side's action for [NooSwipeAction].
 class NooSwipeActionSpec {
   final NooSwipeActionKind kind;
   final VoidCallback onTriggered;
 
-  /// Overrides the default label ("Delete" / "Favorite"), e.g.
+  /// Overrides the action's default label, e.g.
   /// "Unfavorite" for an already-starred file.
   final String? label;
 
-  /// Overrides the default icon (`trash-2` / `star`).
+  /// Overrides the action's default icon.
   final IconData? icon;
 
   const NooSwipeActionSpec({
@@ -30,7 +28,7 @@ class NooSwipeActionSpec {
 
 /// Wraps a row (normally a `NooFileRow`) so dragging it horizontally slides
 /// it aside to uncover a 96px action block: delete is white on
-/// `danger-fill`, favorite is white on `accent`, each a 20px icon over a
+/// `danger-fill`, other actions are white on `accent`, each a 20px icon over a
 /// 12/600 label. Releasing past half the block snaps it open, otherwise it
 /// springs shut - both on [NooMotion.base] / [NooMotion.ease], no bounce.
 /// Tapping the block fires the action and closes it; tapping the row while
@@ -256,9 +254,8 @@ class _ActionBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDelete = spec.kind == NooSwipeActionKind.delete;
     final bg = isDelete ? colors.dangerFill : colors.accent;
-    final icon =
-        spec.icon ?? (isDelete ? LucideIcons.trash2 : LucideIcons.star);
-    final label = spec.label ?? (isDelete ? 'Delete' : 'Favorite');
+    final icon = spec.icon ?? spec.kind.icon;
+    final label = spec.label ?? spec.kind.label;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,

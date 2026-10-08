@@ -1,0 +1,103 @@
+name: Build iOS
+
+# Tag scheme (shared with the Android workflows):
+#   Release-<version>  -> release.yml (Play bundle) AND this workflow
+#   RC-Android-<n>     -> build.yml (APK) only
+#   RC-iOS-<n>         -> this workflow only
+#   git tag RC-iOS-1 && git push origin RC-iOS-1
+# Builds a signed .ipa and uploads it to TestFlight. Needs a Mac runner
+# registered with the `macos` label (gitea-runner in host mode) with Xcode
+# installed; Linux runners cannot build iOS.
+on:
+  push:
+    tags:
+      - "Release-*"
+      - "RC-iOS-*"
+
+jobs:
+  build:
+    runs-on: macos
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Check tag matches pubspec version
+        # Only Release-* tags carry a version; RC-iOS-* tags are free-form.
+        if: startsWith(github.ref_name, 'Release-')
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
+          if [ "${GITHUB_REF_NAME}" != "Release-${VERSION}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match pubspec version ${VERSION}" >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Install signing certificate and profiles
+        # A throwaway keychain keeps the distribution key off the runner's
+        # login keychain; it is deleted again in the cleanup step.
+        env:
+          CERT_P12_BASE64: ${{ secrets.IOS_DIST_CERT_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+          APP_PROFILE_BASE64: ${{ secrets.IOS_APP_PROFILE_BASE64 }}
+          EXT_PROFILE_BASE64: ${{ secrets.IOS_EXT_PROFILE_BASE64 }}
+        run: |
+          KEYCHAIN="${{ runner.temp }}/ci-signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(uuidgen)
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          echo "$CERT_P12_BASE64" | base64 -d > "${{ runner.temp }}/dist.p12"
+          security import "${{ runner.temp }}/dist.p12" -P "$CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm -f "${{ runner.temp }}/dist.p12"
+          # Must list 2527806871D8... (the cert the profiles embed); if it
+          # doesn't, IOS_DIST_CERT_P12_BASE64 holds the wrong certificate.
+          security find-identity -v -p codesigning "$KEYCHAIN"
+
+          PROFILES_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILES_DIR"
+          echo "$APP_PROFILE_BASE64" | base64 -d > "$PROFILES_DIR/NooProfile.mobileprovision"
+          echo "$EXT_PROFILE_BASE64" | base64 -d > "$PROFILES_DIR/NooShareSheetProfile.mobileprovision"
+
+      - name: Switch Release config to manual signing
+        run: ruby .gitea/scripts/ios_ci_signing.rb
+
+      - name: Build signed IPA
+        run: flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+
+      - name: Rename IPA to Noo-<version>.ipa
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
+          mkdir -p release
+          cp build/ios/ipa/*.ipa "release/Noo-${VERSION}.ipa"
+          echo "IPA_PATH=release/Noo-${VERSION}.ipa" >> "$GITHUB_ENV"
+
+      - name: Upload to TestFlight
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: |
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          echo "$ASC_KEY_P8_BASE64" | base64 -d > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          xcrun altool --upload-app -f "$IPA_PATH" -t ios \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+
+      - name: Cleanup signing material
+        if: always()
+        run: |
+          security delete-keychain "${{ runner.temp }}/ci-signing.keychain-db" || true
+          rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/NooProfile.mobileprovision" \
+                "$HOME/Library/MobileDevice/Provisioning Profiles/NooShareSheetProfile.mobileprovision"
+          rm -rf "$HOME/.appstoreconnect/private_keys"

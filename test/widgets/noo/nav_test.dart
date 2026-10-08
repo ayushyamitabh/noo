@@ -1,3 +1,4 @@
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -25,6 +26,107 @@ void main() {
   setUpNooTests();
 
   group('NooBottomBar', () {
+    for (final style in NooNavStyle.values) {
+      for (final barStyle in NooBottomBarStyle.values) {
+        testNooWidgets(
+          '$style/$barStyle: frosted draws a backdrop blur, solid does not',
+          (tester, theme, c) async {
+            for (final frosted in [false, true]) {
+              await pumpNoo(
+                tester,
+                SizedBox(
+                  width: 360,
+                  height: 120,
+                  child: NooBottomBar(
+                    style: style,
+                    barStyle: barStyle,
+                    frosted: frosted,
+                    destinations: _destinations,
+                    selectedIndex: 0,
+                    onSelected: (_) {},
+                    searchDestination: const NooNavDestination(
+                      icon: LucideIcons.search,
+                      label: 'Search',
+                    ),
+                    onSearchTap: () {},
+                  ),
+                ),
+                theme: theme,
+              );
+              expect(
+                find.byType(BackdropFilter),
+                frosted ? findsWidgets : findsNothing,
+              );
+            }
+          },
+        );
+      }
+    }
+
+    testNooWidgets('frosted bar uses the given blur sigma and fill opacity', (
+      tester,
+      theme,
+      c,
+    ) async {
+      await pumpNoo(
+        tester,
+        SizedBox(
+          width: 360,
+          height: 120,
+          child: NooBottomBar(
+            style: NooNavStyle.android,
+            frosted: true,
+            frostedBlur: 31,
+            frostedOpacity: 0.5,
+            destinations: _destinations,
+            selectedIndex: 0,
+            onSelected: (_) {},
+          ),
+        ),
+        theme: theme,
+      );
+      expect(
+        tester.widget<BackdropFilter>(find.byType(BackdropFilter)).filter,
+        ImageFilter.blur(sigmaX: 31, sigmaY: 31),
+      );
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Container &&
+              w.decoration is BoxDecoration &&
+              (w.decoration as BoxDecoration).color ==
+                  c.surface.withValues(alpha: 0.5),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    test('drawsBehindBody: floating or frosted', () {
+      expect(
+        NooBottomBar.drawsBehindBody(NooBottomBarStyle.attached, false),
+        isFalse,
+      );
+      expect(
+        NooBottomBar.drawsBehindBody(NooBottomBarStyle.attached, true),
+        isTrue,
+      );
+      expect(
+        NooBottomBar.drawsBehindBody(NooBottomBarStyle.floating, false),
+        isTrue,
+      );
+    });
+
+    test('floating row height is the Android one on both nav styles', () {
+      expect(
+        NooBottomBar.rowHeight(NooNavStyle.ios, NooBottomBarStyle.floating),
+        64,
+      );
+      expect(
+        NooBottomBar.rowHeight(NooNavStyle.ios, NooBottomBarStyle.attached),
+        50,
+      );
+    });
+
     testNooWidgets('android: label sits below the icon, not beside it', (
       tester,
       theme,
@@ -113,7 +215,7 @@ void main() {
       expect(opacity.opacity, 0);
     });
 
-    testNooWidgets('ios: unchanged icon-above-label layout, no indicator', (
+    testNooWidgets('ios: only selected tab has a label, no indicator', (
       tester,
       theme,
       c,
@@ -136,6 +238,8 @@ void main() {
       final iconCenter = tester.getCenter(find.byIcon(LucideIcons.images));
       final labelCenter = tester.getCenter(find.text('Photos'));
       expect(labelCenter.dy, greaterThan(iconCenter.dy));
+      expect(find.text('Files'), findsNothing);
+      expect(find.text('Favorites'), findsNothing);
     });
 
     testNooWidgets('floating: inset, rounded, bordered - not edge to edge', (
