@@ -109,6 +109,17 @@ Gotchas:
   trigger it) but also fires it directly if the drag goes far enough (past
   1.8x the block's width) before release - a full swipe-through does delete
   in one gesture, it's not tap-only anymore.
+- Swipe settings offer every `SelectionActionKind` plus None. `SwipeAction`
+  persists the existing enum names and maps to that shared action catalog;
+  `FilesView` uses the single-item action-bar handlers, with the existing
+  delete confirmation retained. Labels/icons update for favorited and synced
+  items. Swipes remain disabled during selection, picking, and offline browsing.
+- Settings → Action bar shows the real `NooSelectionBar` above its reorder
+  list. It updates immediately and supports the same More sheet; preview
+  actions only show feedback, never operate on files. The bar scales down
+  inside Settings' narrower column while keeping the mobile/tablet split.
+- The Security setting is labelled **App lock** on every platform; its
+  subtitle still explains device PIN or biometric authentication.
 - Always read colors through `context.nooColors`, never
   `Theme.of(context).colorScheme` - the latter is Flutter's own Material 3
   scheme, reseeded by the user's accent color choice (`AppTheme.light`/

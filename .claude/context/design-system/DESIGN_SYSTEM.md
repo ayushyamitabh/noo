@@ -168,10 +168,10 @@ Use **Lucide** (pinned to `lucide-static@0.460.0`) at a 1.8 stroke. Sizes are 14
 - Shared: `users` in fg-3.
 
 **Swipe action**
-- The row slides and uncovers a 96px action block. Delete is white on danger-fill; Favorite is white on accent.
+- The row slides and uncovers a 96px action block. Delete is white on danger-fill; all other actions are white on accent.
 - The block has a 20px icon above a 12/600 label.
 - Releasing past half the block snaps it open; dragging further still (past 1.8× the block's width, a haptic tick marks the crossing and the icon bumps up 15%) arms the action, and releasing while armed fires it immediately - one swipe-through gesture instead of open-then-tap. The block grows to fill however far it's dragged, so there's never a gap behind it.
-- Swipe actions are set in Settings → Swipe on a file.
+- Swipe actions are set in Settings → Swipe on a file. Both directions offer None and every action-bar action: Favorite, Share, Download, Delete, Copy, Move, Rename, Sync to device, Details. They use the same single-item handlers; Delete still asks for confirmation.
 
 **Selection action bar** (Files, Photos, Favorites - anywhere with
 multi-select)
@@ -289,7 +289,7 @@ Mobile always has **5 pinned tabs in the bottom bar**. The rest go in the drawer
 | Upload | `plus` in the nav bar | Extended FAB - fully round (pill) when the bottom bar is floating, rounded square (`card` radius) when it's attached |
 | Overflow icon | `ellipsis` | `ellipsis-vertical` |
 | Settings | Pushed screen with a "‹ Files" back button and a large title. No bottom bar. | Pushed screen with a back arrow and a title. No bottom bar. |
-| Biometric label | "Lock with Face ID" | "Lock with fingerprint" |
+| App lock label | "App lock" | "App lock" |
 
 ### Wide tablet
 
@@ -359,7 +359,9 @@ Sidebar items are 38px tall with radius 12, an 18px icon and a 14/500 label. The
      priority order for the Selection action bar's bulk actions (favorite,
      share, download, delete, copy, move, rename, sync, details) - the
      first few (3 mobile / 4 wide tablet) land in the bar's fixed inline
-     slots, the rest sit behind "More". See §2 "Selection action bar".
+     slots, the rest sit behind "More". A live preview above the list uses
+     the actual bar and updates on reorder, including its More sheet. Preview
+     actions show feedback without touching files. See §2 "Selection action bar".
   9. Swipe on a file
 
   Mobile is a two-level menu, the way native iOS/Android Settings apps

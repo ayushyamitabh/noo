@@ -4,6 +4,7 @@ import '../../models/selection_action.dart';
 import '../../providers/settings_controller.dart';
 import '../../theme/design_tokens.dart';
 import '../noo/lists/noo_tab_order_row.dart';
+import '../noo/lists/noo_selection_bar.dart';
 import '../noo/lists/noo_settings_row.dart';
 import '../noo/lists/noo_grouped_list.dart';
 import '../noo/core/noo_segmented_control.dart';
@@ -58,7 +59,11 @@ class SettingsActionBarSection extends StatelessWidget {
     if (!desktop) {
       return NooGroupedList(
         footer: const Text(_subtitle),
-        children: [positionRow, orderList],
+        children: [
+          _ActionBarPreview(order: settings.selectionActionOrder),
+          positionRow,
+          orderList,
+        ],
       );
     }
 
@@ -79,9 +84,60 @@ class SettingsActionBarSection extends StatelessWidget {
           const SizedBox(height: 4),
           Text(_subtitle, style: NooText.meta.copyWith(color: colors.fg3)),
           const SizedBox(height: NooSpace.md),
+          _ActionBarPreview(order: settings.selectionActionOrder),
+          const SizedBox(height: NooSpace.md),
           positionRow,
           const SizedBox(height: NooSpace.md),
           orderList,
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionBarPreview extends StatelessWidget {
+  final List<SelectionActionKind> order;
+
+  const _ActionBarPreview({required this.order});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.nooColors;
+    final desktop = NooLayout.isDesktop(context);
+    return Container(
+      padding: const EdgeInsets.all(NooSpace.sm),
+      color: colors.surface2,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Preview', style: NooText.meta.copyWith(color: colors.fg3)),
+          const SizedBox(height: NooSpace.xs),
+          // Settings has a narrower column than the file browser. Scale the
+          // real bar to fit rather than changing its inline/overflow split.
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: SizedBox(
+              width: desktop ? 1000 : 400,
+              child: NooSelectionBar(
+                count: 1,
+                isDesktop: desktop,
+                iosStyle: NooLayout.iosStyle(context),
+                onClose: () {},
+                actions: [
+                  for (final kind in order)
+                    SelectionAction(
+                      kind: kind,
+                      icon: kind.icon,
+                      label: kind.label,
+                      onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('${kind.label} preview')),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );

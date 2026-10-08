@@ -6,26 +6,6 @@ import '../noo/core/noo_toggle.dart';
 import '../noo/lists/noo_settings_row.dart';
 import 'settings_section.dart';
 
-/// Per-platform copy for the login-lock row's label (DESIGN_SYSTEM.md 3's
-/// "Biometric label" row, both the mobile table and the macOS/Windows
-/// desktop table). Falls back to generic copy on platforms the spec
-/// doesn't name (Linux, tests).
-String biometricLabel(TargetPlatform platform) {
-  switch (platform) {
-    case TargetPlatform.iOS:
-      return 'Lock with Face ID';
-    case TargetPlatform.android:
-      return 'Lock with fingerprint';
-    case TargetPlatform.macOS:
-      return 'Touch ID';
-    case TargetPlatform.windows:
-      return 'Windows Hello';
-    case TargetPlatform.linux:
-    case TargetPlatform.fuchsia:
-      return 'Lock with device credential';
-  }
-}
-
 /// Settings section 3: three independent locks - opening the app, switching
 /// accounts, and revealing hidden files - each behind the device's own PIN/
 /// biometric credential (see `AppLockService` - this app never stores or
@@ -58,14 +38,13 @@ class SettingsSecuritySection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final session = context.watch<SessionController>();
-    final platform = Theme.of(context).platform;
 
     return SettingsSection(
       title: 'Security',
       children: [
         NooSettingsRow(
           icon: LucideIcons.lock,
-          label: Text(biometricLabel(platform)),
+          label: const Text('App lock'),
           subtitle: const Text(
             "Require this device's PIN or biometric to open Noo",
           ),

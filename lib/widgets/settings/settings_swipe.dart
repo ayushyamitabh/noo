@@ -6,19 +6,6 @@ import '../../theme/design_tokens.dart';
 import '../noo/lists/noo_settings_row.dart';
 import 'settings_section.dart';
 
-String _swipeActionLabel(SwipeAction action) {
-  switch (action) {
-    case SwipeAction.none:
-      return 'None';
-    case SwipeAction.favorite:
-      return 'Favorite';
-    case SwipeAction.delete:
-      return 'Delete';
-    case SwipeAction.share:
-      return 'Share';
-  }
-}
-
 /// Settings section 8: what swiping a file left/right does in list view.
 class SettingsSwipeSection extends StatelessWidget {
   const SettingsSwipeSection({super.key});
@@ -35,7 +22,8 @@ class SettingsSwipeSection extends StatelessWidget {
       options: [
         for (final action in SwipeAction.values)
           NooSettingsRow(
-            label: Text(_swipeActionLabel(action)),
+            icon: action.selectionKind?.icon,
+            label: Text(action.label),
             trailing: action == current
                 ? Icon(
                     LucideIcons.check,
@@ -64,7 +52,7 @@ class SettingsSwipeSection extends StatelessWidget {
         NooSettingsRow(
           icon: LucideIcons.chevronsRight,
           label: const Text('Swipe right'),
-          value: _swipeActionLabel(settings.swipeRightAction),
+          value: settings.swipeRightAction.label,
           onTap: () => _openPicker(
             context,
             title: 'Swipe right',
@@ -75,7 +63,7 @@ class SettingsSwipeSection extends StatelessWidget {
         NooSettingsRow(
           icon: LucideIcons.chevronsLeft,
           label: const Text('Swipe left'),
-          value: _swipeActionLabel(settings.swipeLeftAction),
+          value: settings.swipeLeftAction.label,
           onTap: () => _openPicker(
             context,
             title: 'Swipe left',

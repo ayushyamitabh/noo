@@ -7,7 +7,24 @@ import '../widgets/noo/nav/noo_nav_style.dart';
 
 /// What swiping a Files list-view item left/right does, user-configurable
 /// in Settings.
-enum SwipeAction { none, favorite, delete, share }
+enum SwipeAction {
+  none(null),
+  favorite(SelectionActionKind.favorite),
+  delete(SelectionActionKind.delete),
+  share(SelectionActionKind.share),
+  download(SelectionActionKind.download),
+  copy(SelectionActionKind.copy),
+  move(SelectionActionKind.move),
+  rename(SelectionActionKind.rename),
+  sync(SelectionActionKind.sync),
+  details(SelectionActionKind.details);
+
+  const SwipeAction(this.selectionKind);
+
+  final SelectionActionKind? selectionKind;
+
+  String get label => selectionKind?.label ?? 'None';
+}
 
 /// How the mobile Upload button is sized: [auto] expands on Files/Photos and
 /// shrinks to an icon elsewhere, [mini] is always icon-only, [expanded]

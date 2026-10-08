@@ -629,30 +629,23 @@ class _FilesViewState extends State<FilesView> {
     );
   }
 
-  /// The user's configured swipe action for one side of a row, or null if
-  /// that side is off or set to an action the design's two-slot
-  /// `NooSwipeAction` has no room for (`SwipeAction.share` - still reachable
-  /// via the row's overflow menu / the "Share" bulk action).
-  NooSwipeActionSpec? _swipeSpec(
-    SwipeAction action,
-    NextcloudItem item,
-    ItemOperations ops,
-  ) {
-    switch (action) {
-      case SwipeAction.favorite:
-        return NooSwipeActionSpec(
-          kind: NooSwipeActionKind.favorite,
-          onTriggered: () => ops.toggleItemFavorite(item),
-        );
-      case SwipeAction.delete:
-        return NooSwipeActionSpec(
-          kind: NooSwipeActionKind.delete,
-          onTriggered: () => _confirmAndDeleteViaSwipe(item),
-        );
-      case SwipeAction.share:
-      case SwipeAction.none:
-        return null;
-    }
+  /// Reuse the single-item action handlers so swipe gestures and the action
+  /// bar agree on labels, sheets and mutations. Delete retains its swipe
+  /// confirmation before making any server changes.
+  NooSwipeActionSpec? _swipeSpec(SwipeAction action, NextcloudItem item) {
+    final kind = action.selectionKind;
+    if (kind == null) return null;
+    final selectedAction = _buildSelectionActions(context, [
+      item,
+    ]).firstWhere((candidate) => candidate.kind == kind);
+    return NooSwipeActionSpec(
+      kind: kind,
+      label: selectedAction.label,
+      icon: selectedAction.icon,
+      onTriggered: kind == SelectionActionKind.delete
+          ? () => _confirmAndDeleteViaSwipe(item)
+          : selectedAction.onTap,
+    );
   }
 
   @override
@@ -1343,7 +1336,6 @@ class _FilesViewState extends State<FilesView> {
     final sync = context.watch<SyncStatusController>();
     final session = context.watch<SessionController>();
     final settings = context.watch<SettingsController>();
-    final ops = context.read<ItemOperations>();
     final isSelected = _selectedIds.contains(item.id);
     // Pick mode and selection are server-side features - never on Offline.
     final picking = !_offline && pick.isPicking;
@@ -1381,8 +1373,8 @@ class _FilesViewState extends State<FilesView> {
     final swipeable = _isSelecting || picking || _offline
         ? row
         : NooSwipeAction(
-            startAction: _swipeSpec(settings.swipeRightAction, item, ops),
-            endAction: _swipeSpec(settings.swipeLeftAction, item, ops),
+            startAction: _swipeSpec(settings.swipeRightAction, item),
+            endAction: _swipeSpec(settings.swipeLeftAction, item),
             child: row,
           );
 
