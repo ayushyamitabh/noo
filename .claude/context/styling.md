@@ -2,7 +2,7 @@
 
 **Migration in progress:** the target look is
 [`design-system/DESIGN_SYSTEM.md`](design-system/DESIGN_SYSTEM.md) — warm
-neutrals, one violet accent, pill controls, Schibsted Grotesk/Instrument
+neutrals, one Noo Blue accent, pill controls, Schibsted Grotesk/Instrument
 Sans, no gradients/shadows — built from the `widgets/noo/` component kit
 (see "Noo design-system components" below). Rebuilt so far: the app shell
 (top/bottom bars, drawer, sidebar, toolbar), Files/Offline, Photos,
@@ -409,8 +409,21 @@ blocks are noted where they matter:
   exception, since those colors are content-identity cues, not theme).
 - Use `colorScheme.surfaceContainer*`/`onSurfaceVariant` tokens for
   elevation/secondary text rather than manual opacity on black/white.
-- **Anywhere the app shows its own icon in-app** (splash, lock screen,
-  login screen) uses `assets/icon/app_icon_monochrome.png` — a plain white
+- **Launch/loading screen** (`_SplashView` in `main.dart`, shown while the
+  session restores) is the exception: it shows `NooLogoLoader`
+  (`widgets/noo/core/noo_logo_loader.dart`) — the full-color, transparent
+  `assets/icon/app_logo.png` with the website's logo animation (balls
+  shooting through the logo's "pipes", ported from noo.ayushya.dev's
+  `logo-anim.js`) looped as the loading indicator, still under reduced
+  motion. It continues straight from the Android launch splash
+  (`values-v31` `windowSplashScreenAnimatedIcon` = `drawable-*/splash_icon.png`,
+  the same logo at 116dp on `@color/splash_background`, which is
+  `NooColors.light/dark.bg`), so keep the loader's size (112 wide) and the
+  splash icon's in step. The **sign-in screen** (`LoginView`) loops the same
+  widget as its brand mark, with `semanticLabel: null` so screen readers
+  don't announce it as loading.
+- **Anywhere else the app shows its own icon in-app** (the lock screen)
+  uses `assets/icon/app_icon_monochrome.png` — a plain white
   silhouette on transparent, tinted via `ColorFiltered(colorFilter:
   ColorFilter.mode(colorScheme.onSurface, BlendMode.srcIn), ...)` so it
   reads correctly in both light and dark mode. Never the full-color
@@ -418,7 +431,8 @@ blocks are noted where they matter:
   launcher icon only. The launcher icon is maintained by hand from an
   IconKitchen export (`mipmap-*` in `android/app/src/main/res`); there is no
   generator step. `assets/icon/app_icon_monochrome.png` is deliberately a
-  tightly-cropped glyph (unlike the launcher's safe-zone-padded monochrome
+  tightly-cropped glyph — a white silhouette of the lowercase-n logo source,
+  fitted to ~340px on a 432px canvas (unlike the launcher's safe-zone-padded monochrome
   layer), so it renders at a sensible size at 72-80px.
 
 ## Text/markdown viewer

@@ -111,7 +111,11 @@ void main() {
         child: const NextcloudApp(),
       ),
     );
-    await tester.pumpAndSettle();
+    // Not pumpAndSettle: the sign-in logo animation loops forever, so the
+    // tree never settles. A couple of seconds covers session restore.
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
 
     expect(find.text('Noo'), findsOneWidget);
     expect(find.text('cloud.example.com'), findsOneWidget);

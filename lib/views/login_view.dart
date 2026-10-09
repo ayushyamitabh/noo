@@ -6,6 +6,7 @@ import '../providers/session_controller.dart';
 import '../theme/design_tokens.dart';
 import '../widgets/noo/core/noo_avatar.dart';
 import '../widgets/noo/core/noo_button.dart';
+import '../widgets/noo/core/noo_logo_loader.dart';
 import '../widgets/noo/nav/noo_top_bar.dart';
 import '../widgets/noo/noo_layout.dart';
 import '../widgets/noo/overlays/noo_text_field.dart';
@@ -256,21 +257,10 @@ class _ServerForm extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Center(
-          // Same monochrome-tinted treatment as the splash/lock screens
-          // (see main.dart's _SplashView) - the asset is a plain white
-          // silhouette on transparent, meant to be recolored rather than
-          // shown as-is. Used everywhere the app shows its own icon
-          // in-app, rather than the full-color launcher icon.
-          child: ColorFiltered(
-            colorFilter: ColorFilter.mode(colors.fg1, BlendMode.srcIn),
-            child: Image.asset(
-              'assets/icon/app_icon_monochrome.png',
-              width: 80,
-              height: 80,
-            ),
-          ),
-        ),
+        // The full-color logo with the website's logo animation, looping -
+        // continues the launch splash and loading screen, which show the
+        // same logo. Decorative here: the title below names the app.
+        const Center(child: NooLogoLoader(width: 80, semanticLabel: null)),
         const SizedBox(height: 24),
         Text(
           'Noo',

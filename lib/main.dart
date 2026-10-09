@@ -38,6 +38,7 @@ import 'widgets/create_menu.dart';
 import 'widgets/noo/core/noo_button.dart';
 import 'widgets/noo/core/noo_pointer_selection.dart';
 import 'widgets/noo/core/noo_fab.dart';
+import 'widgets/noo/core/noo_logo_loader.dart';
 import 'widgets/noo/nav/noo_bottom_bar.dart';
 import 'widgets/noo/nav/noo_sidebar.dart';
 import 'widgets/noo/nav/noo_toolbar.dart';
@@ -172,34 +173,10 @@ class _SplashView extends StatelessWidget {
     final colors = context.nooColors;
     return Scaffold(
       backgroundColor: colors.bg,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // The monochrome adaptive-icon layer is a plain white silhouette
-            // on transparent, meant to be tinted rather than shown as-is -
-            // srcIn recolors it to fg-1 so it reads correctly in both light
-            // and dark mode.
-            ColorFiltered(
-              colorFilter: ColorFilter.mode(colors.fg1, BlendMode.srcIn),
-              child: Image.asset(
-                'assets/icon/app_icon_monochrome.png',
-                width: 72,
-                height: 72,
-              ),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.5,
-                color: colors.accent,
-              ),
-            ),
-          ],
-        ),
-      ),
+      // Picks up straight from the Android launch splash, which shows the
+      // same full-color logo at the same size on the same background - the
+      // logo's own animation is the loading indicator.
+      body: const Center(child: NooLogoLoader(width: 112)),
     );
   }
 }
