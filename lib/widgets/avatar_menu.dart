@@ -73,12 +73,19 @@ class AvatarMenuCard extends StatelessWidget {
   final bool expanded;
   final bool movingAvatar;
   final bool showHeaderAvatar;
+
+  /// Whether the card draws its own (possibly frosted) surface. The shell's
+  /// [AvatarNavigationHost] already wraps the card in one for the whole
+  /// open animation, so it passes false - otherwise a second blur, fill,
+  /// border and shadow would pop in on top the moment the animation ends.
+  final bool surface;
   final Key? headerAvatarKey;
   final VoidCallback onExpand;
   final VoidCallback onClose;
   const AvatarMenuCard({
     super.key,
     this.bottom = false,
+    this.surface = true,
     this.movingAvatar = false,
     this.showHeaderAvatar = true,
     this.headerAvatarKey,
@@ -253,7 +260,7 @@ class AvatarMenuCard extends StatelessWidget {
         ),
       ),
     );
-    return movingAvatar
+    return movingAvatar || !surface
         ? content
         : _AvatarSurface(
             radius: BorderRadius.circular(NooRadii.card),
@@ -541,6 +548,7 @@ class _AvatarNavigationHostState extends State<AvatarNavigationHost>
                   constraints: BoxConstraints(maxHeight: maxHeight),
                   child: AvatarMenuCard(
                     bottom: bottom,
+                    surface: false,
                     movingAvatar: measurement || progress < 1,
                     headerAvatarKey: measurement ? measureAvatarKey : null,
                     showHeaderAvatar: !attached,

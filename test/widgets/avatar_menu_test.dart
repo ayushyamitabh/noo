@@ -383,6 +383,12 @@ void main() {
             matching: find.byType(BackdropFilter),
           );
           expect(backdrop, frosted ? findsOneWidget : findsNothing);
+          // The host's surface is the only one: the card mustn't add a
+          // second blur/fill of its own once the open animation finishes.
+          expect(
+            find.descendant(of: card, matching: find.byType(BackdropFilter)),
+            findsNothing,
+          );
           if (frosted) {
             expect(
               tester.widget<BackdropFilter>(backdrop).filter,
