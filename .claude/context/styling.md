@@ -464,6 +464,23 @@ Tablet sidebar layout uses a 600dp minimum shortest window side, regardless of
 orientation. Portrait iPads and Android tablets therefore keep the sidebar;
 landscape phones and narrow split-screen windows retain phone navigation.
 
+On an unfolded foldable the tablet layout's two columns (sidebar | content,
+in the shell and in tablet Settings) split at the fold instead: both pass
+`NooLayout.foldSplitWidth(context)` (called above their `SafeArea`) as
+`NooSidebar.width`. Only a vertical fold/hinge counts, so a Pixel Fold held in
+book posture splits 50/50 and rotated (fold horizontal) keeps the normal
+sidebar. Every dialog and sheet passes `anchorPoint:
+NooLayout.popupAnchor(context)` so it opens on the right-hand screen, over the
+content - Flutter keeps popups to one side of a fold and otherwise picks the
+top-left one. New `showDialog`/`showModalBottomSheet`/`showGeneralDialog`
+calls must pass it too (`showNooSheet`/`showNooDialog` already do). Android
+reports folds in `MediaQuery.displayFeatures`; iOS has no fold API, so
+`NooLayout.withSyntheticFold` (in `MaterialApp.builder`) adds a half-opened
+vertical fold down the middle for an iPhone (`DeviceIdiom`, from the
+`dev.ayushya.noo/device` channel in `NativeServices.swift`, loaded before
+`runApp`) in a tablet-class window - only possible unfolded - and both
+platforms take the same path from there.
+
 About is the last Settings category. `SettingsAboutSection` reads installed
 version, build number and application identifier through `package_info_plus`,
 so release build overrides appear correctly without hardcoded version text.

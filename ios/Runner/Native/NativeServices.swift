@@ -29,6 +29,14 @@ enum NativeServices {
   private static let uploadStatus = SinkStreamHandler()
 
   static func register(messenger: FlutterBinaryMessenger) {
+    // iPhone vs iPad, for the tablet layout's fold split (Dart's DeviceIdiom):
+    // Flutter has no fold API on iOS, but only an unfolded foldable iPhone
+    // gets a tablet-class window.
+    FlutterMethodChannel(name: "dev.ayushya.noo/device", binaryMessenger: messenger)
+      .setMethodCallHandler { call, result in
+        guard call.method == "isPhone" else { return result(FlutterMethodNotImplemented) }
+        result(UIDevice.current.userInterfaceIdiom == .phone)
+      }
     FlutterMethodChannel(name: "dev.ayushya.noo/upload_service", binaryMessenger: messenger)
       .setMethodCallHandler { call, result in
         guard call.method == "startUpload" else { return result(FlutterMethodNotImplemented) }

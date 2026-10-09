@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../theme/design_tokens.dart';
+import '../noo_layout.dart';
 
 /// Fraction of the available height a sheet can reach before it switches
 /// from sizing to its content to a draggable peek (see [_NooSheetBody]).
@@ -25,6 +26,7 @@ Future<T?> showNooSheet<T>(
   final colors = context.nooColors;
   return showModalBottomSheet<T>(
     context: context,
+    anchorPoint: NooLayout.popupAnchor(context),
     backgroundColor: colors.surface,
     barrierColor: colors.scrim,
     isScrollControlled: true,

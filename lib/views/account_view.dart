@@ -95,6 +95,8 @@ class _AccountViewState extends State<AccountView> {
           child: Row(
             children: [
               NooSidebar(
+                // Split at the crease on an unfolded foldable.
+                width: NooLayout.foldSplitWidth(context),
                 windowControls: Row(
                   children: [
                     IconButton(

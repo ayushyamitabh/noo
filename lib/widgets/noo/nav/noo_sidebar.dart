@@ -32,6 +32,10 @@ class NooSidebar extends StatelessWidget {
   /// its own leading border.
   final bool showDivider;
 
+  /// Overrides the usual width (30% of the window, 200-256), e.g. with
+  /// [NooLayout.foldSplitWidth] to split at a foldable's crease.
+  final double? width;
+
   const NooSidebar({
     super.key,
     this.windowControls,
@@ -42,6 +46,7 @@ class NooSidebar extends StatelessWidget {
     this.storage,
     this.settings,
     this.showDivider = true,
+    this.width,
   });
 
   @override
@@ -50,10 +55,12 @@ class NooSidebar extends StatelessWidget {
     const padding = EdgeInsets.fromLTRB(12, 12, 12, 16);
 
     return Container(
-      width: (MediaQuery.sizeOf(context).width * .3).clamp(
-        200.0,
-        NooSizes.sidebarWidth,
-      ),
+      width:
+          width ??
+          (MediaQuery.sizeOf(context).width * .3).clamp(
+            200.0,
+            NooSizes.sidebarWidth,
+          ),
       decoration: BoxDecoration(
         color: colors.bg,
         border: showDivider

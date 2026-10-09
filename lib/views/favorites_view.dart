@@ -258,6 +258,7 @@ class _FavoritesViewState extends State<FavoritesView> {
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
+      anchorPoint: NooLayout.popupAnchor(context),
       builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Delete Items'),

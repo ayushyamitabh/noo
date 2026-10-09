@@ -812,6 +812,7 @@ class _PhotosViewState extends State<PhotosView> {
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
+      anchorPoint: NooLayout.popupAnchor(context),
       builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Delete Items'),

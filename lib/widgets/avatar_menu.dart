@@ -25,6 +25,7 @@ Future<void> showAvatarMenu(BuildContext context) async {
   }
   await showGeneralDialog<void>(
     context: context,
+    anchorPoint: NooLayout.popupAnchor(context),
     barrierColor: Colors.transparent,
     barrierDismissible: true,
     barrierLabel: 'Close menu',

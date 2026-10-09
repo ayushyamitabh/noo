@@ -252,6 +252,7 @@ class _TrashViewState extends State<TrashView> {
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
+      anchorPoint: NooLayout.popupAnchor(context),
       builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Delete forever'),
@@ -294,6 +295,7 @@ class _TrashViewState extends State<TrashView> {
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
+      anchorPoint: NooLayout.popupAnchor(context),
       builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Empty trash'),

@@ -493,6 +493,7 @@ class _FilesViewState extends State<FilesView> {
     final controller = TextEditingController(text: item.name);
     final newName = await showDialog<String>(
       context: context,
+      anchorPoint: NooLayout.popupAnchor(context),
       builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Rename'),
@@ -1250,6 +1251,7 @@ class _FilesViewState extends State<FilesView> {
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
+      anchorPoint: NooLayout.popupAnchor(context),
       builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Delete Items'),
@@ -1464,6 +1466,7 @@ class _FilesViewState extends State<FilesView> {
   Future<void> _confirmAndDeleteViaSwipe(NextcloudItem item) async {
     final confirmed = await showDialog<bool>(
       context: context,
+      anchorPoint: NooLayout.popupAnchor(context),
       builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Delete Item'),

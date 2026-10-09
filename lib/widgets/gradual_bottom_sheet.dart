@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'noo/noo_layout.dart';
 
 typedef GradualSheetBuilder =
     Widget Function(BuildContext context, ScrollController scrollController);
@@ -20,6 +21,7 @@ Future<T?> showGradualBottomSheet<T>(
   final colorScheme = Theme.of(context).colorScheme;
   return showModalBottomSheet<T>(
     context: context,
+    anchorPoint: NooLayout.popupAnchor(context),
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     builder: (sheetContext) {

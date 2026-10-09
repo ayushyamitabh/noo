@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../theme/design_tokens.dart';
+import '../noo_layout.dart';
 
 /// Desktop counterpart of `showNooSheet`: a 540px, radius-24 card on the
 /// scrim, carrying the design system's one allowed shadow
@@ -19,6 +20,7 @@ Future<T?> showNooDialog<T>(
   final colors = context.nooColors;
   return showGeneralDialog<T>(
     context: context,
+    anchorPoint: NooLayout.popupAnchor(context),
     barrierDismissible: barrierDismissible,
     barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
     barrierColor: colors.scrim,

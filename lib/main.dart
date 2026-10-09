@@ -21,6 +21,7 @@ import 'providers/settings_controller.dart';
 import 'providers/shares_controller.dart';
 import 'providers/sync_status_controller.dart';
 import 'providers/trash_controller.dart';
+import 'services/device_idiom.dart';
 import 'services/pick_intent_service.dart';
 import 'services/share_account_service.dart';
 import 'services/share_intent_service.dart';
@@ -47,10 +48,13 @@ import 'widgets/noo/overlays/noo_dialog.dart';
 import 'widgets/shell/shell_common.dart';
 import 'widgets/shell/tablet_account_menu.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Fonts ship in assets/google_fonts; never fetch them from Google at runtime.
   GoogleFonts.config.allowRuntimeFetching = false;
+  // Before the first frame, so a foldable iPhone's first layout already
+  // splits at the fold (NooLayout.foldSplitWidth).
+  await DeviceIdiom.load();
   runApp(
     MultiProvider(
       // Split out of the former single `ServerProvider` god object - see
@@ -137,7 +141,12 @@ class NextcloudApp extends StatelessWidget {
     return DynamicColorBuilder(
       builder: (lightDynamic, darkDynamic) {
         return MaterialApp(
-          builder: (context, child) => NooPointerSelection(child: child!),
+          // A foldable iPhone reports its fold like Android does (see
+          // NooLayout.withSyntheticFold), so every route below sees it.
+          builder: (context, child) => NooLayout.withSyntheticFold(
+            context,
+            NooPointerSelection(child: child!),
+          ),
           title: 'Noo',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light(
@@ -475,6 +484,8 @@ class _MainShellViewState extends State<MainShellView>
           child: Row(
             children: [
               NooSidebar(
+                // Split at the crease on an unfolded foldable.
+                width: NooLayout.foldSplitWidth(context),
                 account: const TabletAccountMenu(),
                 search: const ShellSearchLauncher(onSurface: true),
                 groupItems: true,
