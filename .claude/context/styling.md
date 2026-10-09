@@ -436,11 +436,50 @@ Markdown files (`.md`/`.markdown`) in `MediaTextPreview` open rendered via `flut
 - The wide tablet branch in `main.dart` is wrapped in `SafeArea` so tablets keep
   system bars clear of the sidebar; the sidebar has no divider between pinned
   and hidden tabs.
-- Wide tablet Settings is the same two-level menu as mobile (centered 640px column, back button in the floating toolbar); the
-  pushed category screens render the wide tablet card layout.
+- Tablet Settings keeps categories in a sidebar with a compact account card;
+  the selected category renders inline in the right pane. Phone categories
+  continue to push a separate screen.
 - Settings that don't apply in wide-tablet (Appearance nav options,
   Swipe on a file) show a `NooInfoNote` via `SettingsSection.notice`.
 - Mobile-layout grids (Files, Favorites, move/copy picker, share upload,
   Photos) take their column count from `NooLayout.gridColumns` (min tile
-  width, never below the phone count), so a tablet in portrait gets more
-  columns rather than a few huge tiles.
+  width, never below the phone count), so wider phone-layout windows get
+  more columns rather than a few huge tiles.
+
+Tablet sidebar layout uses a 600dp minimum shortest window side, regardless of
+orientation. Portrait iPads and Android tablets therefore keep the sidebar;
+landscape phones and narrow split-screen windows retain phone navigation.
+
+About is the last Settings category. `SettingsAboutSection` reads installed
+version, build number and application identifier through `package_info_plus`,
+so release build overrides appear correctly without hardcoded version text.
+
+The tablet Search toolbar is wrapped in `SafeArea` when used as a route's
+app bar, keeping its field and Close action below the system status bar.
+
+File tile grids share `NooLayout.fileGridDelegate`: columns derive from the
+actual content-pane width (220dp maximum tile width), and row heights reserve
+the thumbnail plus scaled name/meta text. Tablet file tables collapse the date
+column below 600dp and the second metadata column below 420dp of available pane
+width, sharing widths between header and
+rows. PDF viewer top-bar space stays reserved when controls hide. About links
+open the website, GitHub repository and privacy policy in the external browser.
+
+Selection bars use the actual content-pane width: compact panes show only
+the icons that fit, with the rest in More; wide panes measure labels before
+choosing the inline actions. The selection count truncates rather than overflow.
+
+Tablet shell sidebars group tab rows in a surface card, put Search below the
+account card, and pin quota/Settings at the bottom. `TabletAccountMenu` expands
+inline with AnimatedSize and a rotating chevron for account switching and
+Add/Manage controls. Tablet Settings uses a category sidebar with a compact
+account card, showing the selected section in a rounded content pane with a
+short fade/slide transition; phones retain pushed category screens. Both
+transitions respect reduced-motion settings. Sidebar widths adapt from 200
+to 256dp as window width grows.
+
+Tablet content panes use the theme surface2 tone, including pinned filter headers, to preserve rounded top corners and contrast with surface-colored tiles. Panes fill their allocated width; photo grids derive tile counts from their actual sliver width. Settings category headings appear only in the toolbar, while distinct subsection headings remain.
+
+Tablet Settings hides bottom-navigation/menu/avatar-position/search-placement controls, upload-button style, swipe-action category, and bottom-tab tap-to-scroll preference. Frosted glass remains available for media viewer panels. Phone preferences stay saved when their controls are hidden.
+
+Pointer selection: NooPointerSelection tracks Flutter mouse presence and trackpad events across platforms. Selectable file rows, tables, tiles and photos expose separate checkboxes when pointer input is available. Checkbox taps toggle selection without opening content. Offline and single-file picker restrictions are preserved; touch-only long press behavior is unchanged. Trackpads without mouse presence are detected on first use, as Flutter has no universal attached-trackpad enumeration.

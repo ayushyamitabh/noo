@@ -34,7 +34,7 @@ class SettingsAccountsSection extends StatelessWidget {
               context,
               session,
               accountId: account.id,
-              username: account.username,
+              username: account.label,
               host: serverHost(account.serverUrl),
               isActive: account.id == session.activeAccountId,
             ),
@@ -45,7 +45,9 @@ class SettingsAccountsSection extends StatelessWidget {
           label: const Text('Add account'),
           onTap: () => Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const LoginView(isAddingAccount: true)),
+            MaterialPageRoute(
+              builder: (_) => const LoginView(isAddingAccount: true),
+            ),
           ),
         ),
       ],
@@ -79,11 +81,18 @@ class _SavedAccountRow extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: NooSpace.md, vertical: 10),
+          padding: const EdgeInsets.symmetric(
+            horizontal: NooSpace.md,
+            vertical: 10,
+          ),
           child: Row(
             spacing: 12,
             children: [
-              NooAvatar(initials: accountInitial(account.username), current: isActive, size: 36),
+              NooAvatar(
+                initials: accountInitial(account.label),
+                current: isActive,
+                size: 36,
+              ),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -108,15 +117,27 @@ class _SavedAccountRow extends StatelessWidget {
                   ],
                 ),
               ),
-              if (isActive) Icon(LucideIcons.checkCircle, size: 20, color: colors.accentText),
+              if (isActive)
+                Icon(
+                  LucideIcons.checkCircle,
+                  size: 20,
+                  color: colors.accentText,
+                ),
               GestureDetector(
                 onTap: onRemove,
                 child: Container(
                   width: 36,
                   height: 36,
                   alignment: Alignment.center,
-                  decoration: BoxDecoration(color: colors.surface2, shape: BoxShape.circle),
-                  child: Icon(LucideIcons.trash2, size: 16, color: colors.danger),
+                  decoration: BoxDecoration(
+                    color: colors.surface2,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    LucideIcons.trash2,
+                    size: 16,
+                    color: colors.danger,
+                  ),
                 ),
               ),
             ],

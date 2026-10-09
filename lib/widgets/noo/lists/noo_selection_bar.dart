@@ -8,7 +8,7 @@ import 'noo_grouped_list.dart';
 import 'noo_settings_row.dart';
 
 /// Bulk actions shown inline before the rest collapse behind "More" - a
-/// fixed, non-scrolling width on every platform (design canvas
+/// capped, non-scrolling row adapted to the available pane width (design canvas
 /// https://claude.ai/artifact/3AGPqqMdkLSC2ypCh2CQs4, "Selection action
 /// bar"). Mobile is tighter (icons share the bar with the close circle and
 /// count on a ~360dp phone); desktop's labelled pills have a wider toolbar
@@ -34,9 +34,9 @@ const int _kDesktopInlineActions = 4;
 /// presentation differ:
 /// - Mobile: the first [_kMobileInlineActions] actions as plain 20px
 ///   accent-text icons, no fill.
-/// - Desktop: the first [_kDesktopInlineActions] as labelled tonal pills -
+/// - Wide panes: up to [_kDesktopInlineActions] as labelled tonal pills -
 ///   danger-soft/danger for the one labelled "Delete", accent-soft/
-///   accent-text otherwise - since desktop has the room for labels.
+///   accent-text otherwise. Narrow tablet panes use the icon presentation.
 ///
 /// Any actions beyond that inline count sit behind a trailing "More"
 /// button that opens the same grouped-list sheet a file row's own overflow
@@ -62,12 +62,43 @@ class NooSelectionBar extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => _buildBar(context, constraints.maxWidth),
+  );
+
+  Widget _buildBar(BuildContext context, double width) {
     final colors = context.nooColors;
     final gutter = isDesktop ? NooSpace.xl : NooSpace.sm;
-    final inlineCount = isDesktop
+    final labelled =
+        isDesktop &&
+        width >= 700 &&
+        MediaQuery.textScalerOf(context).scale(14) <= 18;
+    var inlineCount = labelled
         ? _kDesktopInlineActions
-        : _kMobileInlineActions;
+        : ((width - gutter * 2 - 12 - 140 - 32) / 40).floor().clamp(
+            0,
+            _kMobileInlineActions,
+          );
+    if (labelled) {
+      var used = 0.0;
+      final budget = width - gutter * 2 - 12 - 140 - 85;
+      inlineCount = 0;
+      for (final action in actions.take(_kDesktopInlineActions)) {
+        final text = TextPainter(
+          text: TextSpan(
+            text: action.label,
+            style: NooText.buttonSm.copyWith(fontSize: 13),
+          ),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+        )..layout();
+        final pillWidth = text.width + 51;
+        text.dispose();
+        if (used + pillWidth > budget) break;
+        used += pillWidth;
+        inlineCount++;
+      }
+    }
     final inlineActions = actions.length > inlineCount
         ? actions.sublist(0, inlineCount)
         : actions;
@@ -111,33 +142,33 @@ class NooSelectionBar extends StatelessWidget {
               ),
             ),
             const SizedBox(width: NooSpace.xs),
-            Text(
-              '$count selected',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: NooText.cardTitle.copyWith(
-                fontSize: 17,
-                color: colors.fg1,
+            Expanded(
+              child: Text(
+                '$count selected',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: NooText.cardTitle.copyWith(
+                  fontSize: 17,
+                  color: colors.fg1,
+                ),
               ),
             ),
             const SizedBox(width: NooSpace.xs),
-            Expanded(
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: isDesktop
-                    ? _desktopActions(
-                        context,
-                        colors,
-                        inlineActions,
-                        overflowActions,
-                      )
-                    : _mobileActions(
-                        context,
-                        colors,
-                        inlineActions,
-                        overflowActions,
-                      ),
-              ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: labelled
+                  ? _desktopActions(
+                      context,
+                      colors,
+                      inlineActions,
+                      overflowActions,
+                    )
+                  : _mobileActions(
+                      context,
+                      colors,
+                      inlineActions,
+                      overflowActions,
+                    ),
             ),
           ],
         ),

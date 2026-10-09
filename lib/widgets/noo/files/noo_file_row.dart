@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/noo_pointer_selection.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../theme/design_tokens.dart';
 import 'noo_file_kind.dart';
@@ -41,6 +42,7 @@ class NooFileRow extends StatelessWidget {
   /// `ellipsis` on iOS, `ellipsis-vertical` everywhere else.
   final bool iosStyle;
   final bool selected;
+  final VoidCallback? onSelectionToggle;
 
   /// Real image/video thumbnail for the tile; see [NooFileTile.thumbnail].
   final Widget? thumbnail;
@@ -62,6 +64,7 @@ class NooFileRow extends StatelessWidget {
     this.trailing,
     this.iosStyle = false,
     this.selected = false,
+    this.onSelectionToggle,
     this.thumbnail,
     this.onTap,
     this.onLongPress,
@@ -93,6 +96,10 @@ class NooFileRow extends StatelessWidget {
             ),
             child: Row(
               children: [
+                NooPointerCheckbox(
+                  selected: selected,
+                  onToggle: onSelectionToggle,
+                ),
                 NooFileTile(kind: kind, thumbnail: thumbnail),
                 const SizedBox(width: NooSpace.sm),
                 Expanded(

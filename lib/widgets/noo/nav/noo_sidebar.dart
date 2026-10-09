@@ -22,6 +22,8 @@ import '../core/noo_progress_bar.dart';
 class NooSidebar extends StatelessWidget {
   final Widget? windowControls;
   final Widget? account;
+  final Widget? search;
+  final bool groupItems;
   final List<Widget> items;
   final Widget? storage;
   final Widget? settings;
@@ -34,6 +36,8 @@ class NooSidebar extends StatelessWidget {
     super.key,
     this.windowControls,
     this.account,
+    this.search,
+    this.groupItems = false,
     this.items = const [],
     this.storage,
     this.settings,
@@ -46,7 +50,10 @@ class NooSidebar extends StatelessWidget {
     const padding = EdgeInsets.fromLTRB(12, 12, 12, 16);
 
     return Container(
-      width: NooSizes.sidebarWidth,
+      width: (MediaQuery.sizeOf(context).width * .3).clamp(
+        200.0,
+        NooSizes.sidebarWidth,
+      ),
       decoration: BoxDecoration(
         color: colors.bg,
         border: showDivider
@@ -76,7 +83,26 @@ class NooSidebar extends StatelessWidget {
                         padding: const EdgeInsets.only(bottom: 14),
                         child: account,
                       ),
-                    ...items,
+                    if (search != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 14),
+                        child: search,
+                      ),
+                    if (groupItems)
+                      Material(
+                        color: colors.surface,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(NooRadii.card),
+                          side: BorderSide(color: colors.line),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: items,
+                        ),
+                      )
+                    else
+                      ...items,
                     const Spacer(),
                     ?storage,
                     ?settings,

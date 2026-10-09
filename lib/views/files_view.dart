@@ -745,14 +745,7 @@ class _FilesViewState extends State<FilesView> {
               NooSpace.lg,
             ),
             sliver: SliverGrid(
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: isDesktop
-                    ? 5
-                    : NooLayout.gridColumns(context, phone: 2, minTile: 180),
-                childAspectRatio: isDesktop ? 1.05 : 0.92,
-                crossAxisSpacing: isDesktop ? 16 : 10,
-                mainAxisSpacing: isDesktop ? 16 : 10,
-              ),
+              gridDelegate: NooLayout.fileGridDelegate(context),
               delegate: SliverChildBuilderDelegate((context, index) {
                 final item = items[index];
                 return _FolderEnterAnimation(
@@ -971,7 +964,7 @@ class _FilesViewState extends State<FilesView> {
             ? _buildSelectionBar(context, selectedItems)
             : null,
         child: ColoredBox(
-          color: colors.bg,
+          color: NooLayout.contentBackground(context),
           child: RefreshIndicator(
             color: colors.accent,
             backgroundColor: colors.surface,
@@ -1061,14 +1054,16 @@ class _FilesViewState extends State<FilesView> {
         tone: hasConflicts
             ? NooSummaryCardTone.danger
             : NooSummaryCardTone.normal,
-        action: NooButton(
-          variant: NooButtonVariant.tonal,
-          size: NooButtonSize.compact,
-          icon: LucideIcons.refreshCw,
-          disabled: sync.isSyncingNow,
-          onTap: () => sync.syncOnPull(),
-          child: const Text('Sync now'),
-        ),
+        action: sync.syncEverything || sync.syncedPaths.isNotEmpty
+            ? NooButton(
+                variant: NooButtonVariant.tonal,
+                size: NooButtonSize.compact,
+                icon: LucideIcons.refreshCw,
+                disabled: sync.isSyncingNow,
+                onTap: () => sync.syncOnPull(),
+                child: const Text('Sync now'),
+              )
+            : null,
       ),
     );
   }
@@ -1360,6 +1355,10 @@ class _FilesViewState extends State<FilesView> {
       favorite: item.isFavorite,
       iosStyle: NooLayout.iosStyle(context),
       selected: isSelected,
+      onSelectionToggle:
+          _offline || (picking && !pick.pickRequest!.allowMultiple)
+          ? null
+          : () => _toggleSelection(item),
       thumbnail: _rowThumbnail(context, item, session, NooFileTileSize.row),
       onTap: () => _handleItemTap(context, item, picking: picking),
       onLongPress: _offline || (picking && !pick.pickRequest!.allowMultiple)
@@ -1447,6 +1446,10 @@ class _FilesViewState extends State<FilesView> {
       statuses: _nooStatuses(status),
       favorite: item.isFavorite,
       selected: isSelected,
+      onSelectionToggle:
+          _offline || (picking && !pick.pickRequest!.allowMultiple)
+          ? null
+          : () => _toggleSelection(item),
       thumbnail: _rowThumbnail(context, item, session, NooFileTileSize.desktop),
       onTap: () => _handleItemTap(context, item, picking: picking),
       onLongPress: _offline || (picking && !pick.pickRequest!.allowMultiple)
@@ -1549,6 +1552,10 @@ class _FilesViewState extends State<FilesView> {
           : null,
       thumbnailHeight: NooLayout.isDesktop(context) ? 118 : 104,
       selected: isSelected,
+      onSelectionToggle:
+          _offline || (picking && !pick.pickRequest!.allowMultiple)
+          ? null
+          : () => _toggleSelection(item),
       onTap: () => _handleItemTap(context, item, picking: picking),
       onLongPress: _offline || (picking && !pick.pickRequest!.allowMultiple)
           ? null

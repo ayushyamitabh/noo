@@ -5,11 +5,16 @@ class SavedAccount {
   final String id;
   final String serverUrl;
   final String username;
+  final String? displayName;
+
+  String get label =>
+      displayName?.trim().isNotEmpty == true ? displayName!.trim() : username;
 
   const SavedAccount({
     required this.id,
     required this.serverUrl,
     required this.username,
+    this.displayName,
   });
 
   /// A deterministic id from the server + username, so re-adding the same
@@ -25,11 +30,13 @@ class SavedAccount {
     'id': id,
     'serverUrl': serverUrl,
     'username': username,
+    if (displayName != null) 'displayName': displayName,
   };
 
   factory SavedAccount.fromJson(Map<String, dynamic> json) => SavedAccount(
     id: json['id'] as String,
     serverUrl: json['serverUrl'] as String,
     username: json['username'] as String,
+    displayName: json['displayName'] as String?,
   );
 }

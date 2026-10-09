@@ -171,6 +171,39 @@ class SessionController extends ChangeNotifier with WidgetsBindingObserver {
   // Getters
   String get serverUrl => _serverUrl;
   String get username => _username;
+  String get displayName =>
+      _accounts
+          .where((a) => a.id == activeAccountId)
+          .map((a) => a.label)
+          .firstOrNull ??
+      _username;
+
+  Future<void> cacheDisplayName(String name, {required int generation}) async {
+    final clean = name.trim();
+    if (generation != _sessionGeneration || clean.isEmpty) return;
+    final id = activeAccountId;
+    if (id == null ||
+        !_accounts.any((a) => a.id == id && a.displayName != clean)) {
+      return;
+    }
+    final prefs = await prefsFuture;
+    if (generation != _sessionGeneration) return;
+    _accounts = [
+      for (final a in _accounts)
+        if (a.id == id)
+          SavedAccount(
+            id: a.id,
+            serverUrl: a.serverUrl,
+            username: a.username,
+            displayName: clean,
+          )
+        else
+          a,
+    ];
+    await accountStore.saveAccounts(prefs, _accounts);
+    notifyListeners();
+  }
+
   bool get isLoggedIn => _isLoggedIn;
   bool get isLoading => _isLoading;
   bool get isRestoringSession => _isRestoringSession;
@@ -560,6 +593,8 @@ class SessionController extends ChangeNotifier with WidgetsBindingObserver {
     if (index == -1) return;
     final wasActive = accountId == _activeAccountId;
 
+    await SyncService.removeAccountData(accountId);
+
     _accounts = [..._accounts]..removeAt(index);
     final prefs = await prefsFuture;
     await accountStore.saveAccounts(prefs, _accounts);
@@ -568,8 +603,6 @@ class SessionController extends ChangeNotifier with WidgetsBindingObserver {
       await prefs.remove(accountStore.accountPrefKey(accountId, key));
     }
     await accountStore.setSignedOut(prefs, accountId, false);
-    // Its background sync job holds that account's credentials - stop it.
-    unawaited(SyncService.cancelAccount(accountId));
 
     if (!wasActive) {
       notifyListeners();

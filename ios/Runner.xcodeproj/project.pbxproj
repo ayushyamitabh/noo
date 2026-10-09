@@ -607,6 +607,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				DEVELOPMENT_TEAM = Q3JLTAG9PV;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.ayushya.noo;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
@@ -680,6 +681,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				DEVELOPMENT_TEAM = Q3JLTAG9PV;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.ayushya.noo.ShareExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -708,6 +710,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				DEVELOPMENT_TEAM = Q3JLTAG9PV;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.ayushya.noo.ShareExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -736,6 +739,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				DEVELOPMENT_TEAM = Q3JLTAG9PV;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.ayushya.noo.ShareExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -870,6 +874,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				DEVELOPMENT_TEAM = Q3JLTAG9PV;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.ayushya.noo;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
@@ -893,6 +898,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				DEVELOPMENT_TEAM = Q3JLTAG9PV;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.ayushya.noo;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";

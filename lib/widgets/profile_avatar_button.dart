@@ -30,7 +30,7 @@ class ProfileAvatarButton extends StatelessWidget {
     HapticFeedback.selectionClick();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Switched to ${target.username}'),
+        content: Text('Switched to ${target.label}'),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -39,8 +39,8 @@ class ProfileAvatarButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<SessionController>();
-    final initial = provider.username.isNotEmpty
-        ? provider.username[0].toUpperCase()
+    final initial = provider.displayName.isNotEmpty
+        ? provider.displayName[0].toUpperCase()
         : '?';
 
     return Padding(

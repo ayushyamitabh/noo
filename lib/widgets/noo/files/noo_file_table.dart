@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/noo_pointer_selection.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../theme/design_tokens.dart';
 import 'noo_file_kind.dart';
@@ -6,9 +7,8 @@ import 'noo_file_row.dart';
 import 'noo_file_tile.dart';
 import 'noo_status_icon.dart';
 
-/// Fixed widths of the desktop file table's grid
-/// (`minmax(0,1fr) 180px 160px 120px`, `DESIGN_SYSTEM.md` 2 "File row").
-/// The first column takes the remaining width.
+/// Maximum metadata widths for wide file tables. Compact panes collapse
+/// the date column and reserve the remaining width for the filename.
 const double _col2Width = 180;
 const double _col3Width = 160;
 const double _col4Width = 120;
@@ -36,13 +36,33 @@ class _TableColumns extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: _tableInset),
-      child: Row(
-        children: [
-          Expanded(child: name),
-          SizedBox(width: _col2Width, child: col2),
-          SizedBox(width: _col3Width, child: col3),
-          SizedBox(width: _col4Width, child: col4),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          final compact = width < 600;
+          final statusWidth = width < 420 ? 80.0 : _col4Width;
+          final metadataWidth = compact
+              ? 72.0
+              : (width * .18).clamp(90.0, _col3Width);
+          final dateWidth = compact
+              ? 0.0
+              : (width * .22).clamp(110.0, _col2Width);
+          return Row(
+            children: [
+              Expanded(child: name),
+              if (!compact) SizedBox(width: dateWidth, child: col2),
+              if (width >= 420) SizedBox(width: metadataWidth, child: col3),
+              SizedBox(
+                width: statusWidth,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: col4,
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -150,7 +170,11 @@ class NooFileTableRow extends StatelessWidget {
   final List<NooSyncStatus> statuses;
   final bool favorite;
   final bool selected;
+  final VoidCallback? onSelectionToggle;
   final Widget? thumbnail;
+
+  /// Optional last-column actions, laid out using the shared column widths.
+  final Widget? actions;
   final VoidCallback? onTap;
   final VoidCallback? onDoubleTap;
   final VoidCallback? onSecondaryTap;
@@ -168,7 +192,9 @@ class NooFileTableRow extends StatelessWidget {
     this.statuses = const [],
     this.favorite = false,
     this.selected = false,
+    this.onSelectionToggle,
     this.thumbnail,
+    this.actions,
     this.onTap,
     this.onDoubleTap,
     this.onSecondaryTap,
@@ -201,6 +227,10 @@ class NooFileTableRow extends StatelessWidget {
           child: _TableColumns(
             name: Row(
               children: [
+                NooPointerCheckbox(
+                  selected: selected,
+                  onToggle: onSelectionToggle,
+                ),
                 NooFileTile(
                   kind: kind,
                   size: NooFileTileSize.desktop,
@@ -224,20 +254,27 @@ class NooFileTableRow extends StatelessWidget {
             ),
             col2: dataCell(col2),
             col3: dataCell(col3),
-            col4: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                for (final s in statuses) ...[
-                  NooStatusIcon(s),
-                  const SizedBox(width: 6),
-                ],
-                if (favorite) ...[
-                  Icon(LucideIcons.star, size: 14, color: colors.accentText),
-                  const SizedBox(width: 6),
-                ],
-                if (onMore != null) NooOverflowButton(size: 32, onTap: onMore),
-              ],
-            ),
+            col4:
+                actions ??
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    for (final s in statuses) ...[
+                      NooStatusIcon(s),
+                      const SizedBox(width: 6),
+                    ],
+                    if (favorite) ...[
+                      Icon(
+                        LucideIcons.star,
+                        size: 14,
+                        color: colors.accentText,
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    if (onMore != null)
+                      NooOverflowButton(size: 32, onTap: onMore),
+                  ],
+                ),
           ),
         ),
       ),

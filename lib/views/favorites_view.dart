@@ -400,6 +400,7 @@ class _FavoritesViewState extends State<FavoritesView> {
           favorite: item.isFavorite,
           iosStyle: NooLayout.iosStyle(context),
           selected: isSelected,
+          onSelectionToggle: () => _toggleSelection(item),
           thumbnail: _thumbnailFor(context, item, extent: NooSizes.rowMobile),
           onTap: () {
             if (_isSelecting) {
@@ -434,6 +435,7 @@ class _FavoritesViewState extends State<FavoritesView> {
       col3: item.isFolder ? null : formatBytes(item.size),
       favorite: item.isFavorite,
       selected: isSelected,
+      onSelectionToggle: () => _toggleSelection(item),
       thumbnail: _thumbnailFor(
         context,
         item,
@@ -477,6 +479,7 @@ class _FavoritesViewState extends State<FavoritesView> {
       thumbnailHeight: thumbnailHeight,
       thumbnail: _thumbnailFor(context, item, extent: thumbnailHeight),
       selected: isSelected,
+      onSelectionToggle: () => _toggleSelection(item),
       verticalOverflowIcon: !NooLayout.iosStyle(context),
       onTap: () {
         if (_isSelecting) {
@@ -600,14 +603,7 @@ class _FavoritesViewState extends State<FavoritesView> {
             vertical: NooSpace.xs,
           ),
           sliver: SliverGrid(
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: isDesktop
-                  ? 5
-                  : NooLayout.gridColumns(context, phone: 2, minTile: 180),
-              crossAxisSpacing: isDesktop ? 16 : 10,
-              mainAxisSpacing: isDesktop ? 16 : 10,
-              childAspectRatio: isDesktop ? 0.92 : 0.85,
-            ),
+            gridDelegate: NooLayout.fileGridDelegate(context),
             delegate: SliverChildBuilderDelegate((context, index) {
               return _buildGridCard(
                 context,
@@ -680,7 +676,7 @@ class _FavoritesViewState extends State<FavoritesView> {
             ? _buildSelectionBar(context, selectedItems)
             : null,
         child: ColoredBox(
-          color: colors.bg,
+          color: NooLayout.contentBackground(context),
           child: RefreshIndicator(
             color: colors.accent,
             backgroundColor: colors.surface,

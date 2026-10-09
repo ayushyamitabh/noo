@@ -9,7 +9,6 @@ import '../widgets/noo/core/noo_button.dart';
 import '../widgets/noo/files/noo_file_kind.dart';
 import '../widgets/noo/files/noo_file_row.dart';
 import '../widgets/noo/files/noo_file_table.dart';
-import '../widgets/noo/files/noo_file_tile.dart';
 import '../widgets/noo/lists/noo_banner.dart';
 import '../widgets/noo/noo_layout.dart';
 import '../widgets/tabs/tab_location.dart';
@@ -98,7 +97,7 @@ class _TrashViewState extends State<TrashView> {
     ];
 
     return ColoredBox(
-      color: colors.bg,
+      color: NooLayout.contentBackground(context),
       child: RefreshIndicator(
         color: colors.accent,
         backgroundColor: colors.surface,
@@ -335,17 +334,7 @@ class _TrashViewState extends State<TrashView> {
   }
 }
 
-/// Desktop trash row: like `NooFileTableRow`, but its 120px last column
-/// holds a tonal "Restore" button plus a danger-tonal "Delete" button
-/// (permanent delete) instead of status icons - `NooFileTableRow` has no
-/// slot for screen-specific actions there. A labelled pill, not a bare
-/// overflow icon: it's the row's only destructive action, not a menu of
-/// several, and desktop already prefers labelled buttons to bare icons
-/// (see `NooSelectionBar`'s own desktop actions). Column widths
-/// (180/160/120) are matched by hand to `NooFileTableHeader`'s (private in
-/// `noo_file_table.dart`) so this still lines up under it; promoting an
-/// optional `actions` slot onto `NooFileTableRow` would let this fold back
-/// into the shared component.
+/// Trash actions use the same responsive columns as the other file tables.
 class _TrashDesktopRow extends StatelessWidget {
   final NooFileKind kind;
   final String name;
@@ -364,83 +353,28 @@ class _TrashDesktopRow extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final colors = context.nooColors;
-    final metaStyle = NooText.meta.copyWith(color: colors.fg3);
-
-    return SizedBox(
-      height: NooSizes.rowDesktop,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: NooSpace.sm),
-        child: Row(
-          children: [
-            Expanded(
-              child: Row(
-                children: [
-                  NooFileTile(kind: kind, size: NooFileTileSize.desktop),
-                  const SizedBox(width: NooSpace.sm),
-                  Expanded(
-                    child: Text(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: NooText.body.copyWith(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: colors.fg1,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: NooSpace.md),
-                ],
-              ),
-            ),
-            SizedBox(
-              width: 180,
-              child: Text(
-                col2,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: metaStyle,
-              ),
-            ),
-            SizedBox(
-              width: 160,
-              child: Text(
-                col3,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: metaStyle,
-              ),
-            ),
-            SizedBox(
-              width: 120,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerRight,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    NooButton(
-                      variant: NooButtonVariant.tonal,
-                      size: NooButtonSize.xs,
-                      onTap: onRestore,
-                      child: const Text('Restore'),
-                    ),
-                    const SizedBox(width: 4),
-                    NooButton(
-                      variant: NooButtonVariant.danger,
-                      size: NooButtonSize.xs,
-                      onTap: onDelete,
-                      child: const Text('Delete'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+  Widget build(BuildContext context) => NooFileTableRow(
+    kind: kind,
+    name: name,
+    col2: col2,
+    col3: col3,
+    actions: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        NooButton(
+          variant: NooButtonVariant.tonal,
+          size: NooButtonSize.xs,
+          onTap: onRestore,
+          child: const Text('Restore'),
         ),
-      ),
-    );
-  }
+        const SizedBox(width: 4),
+        NooButton(
+          variant: NooButtonVariant.danger,
+          size: NooButtonSize.xs,
+          onTap: onDelete,
+          child: const Text('Delete'),
+        ),
+      ],
+    ),
+  );
 }

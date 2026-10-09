@@ -78,17 +78,18 @@ class SettingsTabsSection extends StatelessWidget {
     final desktop = NooLayout.isDesktop(context);
 
     final optionRows = [
-      NooSettingsRow(
-        icon: LucideIcons.arrowUpDown,
-        label: const Text('Tap tab to scroll to top'),
-        subtitle: const Text(
-          'Tapping the current bottom bar tab scrolls its list back to the top',
+      if (!desktop)
+        NooSettingsRow(
+          icon: LucideIcons.arrowUpDown,
+          label: const Text('Tap tab to scroll to top'),
+          subtitle: const Text(
+            'Tapping the current bottom bar tab scrolls its list back to the top',
+          ),
+          trailing: NooToggle(
+            checked: settings.tapTabToScrollTop,
+            onChanged: settings.setTapTabToScrollTop,
+          ),
         ),
-        trailing: NooToggle(
-          checked: settings.tapTabToScrollTop,
-          onChanged: settings.setTapTabToScrollTop,
-        ),
-      ),
       NooSettingsRow(
         icon: LucideIcons.star,
         label: const Text('Default tab'),
@@ -136,7 +137,8 @@ class SettingsTabsSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Tabs', style: NooText.cardTitle.copyWith(color: colors.fg1)),
+          if (SettingsCategoryHeading.shows(context, 'Tabs'))
+            Text('Tabs', style: NooText.cardTitle.copyWith(color: colors.fg1)),
           const SizedBox(height: 4),
           Text(_subtitle, style: NooText.meta.copyWith(color: colors.fg3)),
           const SizedBox(height: NooSpace.md),

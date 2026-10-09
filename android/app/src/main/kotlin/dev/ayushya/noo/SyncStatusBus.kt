@@ -74,6 +74,16 @@ object SyncStatusBus {
         publish()
     }
 
+    @Synchronized
+    fun clearAccount(accountId: String) {
+        current = current.copy(
+            syncing = if (current.accountId == accountId) false else current.syncing,
+            syncingFileIds = if (current.accountId == accountId) emptySet() else current.syncingFileIds,
+            conflicts = current.conflicts.filter { it.accountId != accountId },
+        )
+        publish()
+    }
+
     private fun publish() {
         listeners.toList().forEach { it(current) }
     }

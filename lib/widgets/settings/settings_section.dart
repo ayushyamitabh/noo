@@ -6,6 +6,24 @@ import '../noo/noo_layout.dart';
 import '../noo/overlays/noo_dialog.dart';
 import '../noo/overlays/noo_sheet.dart';
 
+/// Category heading already supplied by the tablet toolbar.
+class SettingsCategoryHeading extends InheritedWidget {
+  final String title;
+  const SettingsCategoryHeading({
+    super.key,
+    required this.title,
+    required super.child,
+  });
+  static bool shows(BuildContext context, String title) =>
+      context
+          .dependOnInheritedWidgetOfExactType<SettingsCategoryHeading>()
+          ?.title !=
+      title;
+  @override
+  bool updateShouldNotify(SettingsCategoryHeading oldWidget) =>
+      title != oldWidget.title;
+}
+
 /// One block of Settings (DESIGN_SYSTEM.md 4's 9-part order): a
 /// [NooGroupedList] on mobile (label above a radius-20 card), or a titled,
 /// bordered radius-20 card holding a flat row group on desktop
@@ -34,7 +52,7 @@ class SettingsSection extends StatelessWidget {
     final colors = context.nooColors;
     if (!NooLayout.isDesktop(context)) {
       return NooGroupedList(
-        label: title,
+        label: SettingsCategoryHeading.shows(context, title) ? title : null,
         notice: notice != null ? NooInfoNote(message: notice!) : null,
         footer: subtitle != null ? Text(subtitle!) : null,
         children: children,
@@ -50,7 +68,8 @@ class SettingsSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: NooText.cardTitle.copyWith(color: colors.fg1)),
+          if (SettingsCategoryHeading.shows(context, title))
+            Text(title, style: NooText.cardTitle.copyWith(color: colors.fg1)),
           if (subtitle != null) ...[
             const SizedBox(height: 4),
             Text(subtitle!, style: NooText.meta.copyWith(color: colors.fg3)),

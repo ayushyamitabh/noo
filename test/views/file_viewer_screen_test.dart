@@ -11,6 +11,7 @@ import 'package:noo/services/nextcloud_service.dart';
 import 'package:noo/views/file_viewer_screen.dart';
 import 'package:noo/widgets/noo/core/noo_button.dart';
 import 'package:noo/widgets/viewer/media_action_bar.dart';
+import 'package:noo/widgets/viewer/media_pdf_preview.dart';
 import 'package:provider/provider.dart';
 
 import '../widgets/noo/noo_test_utils.dart';
@@ -93,6 +94,20 @@ void main() {
     );
     return service;
   }
+
+  testWidgets('PDF viewport remains fixed when toolbar hides', (tester) async {
+    await mount(tester, const Size(390, 800), name: 'document.pdf');
+    final before = tester
+        .widget<MediaPdfPreview>(find.byType(MediaPdfPreview))
+        .topInset;
+    await tester.tapAt(const Offset(195, 350));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(
+      tester.widget<MediaPdfPreview>(find.byType(MediaPdfPreview)).topInset,
+      before,
+    );
+    expect(before, greaterThan(0));
+  });
 
   for (final width in [390.0, 1200.0]) {
     testWidgets('text actions use the top bar at width $width', (tester) async {

@@ -208,14 +208,7 @@ class _ShareUploadViewState extends State<ShareUploadView> {
         SliverPadding(
           padding: EdgeInsets.symmetric(horizontal: gutter),
           sliver: SliverGrid(
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: desktop
-                  ? 5
-                  : NooLayout.gridColumns(context, phone: 2, minTile: 180),
-              childAspectRatio: desktop ? 1.05 : 0.92,
-              crossAxisSpacing: desktop ? 16 : 10,
-              mainAxisSpacing: desktop ? 16 : 10,
-            ),
+            gridDelegate: NooLayout.fileGridDelegate(context),
             delegate: SliverChildBuilderDelegate(
               (context, index) => _buildGridCard(context, folders[index]),
               childCount: folders.length,

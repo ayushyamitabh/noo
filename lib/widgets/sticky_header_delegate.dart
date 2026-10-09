@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../theme/design_tokens.dart';
+import 'noo/noo_layout.dart';
 
 /// Wraps [child] as a sliver that pins to the top of the scroll view when
 /// used with `SliverPersistentHeader(pinned: true, ...)`, or scrolls away
@@ -30,20 +30,11 @@ class StickyHeaderDelegate extends SliverPersistentHeaderDelegate {
     double shrinkOffset,
     bool overlapsContent,
   ) {
-    // `context.nooColors.bg`, not `Theme.of(context).colorScheme.surface` -
-    // the latter is Flutter's own Material 3 scheme, seeded from the user's
-    // accent color choice (see AppTheme.light/dark), so it carried a faint
-    // hue of whatever accent is picked, and didn't match the plain
-    // `colors.bg` every one of these screens' own `ColoredBox` background
-    // uses. `bg`, not `surface`, so the sort/filter chips and List/Grid
-    // toggle riding on top of this (each already `colors.surface`-filled)
-    // still pop against it, the same as they do everywhere else in the app
-    // - matching `surface` here would make this pinned header the one place
-    // they'd flatten into their background instead. `surfaceTintColor:
-    // Colors.transparent` guards against the same M3 elevation-tint
-    // behavior even if this ever gets a non-zero elevation.
+    // Match the pane so pinned controls preserve its rounded silhouette.
     return Material(
-      color: floating ? Colors.transparent : context.nooColors.bg,
+      color: floating
+          ? Colors.transparent
+          : NooLayout.contentBackground(context),
       surfaceTintColor: Colors.transparent,
       child: child,
     );

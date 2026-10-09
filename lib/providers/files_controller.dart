@@ -470,7 +470,10 @@ class FilesController extends ChangeNotifier
         '[FilesController] Loaded ${_items.length} items for $_currentFolderPath',
       );
       try {
-        _quota = await service.fetchUserQuota();
+        final quota = await service.fetchUserQuota();
+        if (gen != session.sessionGeneration) return;
+        _quota = quota;
+        await session.cacheDisplayName(quota.userName, generation: gen);
       } catch (e) {
         debugPrint('[FilesController] Quota fetch warning: $e');
       }

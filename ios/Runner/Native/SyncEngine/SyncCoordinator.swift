@@ -194,6 +194,16 @@ final class SyncCoordinator {
   /// removal under the same mutex as runs - a run still holding the old
   /// state would otherwise write it back over the removal (and a transfer
   /// finishing after it would leave a file the state doesn't know about).
+  func removeAccountData(accountId: String) async throws {
+    cancel(accountId: accountId, forget: true)
+    try await mutex.withLock {
+      try store.removeAccountData(accountId: accountId)
+      for conflict in bus.snapshot().conflicts where conflict.accountId == accountId {
+        bus.removeConflict(accountId: accountId, fileId: conflict.fileId)
+      }
+    }
+  }
+
   func removeLocalSync(accountId: String, path: String) async {
     cancelRun(accountId: accountId, invalidateQueued: true)
     _ = try? await mutex.withLock {

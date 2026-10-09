@@ -45,11 +45,11 @@ class AppDrawer extends StatelessWidget {
     return NooDrawer(
       account: NooDrawerAccount(
         avatar: NooAvatar(
-          initials: accountInitial(session.username),
+          initials: accountInitial(session.displayName),
           current: true,
           size: 48,
         ),
-        name: session.username,
+        name: session.displayName,
         subtitle: serverHost(session.serverUrl),
         onTap: closeAndOpenSettings,
         onSwitchAccount: () => showAccountSwitcher(context),

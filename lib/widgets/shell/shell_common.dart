@@ -88,7 +88,7 @@ void showAccountSwitcher(BuildContext context) {
         children: [
           for (final account in session.accounts)
             _AccountSwitchRow(
-              name: account.username,
+              name: account.label,
               host: serverHost(account.serverUrl),
               active: account.id == session.activeAccountId,
               onTap: account.id == session.activeAccountId
@@ -278,7 +278,7 @@ class ShellAvatarButton extends StatelessWidget {
               radius: hitBox / 2,
               child: Center(
                 child: NooAvatar(
-                  initials: accountInitial(session.username),
+                  initials: accountInitial(session.displayName),
                   current: true,
                   size: 32,
                 ),

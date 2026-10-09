@@ -237,6 +237,21 @@ final class SyncEngineTests: XCTestCase {
 
   // MARK: - The happy path
 
+  func testRemovingAccountDeletesMirrorAndStateButPreservesOtherAccounts() async throws {
+    seedServer()
+    _ = await runner.run(config, force: false)
+    let other = store.syncRoot(accountId: "other").appendingPathComponent("keep.txt")
+    try Data("keep".utf8).write(to: other)
+    let mirrorPath = store.base.appendingPathComponent("sync/acct")
+    let statePath = store.base.appendingPathComponent("sync-state/acct")
+    try store.removeAccountData(accountId: "acct")
+    XCTAssertFalse(FileManager.default.fileExists(atPath: mirrorPath.path))
+    XCTAssertFalse(FileManager.default.fileExists(atPath: statePath.path))
+    XCTAssertTrue(FileManager.default.fileExists(atPath: other.path))
+    XCTAssertTrue(try store.loadState(accountId: "acct").isEmpty)
+    try store.removeAccountData(accountId: "acct")
+  }
+
   func testFirstSyncDownloadsEverythingAndMirrorsFolders() async {
     seedServer()
     FakeDav.mkdir("/Docs/empty")

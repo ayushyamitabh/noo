@@ -43,22 +43,23 @@ class SettingsAppearanceSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsController>();
+    final tablet = NooLayout.isDesktop(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SettingsSection(
           title: 'Appearance',
-          notice:
-              'Bottom bar style, menu style and search in bottom bar have no effect on wide tablets, which use a sidebar.',
           children: [
             _ThemeRow(settings: settings),
-            _BottomBarStyleRow(settings: settings),
+            if (!tablet) _BottomBarStyleRow(settings: settings),
             NooSettingsRow(
               icon: LucideIcons.glassWater,
               label: const Text('Frosted glass'),
-              subtitle: const Text(
-                'Blurred bottom navigation, avatar menus and media viewer panels',
+              subtitle: Text(
+                tablet
+                    ? 'Blurred media viewer panels'
+                    : 'Blurred bottom navigation, avatar menus and media viewer panels',
               ),
               trailing: NooToggle(
                 checked: settings.bottomBarFrosted,
@@ -66,8 +67,8 @@ class SettingsAppearanceSection extends StatelessWidget {
               ),
             ),
             if (settings.bottomBarFrosted) _FrostedGlassRow(settings: settings),
-            _NavMenuStyleRow(settings: settings),
-            if (settings.navMenuStyle == NooNavMenuStyle.avatarMenu)
+            if (!tablet) _NavMenuStyleRow(settings: settings),
+            if (!tablet && settings.navMenuStyle == NooNavMenuStyle.avatarMenu)
               NooSettingsRow(
                 icon: LucideIcons.userRound,
                 label: const Text('Avatar position'),
@@ -84,27 +85,29 @@ class SettingsAppearanceSection extends StatelessWidget {
                   ],
                 ),
               ),
-            NooSettingsRow(
-              icon: LucideIcons.search,
-              label: const Text('Search in bottom bar'),
-              subtitle: const Text(
-                'Adds Search to the bottom bar and removes it from the top '
-                'bar - leaves room for one fewer regular tab',
+            if (!tablet)
+              NooSettingsRow(
+                icon: LucideIcons.search,
+                label: const Text('Search in bottom bar'),
+                subtitle: const Text(
+                  'Adds Search to the bottom bar and removes it from the top '
+                  'bar - leaves room for one fewer regular tab',
+                ),
+                trailing: NooToggle(
+                  checked: settings.searchInBottomBar,
+                  onChanged: settings.setSearchInBottomBar,
+                ),
               ),
-              trailing: NooToggle(
-                checked: settings.searchInBottomBar,
-                onChanged: settings.setSearchInBottomBar,
-              ),
-            ),
           ],
         ),
-        const SizedBox(height: NooSpace.xl),
-        SettingsSection(
-          title: 'Upload button',
-          notice:
-              'Auto shows the label on Files and Photos and shrinks to an icon on other tabs. Mini and Expanded stay the same on every tab. Has no effect on wide tablets.',
-          children: [_FabStyleRow(settings: settings)],
-        ),
+        if (!tablet) const SizedBox(height: NooSpace.xl),
+        if (!tablet)
+          SettingsSection(
+            title: 'Upload button',
+            notice:
+                'Auto shows the label on Files and Photos and shrinks to an icon on other tabs. Mini and Expanded stay the same on every tab.',
+            children: [_FabStyleRow(settings: settings)],
+          ),
         const SizedBox(height: NooSpace.xl),
         SettingsSection(
           title: 'Advanced appearance',

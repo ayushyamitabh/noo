@@ -83,7 +83,7 @@ class _RecentViewState extends State<RecentView> {
     ];
 
     return ColoredBox(
-      color: colors.bg,
+      color: NooLayout.contentBackground(context),
       child: RefreshIndicator(
         color: colors.accent,
         backgroundColor: colors.surface,

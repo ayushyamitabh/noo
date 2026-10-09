@@ -109,7 +109,7 @@ class AvatarMenuCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    session.username,
+                    session.displayName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: NooText.bodyL.copyWith(
@@ -140,7 +140,7 @@ class AvatarMenuCard extends StatelessWidget {
                       onTap: onClose,
                       child: NooAvatar(
                         key: headerAvatarKey,
-                        initials: accountInitial(session.username),
+                        initials: accountInitial(session.displayName),
                         current: true,
                         size: 32,
                       ),
@@ -159,7 +159,7 @@ class AvatarMenuCard extends StatelessWidget {
                 for (final account in session.accounts)
                   if (account.id != session.activeAccountId)
                     _OtherAccountRow(
-                      name: account.username,
+                      name: account.label,
                       host: serverHost(account.serverUrl),
                       onTap: () {
                         onClose();
@@ -667,7 +667,7 @@ class _AvatarNavigationHostState extends State<AvatarNavigationHost>
                             child: GestureDetector(
                               onTap: close,
                               child: NooAvatar(
-                                initials: accountInitial(session.username),
+                                initials: accountInitial(session.displayName),
                                 current: true,
                                 size: 32,
                               ),

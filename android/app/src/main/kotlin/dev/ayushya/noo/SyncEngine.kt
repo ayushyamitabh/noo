@@ -509,6 +509,16 @@ object SyncEngine {
      * (see [diffFolder]'s `!localExists && !serverChanged` branch) instead
      * of pulling it back down.
      */
+    fun removeAccountData(context: Context, accountId: String) {
+        val root = syncRoot(context, accountId)
+        check(!root.exists() || root.deleteRecursively()) { "Could not remove synced files" }
+        check(context.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE).edit()
+            .remove(stateKey(accountId)).remove(rootsKey(accountId))
+            .remove(rootsVersionKey(accountId)).remove(missingKey(accountId)).commit()) {
+            "Could not remove sync records"
+        }
+    }
+
     fun removeLocalSync(context: Context, accountId: String, path: String) {
         val root = syncRoot(context, accountId)
         val state = loadState(context, accountId).toMutableMap()

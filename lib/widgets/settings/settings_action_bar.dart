@@ -9,6 +9,7 @@ import '../noo/lists/noo_settings_row.dart';
 import '../noo/lists/noo_grouped_list.dart';
 import '../noo/core/noo_segmented_control.dart';
 import '../noo/noo_layout.dart';
+import 'settings_section.dart';
 
 /// Settings section: the priority order bulk actions (favorite, share,
 /// download, ...) show in on the Files/Photos/Favorites multi-select
@@ -77,10 +78,11 @@ class SettingsActionBarSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Action bar',
-            style: NooText.cardTitle.copyWith(color: colors.fg1),
-          ),
+          if (SettingsCategoryHeading.shows(context, 'Action bar'))
+            Text(
+              'Action bar',
+              style: NooText.cardTitle.copyWith(color: colors.fg1),
+            ),
           const SizedBox(height: 4),
           Text(_subtitle, style: NooText.meta.copyWith(color: colors.fg3)),
           const SizedBox(height: NooSpace.md),

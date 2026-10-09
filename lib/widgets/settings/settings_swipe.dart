@@ -47,7 +47,6 @@ class SettingsSwipeSection extends StatelessWidget {
     return SettingsSection(
       title: 'Swipe on a file',
       subtitle: 'Choose what swiping a file left or right does in list view',
-      notice: 'Swipe actions have no effect on wide tablets.',
       children: [
         NooSettingsRow(
           icon: LucideIcons.chevronsRight,

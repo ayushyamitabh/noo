@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/noo_pointer_selection.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../theme/design_tokens.dart';
 
@@ -25,6 +26,7 @@ class NooPhotoTile extends StatelessWidget {
   final String? videoDuration;
 
   final bool selected;
+  final VoidCallback? onSelectionToggle;
 
   /// Shows the selection check circle even when not [selected] (i.e. the
   /// grid is in multi-select mode).
@@ -39,6 +41,7 @@ class NooPhotoTile extends StatelessWidget {
     this.placeholderColor,
     this.videoDuration,
     this.selected = false,
+    this.onSelectionToggle,
     this.selectionMode = false,
     this.onTap,
     this.onLongPress,
@@ -63,7 +66,9 @@ class NooPhotoTile extends StatelessWidget {
           children: [
             // Selected tiles inset so an accent-soft frame shows around
             // the photo, instead of covering it with a tint.
-            ColoredBox(color: selected ? colors.accentSoft : Colors.transparent),
+            ColoredBox(
+              color: selected ? colors.accentSoft : Colors.transparent,
+            ),
             AnimatedPadding(
               duration: NooMotion.fast,
               curve: NooMotion.ease,
@@ -87,11 +92,21 @@ class NooPhotoTile extends StatelessWidget {
                 bottom: 6,
                 child: _VideoBadge(duration: videoDuration!),
               ),
-            if (selected || selectionMode)
+            if (selected ||
+                selectionMode ||
+                (onSelectionToggle != null &&
+                    NooPointerSelection.available(context)))
               Positioned(
                 left: 6,
                 top: 6,
-                child: _SelectCheck(selected: selected),
+                child:
+                    NooPointerSelection.available(context) &&
+                        onSelectionToggle != null
+                    ? NooPointerCheckbox(
+                        selected: selected,
+                        onToggle: onSelectionToggle,
+                      )
+                    : _SelectCheck(selected: selected),
               ),
           ],
         ),
@@ -152,9 +167,7 @@ class _SelectCheck extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: selected ? colors.accent : _videoBadgeColor,
-        border: selected
-            ? null
-            : Border.all(color: Colors.white, width: 1.5),
+        border: selected ? null : Border.all(color: Colors.white, width: 1.5),
       ),
       child: selected
           ? const Icon(LucideIcons.check, size: 14, color: Colors.white)

@@ -117,4 +117,67 @@ void main() {
     connectivity.dispose();
     session.dispose();
   });
+  for (final fails in [false, true]) {
+    test('account removal awaits native cleanup (failure: $fails)', () async {
+      SharedPreferences.setMockInitialValues({
+        'account_migration_v1_done': true,
+        'accounts_list': jsonEncode([
+          const SavedAccount(
+            id: accountId,
+            serverUrl: 'https://server.example.com',
+            username: 'alice',
+          ).toJson(),
+        ]),
+        'active_account_id': accountId,
+        'acct_${accountId}_ui_synced_folders': ['/Photos'],
+      });
+      final connectivity = ConnectivityController();
+      await pumpUntil(() => connectivity.isOffline);
+      final session = SessionController(connectivity);
+      await pumpUntil(() => session.isLoggedIn);
+      const channel = MethodChannel('dev.ayushya.noo/sync_service');
+      var cleanupCalled = false;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            if (call.method == 'removeAccountData') {
+              expect(call.arguments['accountId'], accountId);
+              expect(session.accounts, isNotEmpty);
+              cleanupCalled = true;
+              if (fails) throw PlatformException(code: 'cleanup_failed');
+            }
+            return null;
+          });
+      try {
+        if (fails) {
+          await expectLater(
+            session.removeAccount(accountId),
+            throwsA(isA<PlatformException>()),
+          );
+          expect(session.accounts, isNotEmpty);
+          expect(
+            (await SharedPreferences.getInstance()).getStringList(
+              'acct_${accountId}_ui_synced_folders',
+            ),
+            ['/Photos'],
+          );
+        } else {
+          await session.removeAccount(accountId);
+          expect(session.accounts, isEmpty);
+          expect(session.isLoggedIn, false);
+          expect(
+            (await SharedPreferences.getInstance()).containsKey(
+              'acct_${accountId}_ui_synced_folders',
+            ),
+            false,
+          );
+        }
+        expect(cleanupCalled, true);
+      } finally {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+        session.dispose();
+        connectivity.dispose();
+      }
+    });
+  }
 }

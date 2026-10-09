@@ -355,13 +355,7 @@ class _PhotosViewState extends State<PhotosView> {
           ),
           NooPhotoGrid(
             itemCount: group.items.length,
-            columns: isDesktop
-                ? NooPhotoGrid.desktopColumns
-                : NooLayout.gridColumns(
-                    context,
-                    phone: NooPhotoGrid.mobileColumns,
-                    minTile: 130,
-                  ),
+            minTileWidth: 150,
             gap: isDesktop ? NooPhotoGrid.desktopGap : NooPhotoGrid.mobileGap,
             padding: EdgeInsets.symmetric(
               horizontal: isDesktop ? NooLayout.gutter(context) : 0,
@@ -393,7 +387,7 @@ class _PhotosViewState extends State<PhotosView> {
             ? _buildSelectionBar(context, pick, selectedItems)
             : null,
         child: ColoredBox(
-          color: colors.bg,
+          color: NooLayout.contentBackground(context),
           child: RefreshIndicator(
             color: colors.accent,
             backgroundColor: colors.surface,
@@ -653,6 +647,9 @@ class _PhotosViewState extends State<PhotosView> {
 
     return NooPhotoTile(
       selected: isSelected,
+      onSelectionToggle: pick.isPicking && !pick.pickRequest!.allowMultiple
+          ? null
+          : () => _toggleSelection(photo),
       selectionMode: _isSelecting,
       // No real duration source (no video-metadata extraction anywhere in
       // the app) - an empty string still marks it as a video and shows the

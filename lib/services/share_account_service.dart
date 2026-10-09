@@ -12,6 +12,7 @@ class ShareAccountEntry {
   final String id;
   final String serverUrl;
   final String username;
+  final String? displayName;
   final String password;
 
   /// The account's Files "hidden files" filter: `hide`, `only` or `include`.
@@ -24,6 +25,7 @@ class ShareAccountEntry {
     required this.id,
     required this.serverUrl,
     required this.username,
+    this.displayName,
     required this.password,
     required this.hiddenFilter,
     required this.storageScope,
@@ -60,7 +62,7 @@ class ShareAccountService {
             'username': a.username,
             'authHeader': basicAuth(a.username, a.password),
             'displayName':
-                '${a.username}@${Uri.tryParse(a.serverUrl)?.host ?? a.serverUrl}',
+                '${a.displayName?.trim().isNotEmpty == true ? a.displayName!.trim() : a.username}@${Uri.tryParse(a.serverUrl)?.host ?? a.serverUrl}',
             'hiddenFilter': a.hiddenFilter,
             'storageScope': a.storageScope,
           },
@@ -119,6 +121,7 @@ class ShareAccountService {
           id: account.id,
           serverUrl: account.serverUrl,
           username: account.username,
+          displayName: account.label,
           password: password,
           hiddenFilter: filter.name,
           storageScope: scope.name,

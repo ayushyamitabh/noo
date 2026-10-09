@@ -1064,3 +1064,12 @@ backup) with state in `<...>/sync-state/<accountId>/*.json`.
   macOS) swallows any directory named `Sync` - hence `SyncEngine/`.
 
 Not built on iOS yet: the picker (File Provider) - see the iOS handoff notes.
+
+Account removal awaits native `removeAccountData` before deleting credentials or
+account preferences. Native cleanup stops account sync work, takes the sync mutex,
+and deletes both its local mirror and durable sync records. Signing out continues
+to retain local data. Cleanup errors keep the saved account available for retry.
+
+Account display names from the OCS cloud/user response are cached in SavedAccount.displayName and used for account labels/avatars (username fallback). Authentication, IDs, DAV paths and native sync continue using the username. Cached names survive offline startup and inactive accounts; stale responses cannot update another session.
+
+Settings → Accounts lists the login username explicitly for identifying saved credentials; other account menus continue using the display name.

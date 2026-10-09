@@ -40,7 +40,10 @@ class NooPhotoGroupHeader extends StatelessWidget {
               title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: NooText.groupHeading.copyWith(height: 1, color: colors.fg1),
+              style: NooText.groupHeading.copyWith(
+                height: 1,
+                color: colors.fg1,
+              ),
             ),
           ),
           if (count != null) ...[
@@ -67,6 +70,7 @@ class NooPhotoGrid extends StatelessWidget {
   final IndexedWidgetBuilder itemBuilder;
   final int columns;
   final double gap;
+  final double? minTileWidth;
   final EdgeInsetsGeometry padding;
   final bool _sliver;
 
@@ -77,6 +81,7 @@ class NooPhotoGrid extends StatelessWidget {
     required this.itemBuilder,
     this.columns = 3,
     this.gap = 2,
+    this.minTileWidth,
     this.padding = EdgeInsets.zero,
   }) : _sliver = true;
 
@@ -87,6 +92,7 @@ class NooPhotoGrid extends StatelessWidget {
     required this.itemBuilder,
     this.columns = 3,
     this.gap = 2,
+    this.minTileWidth,
     this.padding = EdgeInsets.zero,
   }) : _sliver = false;
 
@@ -96,12 +102,17 @@ class NooPhotoGrid extends StatelessWidget {
   static const desktopColumns = 8;
   static const desktopGap = 4.0;
 
-  SliverGridDelegate get _delegate =>
-      SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: columns,
-        mainAxisSpacing: gap,
-        crossAxisSpacing: gap,
-      );
+  SliverGridDelegate get _delegate => minTileWidth != null
+      ? SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: minTileWidth!,
+          mainAxisSpacing: gap,
+          crossAxisSpacing: gap,
+        )
+      : SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: columns,
+          mainAxisSpacing: gap,
+          crossAxisSpacing: gap,
+        );
 
   @override
   Widget build(BuildContext context) {

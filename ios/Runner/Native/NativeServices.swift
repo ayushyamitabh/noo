@@ -149,6 +149,18 @@ enum NativeServices {
             // Fire and forget, like Android: the status stream reports the result.
             Task { _ = await coordinator.resolveConflict(conflict, resolution: resolution, creds: creds) }
           }
+        case "removeAccountData":
+          guard let accountId = args["accountId"] as? String else {
+            return result(FlutterError(code: "bad_args", message: "Missing accountId", details: nil))
+          }
+          Task {
+            do {
+              try await coordinator.removeAccountData(accountId: accountId)
+              await MainActor.run { result(nil) }
+            } catch {
+              await MainActor.run { result(FlutterError(code: "cleanup_failed", message: error.localizedDescription, details: nil)) }
+            }
+          }
         case "removeLocalSync":
           guard let accountId = args["accountId"] as? String, let path = args["path"] as? String else {
             return result(FlutterError(code: "bad_args", message: "Missing required arguments", details: nil))

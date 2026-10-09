@@ -31,6 +31,7 @@ class NooToolbar extends StatelessWidget implements PreferredSizeWidget {
 
   /// Defaults to `surface` - the toolbar belongs to the main pane.
   final Color? backgroundColor;
+  final bool framed;
 
   const NooToolbar({
     super.key,
@@ -42,6 +43,7 @@ class NooToolbar extends StatelessWidget implements PreferredSizeWidget {
     this.onBack,
     this.onForward,
     this.backgroundColor,
+    this.framed = true,
   }) : assert(
          title == null || titleWidget == null,
          'Pass either title or titleWidget, not both.',
@@ -67,7 +69,7 @@ class NooToolbar extends StatelessWidget implements PreferredSizeWidget {
         clipBehavior: Clip.antiAlias,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(NooRadii.card),
-          side: BorderSide(color: colors.line),
+          side: framed ? BorderSide(color: colors.line) : BorderSide.none,
         ),
         child: Container(
           height: NooSizes.toolbar,

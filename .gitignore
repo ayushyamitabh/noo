@@ -56,3 +56,6 @@ app.*.map.json
 key.properties
 .env
 .env.*
+
+# Kotlin compiler session cache
+/android/.kotlin/

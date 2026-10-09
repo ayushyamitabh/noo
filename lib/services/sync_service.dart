@@ -132,6 +132,14 @@ class SyncService {
     }
   }
 
+  /// Deletes the removed account's mirror and native sync state after stopping
+  /// its runs. Await before forgetting the account so cleanup failures can retry.
+  static Future<void> removeAccountData(String accountId) async {
+    await invokeIfAvailable(_channel, 'removeAccountData', {
+      'accountId': accountId,
+    });
+  }
+
   static String _basicAuth(SavedAccount account, String password) =>
       'Basic ${base64Encode(utf8.encode('${account.username}:$password'))}';
 
@@ -143,7 +151,10 @@ class SyncService {
   /// background job is being turned off - the account's paths are still
   /// synced by hand ("Sync now"), and a conflict notification's actions
   /// still need its credentials.
-  static Future<void> cancelAccount(String accountId, {bool forget = true}) async {
+  static Future<void> cancelAccount(
+    String accountId, {
+    bool forget = true,
+  }) async {
     await invokeIfAvailable(_channel, 'cancel', {
       'accountId': accountId,
       'forget': forget,

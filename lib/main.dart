@@ -35,8 +35,8 @@ import 'widgets/app_top_bar.dart';
 import 'widgets/avatar_menu.dart';
 import 'widgets/bottom_nav_bar.dart';
 import 'widgets/create_menu.dart';
-import 'widgets/noo/core/noo_avatar.dart';
 import 'widgets/noo/core/noo_button.dart';
+import 'widgets/noo/core/noo_pointer_selection.dart';
 import 'widgets/noo/core/noo_fab.dart';
 import 'widgets/noo/nav/noo_bottom_bar.dart';
 import 'widgets/noo/nav/noo_sidebar.dart';
@@ -44,6 +44,7 @@ import 'widgets/noo/nav/noo_toolbar.dart';
 import 'widgets/noo/noo_layout.dart';
 import 'widgets/noo/overlays/noo_dialog.dart';
 import 'widgets/shell/shell_common.dart';
+import 'widgets/shell/tablet_account_menu.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -135,6 +136,7 @@ class NextcloudApp extends StatelessWidget {
     return DynamicColorBuilder(
       builder: (lightDynamic, darkDynamic) {
         return MaterialApp(
+          builder: (context, child) => NooPointerSelection(child: child!),
           title: 'Noo',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light(
@@ -209,7 +211,13 @@ class MainShellView extends StatefulWidget {
   State<MainShellView> createState() => _MainShellViewState();
 }
 
-class _MainShellViewState extends State<MainShellView> {
+class _MainShellViewState extends State<MainShellView>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _paneTransition = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 240),
+    value: 1,
+  );
   late AppTab _currentTab;
   final Set<AppTab> _selectionActiveTabs = {};
   late final Map<AppTab, ScrollController> _scrollControllers;
@@ -329,6 +337,7 @@ class _MainShellViewState extends State<MainShellView> {
     _shareSub?.cancel();
     _pickSub?.cancel();
     _shareAccountSync?.dispose();
+    _paneTransition.dispose();
     super.dispose();
   }
 
@@ -338,7 +347,6 @@ class _MainShellViewState extends State<MainShellView> {
     final settings = context.watch<SettingsController>();
     final pick = context.watch<PickController>();
     final connectivity = context.watch<ConnectivityController>();
-    final session = context.watch<SessionController>();
     final quota = context.watch<FilesController>().quota;
     // Cheap and already loaded once the Trash tab has been visited this
     // session - not worth adding a fetch just to populate a nav badge.
@@ -397,6 +405,10 @@ class _MainShellViewState extends State<MainShellView> {
 
     void selectTab(AppTab tab) {
       if (tab == _currentTab) return;
+      if (NooLayout.isDesktop(context) &&
+          !MediaQuery.disableAnimationsOf(context)) {
+        _paneTransition.forward(from: 0);
+      }
       setState(() => _currentTab = tab);
     }
 
@@ -486,16 +498,9 @@ class _MainShellViewState extends State<MainShellView> {
           child: Row(
             children: [
               NooSidebar(
-                account: NooSidebarAccount(
-                  avatar: NooAvatar(
-                    initials: accountInitial(session.username),
-                    current: true,
-                    size: 32,
-                  ),
-                  name: session.username,
-                  subtitle: serverHost(session.serverUrl),
-                  onTap: () => showAccountSwitcher(context),
-                ),
+                account: const TabletAccountMenu(),
+                search: const ShellSearchLauncher(onSurface: true),
+                groupItems: true,
                 items: [
                   for (final tab in pinnedTabs)
                     NooSidebarItem(
@@ -529,18 +534,37 @@ class _MainShellViewState extends State<MainShellView> {
                   children: [
                     NooToolbar(
                       title: selectedTab.label,
-                      search: const ShellSearchLauncher(onSurface: true),
+                      backgroundColor: colors.bg,
+                      framed: false,
                       actions: [
                         if (canUpload)
                           NooButton(
-                            icon: LucideIcons.upload,
+                            icon: LucideIcons.plus,
                             onTap: () => showCreateMenu(context),
                             child: const Text('Upload'),
                           ),
                       ],
                     ),
                     Expanded(
-                      child: ColoredBox(color: colors.surface, child: tabStack),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(NooRadii.card),
+                          child: ColoredBox(
+                            color: colors.surface2,
+                            child: FadeTransition(
+                              opacity: Tween<double>(begin: .65, end: 1)
+                                  .animate(
+                                    CurvedAnimation(
+                                      parent: _paneTransition,
+                                      curve: Curves.easeOutCubic,
+                                    ),
+                                  ),
+                              child: SizedBox.expand(child: tabStack),
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),

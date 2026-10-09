@@ -37,7 +37,9 @@ class _LoginViewState extends State<LoginView> {
   void initState() {
     super.initState();
     if (widget.isAddingAccount) {
-      _originalActiveAccountId = context.read<SessionController>().activeAccountId;
+      _originalActiveAccountId = context
+          .read<SessionController>()
+          .activeAccountId;
     }
   }
 
@@ -50,12 +52,17 @@ class _LoginViewState extends State<LoginView> {
   void _handleContinue() {
     final url = _urlController.text.trim();
     if (url.isEmpty) {
-      setState(() => _localError = 'Please enter your Nextcloud server address');
+      setState(
+        () => _localError = 'Please enter your Nextcloud server address',
+      );
       return;
     }
     setState(() => _localError = null);
     FocusScope.of(context).unfocus();
-    context.read<SessionController>().startLoginFlow(url, addAccount: widget.isAddingAccount);
+    context.read<SessionController>().startLoginFlow(
+      url,
+      addAccount: widget.isAddingAccount,
+    );
   }
 
   /// Resumes a saved account with one tap (see [SessionController.switchAccount]).
@@ -73,7 +80,7 @@ class _LoginViewState extends State<LoginView> {
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text("Couldn't sign in as ${account.username}"),
+          content: Text("Couldn't sign in as ${account.label}"),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -97,7 +104,8 @@ class _LoginViewState extends State<LoginView> {
     final colors = context.nooColors;
     final session = context.watch<SessionController>();
 
-    final isAwaitingBrowser = session.loginFlowStatus == LoginFlowStatus.awaitingBrowser;
+    final isAwaitingBrowser =
+        session.loginFlowStatus == LoginFlowStatus.awaitingBrowser;
     final isInitiating = session.loginFlowStatus == LoginFlowStatus.initiating;
 
     // A new/refreshed account has just become active - pop back to
@@ -117,7 +125,9 @@ class _LoginViewState extends State<LoginView> {
     // SessionController.startLoginFlow's doc comment for why. Push it the
     // moment there's a URL to show; _webViewPushed resets once that route
     // pops (cancelled or done) so a retry after cancelling pushes it again.
-    if (!_webViewPushed && isAwaitingBrowser && session.pendingLoginUrl != null) {
+    if (!_webViewPushed &&
+        isAwaitingBrowser &&
+        session.pendingLoginUrl != null) {
       _webViewPushed = true;
       final url = session.pendingLoginUrl!;
       WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -142,7 +152,10 @@ class _LoginViewState extends State<LoginView> {
     }
 
     final errorMessage =
-        _localError ?? (session.loginFlowStatus == LoginFlowStatus.error ? session.errorMessage : null);
+        _localError ??
+        (session.loginFlowStatus == LoginFlowStatus.error
+            ? session.errorMessage
+            : null);
 
     final body = Scaffold(
       backgroundColor: colors.bg,
@@ -167,7 +180,8 @@ class _LoginViewState extends State<LoginView> {
                   // deleting it, specifically so it can be resumed
                   // from here with one tap - no need to repeat
                   // Login Flow v2.
-                  if (!widget.isAddingAccount && session.accounts.isNotEmpty) ...[
+                  if (!widget.isAddingAccount &&
+                      session.accounts.isNotEmpty) ...[
                     _SavedAccountsSection(
                       accounts: session.accounts,
                       onSelect: (account) => _continueAsAccount(account),
@@ -179,7 +193,10 @@ class _LoginViewState extends State<LoginView> {
                         Expanded(child: Divider(color: colors.line)),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: Text('or', style: NooText.meta.copyWith(color: colors.fg3)),
+                          child: Text(
+                            'or',
+                            style: NooText.meta.copyWith(color: colors.fg3),
+                          ),
                         ),
                         Expanded(child: Divider(color: colors.line)),
                       ],
@@ -188,7 +205,8 @@ class _LoginViewState extends State<LoginView> {
                   ],
                   _ServerForm(
                     urlController: _urlController,
-                    isLoading: isInitiating || session.isLoading || isAwaitingBrowser,
+                    isLoading:
+                        isInitiating || session.isLoading || isAwaitingBrowser,
                     errorMessage: errorMessage,
                     onContinue: _handleContinue,
                   ),
@@ -246,11 +264,19 @@ class _ServerForm extends StatelessWidget {
           // in-app, rather than the full-color launcher icon.
           child: ColorFiltered(
             colorFilter: ColorFilter.mode(colors.fg1, BlendMode.srcIn),
-            child: Image.asset('assets/icon/app_icon_monochrome.png', width: 80, height: 80),
+            child: Image.asset(
+              'assets/icon/app_icon_monochrome.png',
+              width: 80,
+              height: 80,
+            ),
           ),
         ),
         const SizedBox(height: 24),
-        Text('Noo', textAlign: TextAlign.center, style: NooText.largeTitle.copyWith(color: colors.fg1)),
+        Text(
+          'Noo',
+          textAlign: TextAlign.center,
+          style: NooText.largeTitle.copyWith(color: colors.fg1),
+        ),
         const SizedBox(height: 6),
         Text(
           'Connect to your self-hosted server',
@@ -317,7 +343,11 @@ class _SavedAccountsSection extends StatelessWidget {
   final ValueChanged<SavedAccount> onSelect;
   final ValueChanged<SavedAccount> onRemove;
 
-  const _SavedAccountsSection({required this.accounts, required this.onSelect, required this.onRemove});
+  const _SavedAccountsSection({
+    required this.accounts,
+    required this.onSelect,
+    required this.onRemove,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -328,7 +358,10 @@ class _SavedAccountsSection extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.only(left: 4, bottom: 8),
-          child: Text('Continue as', style: NooText.label.copyWith(color: colors.fg2)),
+          child: Text(
+            'Continue as',
+            style: NooText.label.copyWith(color: colors.fg2),
+          ),
         ),
         ClipRRect(
           borderRadius: BorderRadius.circular(NooRadii.card),
@@ -358,7 +391,11 @@ class _SavedAccountRow extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onRemove;
 
-  const _SavedAccountRow({required this.account, required this.onTap, required this.onRemove});
+  const _SavedAccountRow({
+    required this.account,
+    required this.onTap,
+    required this.onRemove,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -369,18 +406,21 @@ class _SavedAccountRow extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: NooSpace.md, vertical: 10),
+          padding: const EdgeInsets.symmetric(
+            horizontal: NooSpace.md,
+            vertical: 10,
+          ),
           child: Row(
             spacing: 12,
             children: [
-              NooAvatar(initials: accountInitial(account.username), size: 36),
+              NooAvatar(initials: accountInitial(account.label), size: 36),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   spacing: 2,
                   children: [
                     Text(
-                      account.username,
+                      account.label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: NooText.bodyL.copyWith(
@@ -404,7 +444,10 @@ class _SavedAccountRow extends StatelessWidget {
                   width: 36,
                   height: 36,
                   alignment: Alignment.center,
-                  decoration: BoxDecoration(color: colors.surface2, shape: BoxShape.circle),
+                  decoration: BoxDecoration(
+                    color: colors.surface2,
+                    shape: BoxShape.circle,
+                  ),
                   child: Icon(LucideIcons.x, size: 16, color: colors.fg2),
                 ),
               ),

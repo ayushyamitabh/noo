@@ -57,6 +57,7 @@ class ConflictResolveWorker(appContext: Context, params: WorkerParameters) :
             )
             val request = OneTimeWorkRequestBuilder<ConflictResolveWorker>()
                 .setInputData(data)
+                .addTag("noo_sync_account_$accountId")
                 .build()
             WorkManager.getInstance(context).enqueue(request)
         }

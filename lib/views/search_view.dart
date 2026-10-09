@@ -123,18 +123,24 @@ class _SearchViewState extends State<SearchView> {
     return Scaffold(
       backgroundColor: colors.bg,
       appBar: desktop
-          ? NooToolbar(
-              titleWidget: _buildField(onSurface: true),
-              actions: [
-                IconTheme.merge(
-                  data: IconThemeData(color: colors.fg1, size: 24),
-                  child: NooTopBarButton(
-                    icon: LucideIcons.x,
-                    tooltip: 'Close',
-                    onTap: () => Navigator.pop(context),
-                  ),
+          ? PreferredSize(
+              preferredSize: const Size.fromHeight(NooToolbar.outerHeight),
+              child: SafeArea(
+                bottom: false,
+                child: NooToolbar(
+                  titleWidget: _buildField(onSurface: true),
+                  actions: [
+                    IconTheme.merge(
+                      data: IconThemeData(color: colors.fg1, size: 24),
+                      child: NooTopBarButton(
+                        icon: LucideIcons.x,
+                        tooltip: 'Close',
+                        onTap: () => Navigator.pop(context),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             )
           : null,
       body: SafeArea(
@@ -223,7 +229,9 @@ class _SearchViewState extends State<SearchView> {
         title: 'No results found',
       );
     }
-    return desktop ? _buildDesktopResults(context) : _buildMobileResults(context);
+    return desktop
+        ? _buildDesktopResults(context)
+        : _buildMobileResults(context);
   }
 
   Widget _buildMessage(
@@ -304,7 +312,10 @@ class _SearchViewState extends State<SearchView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const NooFileTableHeader(col2Label: 'Modified', col3Label: 'Location'),
+          const NooFileTableHeader(
+            col2Label: 'Modified',
+            col3Label: 'Location',
+          ),
           for (final item in _results)
             NooFileTableRow(
               kind: NooFileKind.from(

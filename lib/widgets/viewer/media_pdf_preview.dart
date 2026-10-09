@@ -17,7 +17,7 @@ class MediaPdfPreview extends StatefulWidget {
   /// `FileViewerScreen.localPathResolver`'s doc comment.
   final Future<String?> Function(NextcloudItem item)? localPathResolver;
 
-  /// Space reserved above the page for an overlaid top bar (0 when hidden).
+  /// Stable space reserved above the page for the overlaid top bar.
   final double topInset;
 
   const MediaPdfPreview({

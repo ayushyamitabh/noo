@@ -108,6 +108,13 @@ final class SyncStore {
     if changed { _ = write(Array(current).sorted(), to: file(accountId, "missing.json")) }
   }
 
+  func removeAccountData(accountId: String) throws {
+    for directory in ["sync", "sync-state"] {
+      let url = base.appendingPathComponent(directory).appendingPathComponent(accountId)
+      if fileManager.fileExists(atPath: url.path) { try fileManager.removeItem(at: url) }
+    }
+  }
+
   // MARK: - Removing a path's mirror
 
   /// Deletes [path]'s local mirror (a file, or a whole folder's worth) and

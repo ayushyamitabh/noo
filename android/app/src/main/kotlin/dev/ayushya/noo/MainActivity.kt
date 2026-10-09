@@ -1,5 +1,7 @@
 package dev.ayushya.noo
 
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.withLock
 import android.Manifest
 import android.content.ClipData
 import android.content.Intent
@@ -140,6 +142,7 @@ class MainActivity : FlutterFragmentActivity() {
                         syncStatusMap(SyncStatusBus.snapshot(), call.argument<String>("accountId")),
                     )
                     "resolveConflict" -> resolveConflict(call, result)
+                    "removeAccountData" -> removeAccountData(call, result)
                     "removeLocalSync" -> removeLocalSync(call, result)
                     else -> result.notImplemented()
                 }
@@ -478,6 +481,32 @@ class MainActivity : FlutterFragmentActivity() {
     /// walks/deletes a directory tree; `result.success` is posted back via
     /// [mainHandler] since MethodChannel results must be delivered on the
     /// platform thread.
+    private fun removeAccountData(call: MethodCall, result: MethodChannel.Result) {
+        val accountId = call.argument<String>("accountId")
+        if (accountId == null) {
+            result.error("bad_args", "Missing accountId", null)
+            return
+        }
+        Thread {
+            try {
+                val manager = WorkManager.getInstance(applicationContext)
+                manager.cancelAllWorkByTag("noo_sync_account_$accountId").result.get()
+                manager.cancelUniqueWork(SyncWorker.periodicNameFor(accountId)).result.get()
+                manager.cancelUniqueWork(SyncWorker.oneOffNameFor(accountId)).result.get()
+                manager.cancelUniqueWork(SyncWorker.UNIQUE_PERIODIC_NAME).result.get()
+                runBlocking {
+                    SyncEngine.syncLock.withLock {
+                        SyncEngine.removeAccountData(applicationContext, accountId)
+                        SyncStatusBus.clearAccount(accountId)
+                    }
+                }
+                mainHandler.post { result.success(null) }
+            } catch (error: Exception) {
+                mainHandler.post { result.error("cleanup_failed", error.message, null) }
+            }
+        }.start()
+    }
+
     private fun removeLocalSync(call: MethodCall, result: MethodChannel.Result) {
         val accountId = call.argument<String>("accountId")
         val path = call.argument<String>("path")

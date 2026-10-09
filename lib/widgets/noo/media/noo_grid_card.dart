@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import '../core/noo_pointer_selection.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../theme/design_tokens.dart';
 
 /// Grid-view file card: a thumbnail area (file-type soft colour + 32px
 /// icon, or a real [thumbnail]) above the name, an overflow button and a
 /// meta line (`DESIGN_SYSTEM.md` section 2, "Grid card"). Mobile lays these
-/// out 2-up with a 10px gap, desktop 5-up with a 16px gap - the parent grid
+/// out with 10px phone / 16px tablet gaps and responsive columns - the parent grid
 /// owns that, this card just fills its cell.
 ///
 /// The placeholder colours/icon are plain parameters rather than a file
@@ -30,6 +31,7 @@ class NooGridCard extends StatelessWidget {
   final double thumbnailHeight;
 
   final bool selected;
+  final VoidCallback? onSelectionToggle;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
 
@@ -49,6 +51,7 @@ class NooGridCard extends StatelessWidget {
     this.thumbnail,
     this.thumbnailHeight = 104,
     this.selected = false,
+    this.onSelectionToggle,
     this.onTap,
     this.onLongPress,
     this.onMore,
@@ -88,7 +91,19 @@ class NooGridCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            thumb,
+            Stack(
+              children: [
+                thumb,
+                Positioned(
+                  top: 4,
+                  left: 4,
+                  child: NooPointerCheckbox(
+                    selected: selected,
+                    onToggle: onSelectionToggle,
+                  ),
+                ),
+              ],
+            ),
             Padding(
               padding: EdgeInsets.fromLTRB(
                 NooSpace.sm,

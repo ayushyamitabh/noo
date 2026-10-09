@@ -10,6 +10,7 @@ import '../noo/core/noo_chip.dart';
 import '../noo/core/noo_progress_bar.dart';
 import '../noo/noo_layout.dart';
 import '../shell/shell_common.dart';
+import '../shell/tablet_account_menu.dart';
 import 'settings_dialogs.dart';
 
 /// Settings section 1: the account card (DESIGN_SYSTEM.md 4 - "NooAvatar
@@ -18,7 +19,9 @@ import 'settings_dialogs.dart';
 /// the pre-rework card and have no other home, so they stay here as a
 /// button row under the storage meter.
 class SettingsAccountCard extends StatelessWidget {
-  const SettingsAccountCard({super.key});
+  final bool compact;
+  final VoidCallback? onManage;
+  const SettingsAccountCard({super.key, this.compact = false, this.onManage});
 
   Future<void> _refresh(BuildContext context, FilesController files) async {
     await files.refreshData();
@@ -48,7 +51,7 @@ class SettingsAccountCard extends StatelessWidget {
       context,
       session,
       accountId: id,
-      username: session.username,
+      username: session.displayName,
       host: serverHost(session.serverUrl),
       isActive: true,
     );
@@ -60,52 +63,67 @@ class SettingsAccountCard extends StatelessWidget {
     final session = context.watch<SessionController>();
     final files = context.watch<FilesController>();
     final quota = files.quota;
-    final name = quota?.userName ?? session.username;
+    final name = session.displayName;
 
     return Container(
-      padding: const EdgeInsets.all(NooSpace.lg),
+      padding: EdgeInsets.all(compact ? 10 : NooSpace.lg),
       decoration: BoxDecoration(
         color: colors.surface,
         borderRadius: BorderRadius.circular(NooRadii.card),
-        border: NooLayout.isDesktop(context) ? Border.all(color: colors.line) : null,
+        border: NooLayout.isDesktop(context)
+            ? Border.all(color: colors.line)
+            : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              NooAvatar(initials: accountInitial(name), current: true, size: 56),
-              const SizedBox(width: NooSpace.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: NooText.cardTitle.copyWith(color: colors.fg1),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      serverHost(session.serverUrl),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: NooText.meta.copyWith(color: colors.fg3),
-                    ),
-                  ],
+          if (compact)
+            TabletAccountMenu(framed: false, onManage: onManage)
+          else
+            Row(
+              children: [
+                NooAvatar(
+                  initials: accountInitial(name),
+                  current: true,
+                  size: 56,
                 ),
-              ),
-            ],
-          ),
+                const SizedBox(width: NooSpace.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: NooText.cardTitle.copyWith(color: colors.fg1),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        serverHost(session.serverUrl),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: NooText.meta.copyWith(color: colors.fg3),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           const SizedBox(height: NooSpace.lg),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('Storage', style: NooText.label.copyWith(color: colors.fg2)),
-              Text(
-                quota != null ? quotaDetail(quota) : 'Loading…',
-                style: NooText.meta.copyWith(color: colors.fg3),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  quota != null ? quotaDetail(quota) : 'Loading…',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                  style: NooText.meta.copyWith(color: colors.fg3),
+                ),
               ),
             ],
           ),
@@ -116,7 +134,9 @@ class SettingsAccountCard extends StatelessWidget {
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: [for (final group in quota.groups) NooChip(child: Text(group))],
+              children: [
+                for (final group in quota.groups) NooChip(child: Text(group)),
+              ],
             ),
           ],
           const SizedBox(height: NooSpace.md),

@@ -510,10 +510,10 @@ class _ShareSheetState extends State<ShareSheet> {
           const SizedBox(height: NooSpace.xs),
         NooPersonAccessRow(
           avatar: NooAvatar(
-            initials: _initial(session.username),
+            initials: _initial(session.displayName),
             current: true,
           ),
-          name: session.username,
+          name: session.displayName,
           owner: true,
         ),
         for (final share in peopleShares)

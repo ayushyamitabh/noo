@@ -729,9 +729,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
       default:
         if (_isPdf) {
           return MediaPdfPreview(
-            topInset: _controlsVisible
-                ? MediaQuery.paddingOf(context).top + 60
-                : 0,
+            topInset: MediaQuery.paddingOf(context).top + 60,
             item: widget.item,
             session: session,
             localPathResolver: widget.localPathResolver,

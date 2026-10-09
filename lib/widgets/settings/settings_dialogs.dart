@@ -22,8 +22,8 @@ Future<void> confirmRemoveAccount(
 }) async {
   final hasOtherAccounts = session.accounts.length > 1;
   final message = isActive && hasOtherAccounts
-      ? 'Remove $username ($host)? Another saved account will become active.'
-      : 'Remove $username ($host)? You can add it again later.';
+      ? 'Remove $username ($host)? Its synced files will be removed from this device. Another saved account will become active.'
+      : 'Remove $username ($host)? Its synced files will be removed from this device. You can add it again later.';
 
   var confirmed = false;
   void cancel() => Navigator.pop(context);
@@ -80,7 +80,20 @@ Future<void> confirmRemoveAccount(
   if (!confirmed) return;
   if (!context.mounted) return;
   final navigator = Navigator.of(context);
-  await session.removeAccount(accountId);
+  try {
+    await session.removeAccount(accountId);
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not remove local account data. Please try again.',
+          ),
+        ),
+      );
+    }
+    return;
+  }
   // Only when this was the last saved account does isLoggedIn drop to false
   // and main.dart swap the root route to LoginView underneath - pop back to
   // it then, rather than leaving Settings stranded on top. Removing a

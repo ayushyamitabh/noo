@@ -1,5 +1,10 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:noo/widgets/settings/settings_about.dart';
+import 'package:noo/widgets/noo/core/noo_search_field.dart';
+import 'package:noo/views/search_view.dart';
+import 'package:noo/widgets/shell/tablet_account_menu.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -80,9 +85,15 @@ void main() {
     });
   });
 
-  Future<void> pumpSettings(WidgetTester tester) async {
-    await tester.binding.setSurfaceSize(const Size(400, 800));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+  Future<void> pumpSettings(
+    WidgetTester tester, {
+    Widget home = const AccountView(),
+    Size size = const Size(400, 800),
+  }) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = size;
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
 
     await tester.pumpWidget(
       MultiProvider(
@@ -102,7 +113,7 @@ void main() {
         ],
         child: MaterialApp(
           theme: AppTheme.light(AppTheme.defaultAccent, useDynamicColor: false),
-          home: const AccountView(),
+          home: home,
         ),
       ),
     );
@@ -138,6 +149,7 @@ void main() {
     'Tabs',
     'Action bar',
     'Swipe on a file',
+    'About',
   ];
 
   testWidgets(
@@ -193,6 +205,97 @@ void main() {
       );
       expect(find.text('Security'), findsOneWidget);
       expect(find.text('alice'), findsOneWidget);
+    },
+  );
+  testWidgets(
+    'tablet hides phone navigation preferences and keeps viewer glass',
+    (tester) async {
+      await pumpSettings(tester, size: const Size(768, 1024));
+      expect(find.text('Swipe on a file'), findsNothing);
+      await tester.tap(find.text('Appearance'));
+      await settleNav(tester);
+      for (final label in [
+        'Bottom bar style',
+        'Menu style',
+        'Avatar position',
+        'Search in bottom bar',
+        'Upload button',
+      ]) {
+        expect(find.text(label), findsNothing);
+      }
+      expect(find.text('Frosted glass'), findsOneWidget);
+      expect(find.text('Theme'), findsOneWidget);
+      await tester.tap(find.text('Tabs'));
+      await settleNav(tester);
+      expect(find.text('Tap tab to scroll to top'), findsNothing);
+      expect(find.text('Default tab'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('About reads installed version and build', (tester) async {
+    PackageInfo.setMockInitialValues(
+      appName: 'Noo',
+      packageName: 'dev.ayushya.noo',
+      version: '2.3.4',
+      buildNumber: '42',
+      buildSignature: '',
+    );
+    await pumpSettings(
+      tester,
+      home: const Scaffold(body: SettingsAboutSection()),
+    );
+    expect(find.text('2.3.4'), findsOneWidget);
+    expect(find.text('42'), findsOneWidget);
+    expect(find.text('dev.ayushya.noo'), findsOneWidget);
+  });
+
+  testWidgets('tablet Search header stays below status bar', (tester) async {
+    tester.view.padding = const FakeViewPadding(top: 48);
+    addTearDown(tester.view.resetPadding);
+    await pumpSettings(
+      tester,
+      home: const SearchView(),
+      size: const Size(768, 1024),
+    );
+    expect(
+      tester.getTopLeft(find.byType(NooSearchField)).dy,
+      greaterThanOrEqualTo(48),
+    );
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets(
+    'portrait tablet Settings selects sections inline and expands accounts',
+    (tester) async {
+      await pumpSettings(tester, size: const Size(768, 1024));
+      await tester.tap(find.text('Security'));
+      await settleNav(tester);
+      expect(
+        find.text("Require this device's PIN or biometric to open Noo"),
+        findsOneWidget,
+      );
+      // One sidebar label and one toolbar title; no repeated card heading.
+      expect(find.text('Security'), findsNWidgets(2));
+      expect(find.byType(NooTopBarBack), findsNothing);
+      final account = find.descendant(
+        of: find.byType(TabletAccountMenu),
+        matching: find.text('alice'),
+      );
+      final menuHeight = tester.getSize(find.byType(TabletAccountMenu)).height;
+      await tester.tap(account);
+      await settleNav(tester);
+      expect(
+        tester.getSize(find.byType(TabletAccountMenu)).height,
+        greaterThan(menuHeight),
+      );
+      expect(find.text('Manage Accounts'), findsOneWidget);
+      await tester.tap(find.text('Manage Accounts'));
+      await settleNav(tester);
+      expect(
+        find.text("Require this device's PIN or biometric to open Noo"),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
     },
   );
 }

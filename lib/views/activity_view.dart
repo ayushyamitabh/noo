@@ -41,7 +41,6 @@ class ActivityView extends StatelessWidget {
     final files = context.watch<FilesController>();
     final session = context.watch<SessionController>();
     final activities = files.activities;
-    final isDesktop = NooLayout.isDesktop(context);
     final groups = groupByCalendarDay<NextcloudActivity>(
       activities,
       (a) => a.timestamp,
@@ -116,22 +115,12 @@ class ActivityView extends StatelessWidget {
     );
 
     return ColoredBox(
-      color: colors.bg,
+      color: NooLayout.contentBackground(context),
       child: RefreshIndicator(
         color: colors.accent,
         backgroundColor: colors.surface,
         onRefresh: () => context.read<FilesController>().refreshData(),
-        // "Desktop limits it to 760px wide" (DESIGN_SYSTEM.md §4) - centered
-        // rather than left-aligned, so a wide window doesn't stretch the
-        // feed's short sentences edge to edge.
-        child: isDesktop
-            ? Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 760),
-                  child: scrollView,
-                ),
-              )
-            : scrollView,
+        child: scrollView,
       ),
     );
   }
