@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Noo's own window background (NooColors.light.bg), so the launch
+         splash matches the first Flutter frame instead of flashing white. -->
+    <color name="splash_background">#F3EFE6</color>
+</resources>
