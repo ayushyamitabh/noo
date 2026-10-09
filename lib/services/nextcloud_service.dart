@@ -219,7 +219,7 @@ class NextcloudService {
           str.contains('Failed to fetch')) {
         throw Exception(
           'Browser CORS Policy Blocked: The web browser blocked the connection preflight request to $_cleanServerUrl. '
-          'To bypass browser CORS, run the application as a native Windows app (flutter run -d windows) '
+          'To bypass browser CORS, run the native Android or iOS app '
           'or configure CORS headers on your Nextcloud server.',
         );
       }

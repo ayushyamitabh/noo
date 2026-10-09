@@ -6,8 +6,8 @@ import '../../../theme/design_tokens.dart';
 /// header in `Desktop Screen.dc.html`): 24px leading / 20px trailing
 /// padding, 12px gaps, a 1px `line` along the bottom. Left to right:
 ///
-/// - optional back/forward chevrons ([showHistoryNav] - macOS only; Windows
-///   doesn't show them), 20px, fg-3
+/// - optional back/forward chevrons ([showHistoryNav] - macOS only), 20px,
+///   fg-3
 /// - the [title] (22 Schibsted) - or [titleWidget] instead, e.g. a
 ///   breadcrumb in Files; it inherits the title [DefaultTextStyle]
 /// - flexible space
