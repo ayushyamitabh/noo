@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/icon/app_logo.png" width="112" alt="Noo logo">
+</p>
+
 # Noo
 
 A fast, native [Nextcloud](https://nextcloud.com) client built with Flutter
@@ -11,6 +15,21 @@ Website: <https://noo.ayushya.dev>
 
 > Noo is an independent, unofficial client. It is not affiliated with or
 > endorsed by Nextcloud GmbH.
+
+## Why Noo?
+
+Self-hosting gives you control over your files. Noo makes that cloud easy to
+use day to day, whether you're opening a file, sharing a folder, or taking
+your photos offline.
+
+- **Easy for everyone**: give yourself, your family, or your team a simple
+  way to browse files and manage shares on the server you already use.
+- **Ready away from Wi-Fi**: choose the files and folders you want on your
+  device, and keep them within reach when you're offline.
+- **Make it feel like yours**: put your favorite tabs and actions first, and
+  adjust the theme and layout around how you actually use your cloud.
+- **Private by design**: Noo talks only to your server, never sees your
+  password, and has no analytics or trackers.
 
 ## Features
 
