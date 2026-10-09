@@ -161,3 +161,8 @@ home server) imports open GitHub PRs into Gitea via Agit
 analyze + tests. That workflow must never use secrets; signing and Play
 credentials stay on the tag-triggered `build.yml`/`release.yml`. Issue
 templates are in `.github/ISSUE_TEMPLATE/`.
+
+The iOS build requires Xcode 27.1 or newer to compile UIHingeInteraction,
+with runtime availability checks preserving older iOS support. The iOS release
+workflow selects a compatible installed Xcode before Flutter and signing steps;
+install it on the Mac runner before tagging a release.
