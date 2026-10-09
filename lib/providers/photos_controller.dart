@@ -27,8 +27,13 @@ class PhotosController extends ChangeNotifier {
 
   bool _showFavoritesOnly = false;
   HiddenFilesFilter _hiddenFilter = HiddenFilesFilter.hide;
-  FileSortField _sortField = FileSortField.name;
-  bool _sortAscending = true;
+  // Newest first by default, like a camera roll; a saved choice (only
+  // written once the user changes the sort) still wins.
+  static const _defaultSortField = FileSortField.dateCreated;
+  static const _defaultSortAscending = false;
+
+  FileSortField _sortField = _defaultSortField;
+  bool _sortAscending = _defaultSortAscending;
 
   PhotosController(this.session, this.files) {
     session.addAccountClearedListener(_onAccountCleared);
@@ -92,12 +97,17 @@ class PhotosController extends ChangeNotifier {
           k(_prefHiddenFilterPhotos),
           k(_prefShowHiddenPhotos),
         );
+        // Field and direction are one choice: a direction saved without a
+        // field (toggled while the field was still the old Name default)
+        // doesn't carry over onto the newest-first default.
         final sortFieldName = prefs.getString(k(_prefSortField));
         _sortField = FileSortField.values.firstWhere(
           (f) => f.name == sortFieldName,
-          orElse: () => FileSortField.name,
+          orElse: () => _defaultSortField,
         );
-        _sortAscending = prefs.getBool(k(_prefSortAscending)) ?? true;
+        _sortAscending = sortFieldName == null
+            ? _defaultSortAscending
+            : prefs.getBool(k(_prefSortAscending)) ?? _defaultSortAscending;
         notifyListeners();
       } catch (e) {
         debugPrint('[PhotosController] Account-activation prefs restore failed: $e');
