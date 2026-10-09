@@ -17,7 +17,10 @@ class MediaPdfPreview extends StatefulWidget {
   /// `FileViewerScreen.localPathResolver`'s doc comment.
   final Future<String?> Function(NextcloudItem item)? localPathResolver;
 
-  /// Stable space reserved above the page for the overlaid top bar.
+  /// Height the overlaid top bar covers. Only a document taller than the
+  /// screen uses it - as leading space that scrolls away with the first
+  /// page - so the bar never leaves a fixed, unusable band once it's
+  /// dismissed. A document that fits is centered in the full screen instead.
   final double topInset;
 
   const MediaPdfPreview({
@@ -114,43 +117,43 @@ class _MediaPdfPreviewState extends State<MediaPdfPreview> {
     // margin from here - it isn't an exposed parameter - so this avoids
     // the branch that sets it instead of fighting it.
     //
-    // pdfx's InteractiveViewer also refuses to zoom out past
-    // `viewport.height / document.height`. When the whole document is
-    // shorter than the screen (e.g. a one-page PDF) that ratio is above 1, so
-    // after pinching in, fit-width (scale 1) becomes unreachable. PdfViewPinch
-    // wraps its content in a SafeArea, which counts MediaQuery padding toward
-    // that document height, so padding the bottom up to the viewport height
-    // keeps the ratio at or below 1 without shrinking the gesture area.
-    return AnimatedPadding(
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeInOutCubic,
-      padding: EdgeInsets.only(top: widget.topInset),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final media = MediaQuery.of(context);
-          var padding = media.padding.copyWith(top: 0);
-          if (_pageSizes.isNotEmpty && _pageSizes.length == _pageCount) {
-            const pagePadding = 10.0; // PdfViewPinch's default `padding`
-            final maxWidth = _pageSizes.fold<double>(
-              0,
-              (m, s) => s.width > m ? s.width : m,
-            );
-            final ratio = (constraints.maxWidth - pagePadding * 2) / maxWidth;
-            final docHeight = _pageSizes.fold<double>(
-              pagePadding,
-              (h, s) => h + s.height * ratio + pagePadding,
-            );
-            final needed = constraints.maxHeight - docHeight;
-            if (needed > padding.bottom) {
-              padding = padding.copyWith(bottom: needed);
-            }
-          }
-          return MediaQuery(
-            data: media.copyWith(padding: padding),
-            child: PdfViewPinch(controller: _controller!),
+    // The page fills the whole screen (behind the overlaid bars) rather than
+    // the area below the top bar: PdfViewPinch wraps its pages in a SafeArea
+    // *inside* its InteractiveViewer, so MediaQuery padding becomes part of
+    // the pannable content, not a fixed band. Splitting the leftover height
+    // evenly above and below a document that fits centers it, and once
+    // zoomed the page can still be panned across the full screen.
+    //
+    // The padding also has to bring the content up to the viewport height:
+    // pdfx's InteractiveViewer refuses to zoom out past
+    // `viewport.height / document.height`, so for a document shorter than
+    // the screen (e.g. a one-page PDF) fit-width (scale 1) would otherwise
+    // become unreachable after pinching in.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final media = MediaQuery.of(context);
+        var padding = media.padding.copyWith(top: widget.topInset);
+        if (_pageSizes.isNotEmpty && _pageSizes.length == _pageCount) {
+          const pagePadding = 10.0; // PdfViewPinch's default `padding`
+          final maxWidth = _pageSizes.fold<double>(
+            0,
+            (m, s) => s.width > m ? s.width : m,
           );
-        },
-      ),
+          final ratio = (constraints.maxWidth - pagePadding * 2) / maxWidth;
+          final docHeight = _pageSizes.fold<double>(
+            pagePadding,
+            (h, s) => h + s.height * ratio + pagePadding,
+          );
+          final spare = constraints.maxHeight - docHeight;
+          if (spare > 0) {
+            padding = padding.copyWith(top: spare / 2, bottom: spare / 2);
+          }
+        }
+        return MediaQuery(
+          data: media.copyWith(padding: padding),
+          child: PdfViewPinch(controller: _controller!),
+        );
+      },
     );
   }
 }
