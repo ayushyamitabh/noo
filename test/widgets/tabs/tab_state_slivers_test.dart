@@ -88,6 +88,33 @@ Future<void> _pumpHost(WidgetTester tester, ScrollController controller) {
 }
 
 void main() {
+  testWidgets('shell refresh key invokes the current tab refresh callback', (
+    tester,
+  ) async {
+    var refreshes = 0;
+    final key = GlobalKey<RefreshIndicatorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TabRefreshScope(
+          refreshKey: key,
+          child: Builder(
+            builder: (context) => RefreshIndicator(
+              key: TabRefreshScope.keyOf(context),
+              onRefresh: () async {
+                refreshes++;
+              },
+              child: ListView(children: const [Text('Current folder')]),
+            ),
+          ),
+        ),
+      ),
+    );
+    key.currentState!.show();
+    await tester.pumpAndSettle();
+    expect(refreshes, 1);
+    expect(find.text('Current folder'), findsOneWidget);
+  });
+
   setUpNooTests();
 
   testWidgets(

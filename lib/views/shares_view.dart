@@ -131,6 +131,7 @@ class _SharesViewState extends State<SharesView> {
     return ColoredBox(
       color: NooLayout.contentBackground(context),
       child: RefreshIndicator(
+        key: TabRefreshScope.keyOf(context),
         color: colors.accent,
         backgroundColor: colors.surface,
         onRefresh: sharesController.fetchAll,

@@ -6,6 +6,7 @@ import 'package:noo/widgets/noo/files/noo_file_row.dart';
 import 'package:noo/widgets/noo/files/noo_file_table.dart';
 import 'package:noo/widgets/noo/media/noo_grid_card.dart';
 import 'noo_test_utils.dart';
+import 'package:noo/services/mac_secondary_click.dart';
 
 /// Right-clicking (mouse or touchpad secondary click) a file row, table row
 /// or grid card opens the same overflow menu as its 3-dot button.
@@ -54,6 +55,24 @@ void main() {
       expect(more, 1);
       expect(taps, 0, reason: 'a right-click must not also open the item');
     });
+  }
+
+  for (final entry in cases.entries) {
+    testWidgets(
+      'Mac native secondary click reaches ${entry.key} without opening it',
+      (tester) async {
+        var more = 0, taps = 0;
+        await pumpNoo(
+          tester,
+          SizedBox(width: 700, child: entry.value(() => more++, () => taps++)),
+        );
+        MacSecondaryClick.dispatch(tester.getCenter(find.text('Report.pdf')));
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(more, 1);
+        expect(taps, 0);
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 
   testWidgets('an explicit onSecondaryTap still overrides the default', (

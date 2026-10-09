@@ -676,6 +676,7 @@ class _FavoritesViewState extends State<FavoritesView> {
         child: ColoredBox(
           color: NooLayout.contentBackground(context),
           child: RefreshIndicator(
+            key: TabRefreshScope.keyOf(context),
             color: colors.accent,
             backgroundColor: colors.surface,
             onRefresh: favoritesController.fetchAll,

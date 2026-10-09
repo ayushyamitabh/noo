@@ -21,7 +21,8 @@ import 'providers/settings_controller.dart';
 import 'providers/shares_controller.dart';
 import 'providers/sync_status_controller.dart';
 import 'providers/trash_controller.dart';
-import 'services/device_idiom.dart';
+import 'services/ios_hinge.dart';
+import 'services/mac_secondary_click.dart';
 import 'services/pick_intent_service.dart';
 import 'services/share_account_service.dart';
 import 'services/share_intent_service.dart';
@@ -32,6 +33,7 @@ import 'views/login_view.dart';
 import 'views/share_upload_view.dart';
 import 'widgets/app_drawer.dart';
 import 'widgets/app_tab_view_builder.dart';
+import 'widgets/tabs/tab_state_slivers.dart';
 import 'widgets/app_top_bar.dart';
 import 'widgets/avatar_menu.dart';
 import 'widgets/bottom_nav_bar.dart';
@@ -50,11 +52,10 @@ import 'widgets/shell/tablet_account_menu.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  MacSecondaryClick.initialize();
+  await IosHinge.initialize();
   // Fonts ship in assets/google_fonts; never fetch them from Google at runtime.
   GoogleFonts.config.allowRuntimeFetching = false;
-  // Before the first frame, so a foldable iPhone's first layout already
-  // splits at the fold (NooLayout.foldSplitWidth).
-  await DeviceIdiom.load();
   runApp(
     MultiProvider(
       // Split out of the former single `ServerProvider` god object - see
@@ -141,12 +142,8 @@ class NextcloudApp extends StatelessWidget {
     return DynamicColorBuilder(
       builder: (lightDynamic, darkDynamic) {
         return MaterialApp(
-          // A foldable iPhone reports its fold like Android does (see
-          // NooLayout.withSyntheticFold), so every route below sees it.
-          builder: (context, child) => NooLayout.withSyntheticFold(
-            context,
-            NooPointerSelection(child: child!),
-          ),
+          builder: (context, child) =>
+              IosHingeLayout(child: NooPointerSelection(child: child!)),
           title: 'Noo',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light(
@@ -207,6 +204,9 @@ class _MainShellViewState extends State<MainShellView>
   late AppTab _currentTab;
   final Set<AppTab> _selectionActiveTabs = {};
   late final Map<AppTab, ScrollController> _scrollControllers;
+  final _refreshKeys = {
+    for (final tab in AppTab.values) tab: GlobalKey<RefreshIndicatorState>(),
+  };
   StreamSubscription<List<SharedFileRef>>? _shareSub;
   StreamSubscription<PickRequest>? _pickSub;
   ShareAccountSync? _shareAccountSync;
@@ -435,32 +435,35 @@ class _MainShellViewState extends State<MainShellView>
             index: selectedIndex,
             children: displayTabs
                 .map(
-                  (tab) => buildAppTabView(
-                    tab,
-                    _scrollControllers[tab]!,
-                    onSelectionChanged: (selecting) {
-                      if (!mounted ||
-                          selecting == _selectionActiveTabs.contains(tab)) {
-                        return;
-                      }
-                      setState(() {
-                        if (selecting) {
-                          _selectionActiveTabs.add(tab);
-                        } else {
-                          _selectionActiveTabs.remove(tab);
+                  (tab) => TabRefreshScope(
+                    refreshKey: _refreshKeys[tab]!,
+                    child: buildAppTabView(
+                      tab,
+                      _scrollControllers[tab]!,
+                      onSelectionChanged: (selecting) {
+                        if (!mounted ||
+                            selecting == _selectionActiveTabs.contains(tab)) {
+                          return;
                         }
-                      });
-                    },
-                    topBar: isDesktop || pickRequest != null
-                        ? null
-                        : AppTopBar(
-                            style: navStyle,
-                            tab: tab,
-                            searchInBottomBar: showBottomBarSearch,
-                            navMenuStyle: settings.navMenuStyle,
-                            avatarPosition: settings.avatarPosition,
-                            uploadButtonStyle: settings.fabStyle,
-                          ),
+                        setState(() {
+                          if (selecting) {
+                            _selectionActiveTabs.add(tab);
+                          } else {
+                            _selectionActiveTabs.remove(tab);
+                          }
+                        });
+                      },
+                      topBar: isDesktop || pickRequest != null
+                          ? null
+                          : AppTopBar(
+                              style: navStyle,
+                              tab: tab,
+                              searchInBottomBar: showBottomBarSearch,
+                              navMenuStyle: settings.navMenuStyle,
+                              avatarPosition: settings.avatarPosition,
+                              uploadButtonStyle: settings.fabStyle,
+                            ),
+                    ),
                   ),
                 )
                 .toList(),
@@ -525,6 +528,16 @@ class _MainShellViewState extends State<MainShellView>
                       backgroundColor: colors.bg,
                       framed: false,
                       actions: [
+                        Tooltip(
+                          message: 'Refresh',
+                          child: NooButton(
+                            variant: NooButtonVariant.secondary,
+                            icon: LucideIcons.refreshCw,
+                            iconOnly: true,
+                            onTap: () =>
+                                _refreshKeys[selectedTab]?.currentState?.show(),
+                          ),
+                        ),
                         if (canUpload)
                           NooButton(
                             icon: LucideIcons.plus,

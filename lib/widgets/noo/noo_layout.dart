@@ -1,9 +1,7 @@
-import 'dart:ui' show DisplayFeature, DisplayFeatureState, DisplayFeatureType;
+import 'dart:ui' show DisplayFeature, DisplayFeatureType, DisplayFeatureState;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'nav/noo_nav_style.dart';
-import '../../services/device_idiom.dart';
 import '../../theme/design_tokens.dart';
 
 /// The one place screens decide mobile vs desktop layout and iOS vs Android
@@ -25,14 +23,13 @@ class NooLayout {
   /// into left and right screens, or null. A horizontal one (e.g. the
   /// device rotated) divides top from bottom and doesn't count.
   ///
-  /// Android reports folds itself. iOS has no fold API, so
-  /// [withSyntheticFold] adds one for a foldable iPhone - after that both
-  /// platforms read the same [MediaQueryData.displayFeatures].
+  /// Android reports folds itself; iOS adds a fold only while partially open.
   static DisplayFeature? _verticalFold(MediaQueryData media) {
     for (final feature in media.displayFeatures) {
       final bounds = feature.bounds;
       if ((feature.type == DisplayFeatureType.fold ||
               feature.type == DisplayFeatureType.hinge) &&
+          feature.state == DisplayFeatureState.postureHalfOpened &&
           bounds.height > bounds.width &&
           bounds.left > media.padding.left &&
           bounds.left < media.size.width) {
@@ -51,7 +48,9 @@ class NooLayout {
   /// Call with a context above any [SafeArea]: it subtracts the window's own
   /// leading inset, which the layout's [SafeArea] pads the row by.
   static double? foldSplitWidth(BuildContext context) {
-    if (!isDesktop(context)) return null;
+    if (!isDesktop(context)) {
+      return null;
+    }
     final media = MediaQuery.of(context);
     final fold = _verticalFold(media);
     return fold == null ? null : fold.bounds.left - media.padding.left;
@@ -65,41 +64,6 @@ class NooLayout {
   static Offset? popupAnchor(BuildContext context) {
     final media = MediaQuery.of(context);
     return _verticalFold(media) == null ? null : Offset(media.size.width, 0);
-  }
-
-  /// Wraps the app (`MaterialApp.builder`) so a foldable iPhone reports its
-  /// fold like Android does: iOS gives Flutter no fold information, but no
-  /// iPhone ([DeviceIdiom]) has a tablet-class window except an unfolded
-  /// foldable, so this adds a vertical fold down the middle of the window.
-  /// Flutter's own dialog/sheet placement, [foldSplitWidth] and
-  /// [popupAnchor] then all work as on Android.
-  static Widget withSyntheticFold(BuildContext context, Widget child) {
-    if (defaultTargetPlatform != TargetPlatform.iOS || !DeviceIdiom.isIPhone) {
-      return child;
-    }
-    final media = MediaQuery.of(context);
-    if (media.size.shortestSide < tabletShortestSide ||
-        _verticalFold(media) != null) {
-      return child;
-    }
-    final middle = media.size.width / 2;
-    return MediaQuery(
-      data: media.copyWith(
-        displayFeatures: [
-          ...media.displayFeatures,
-          DisplayFeature(
-            bounds: Rect.fromLTWH(middle, 0, 0, media.size.height),
-            type: DisplayFeatureType.fold,
-            // Half-opened, not flat: Flutter only keeps dialogs and sheets
-            // to one side of a zero-width fold in that posture
-            // (DisplayFeatureSubScreen.avoidBounds), and nothing in the app
-            // reads the posture otherwise.
-            state: DisplayFeatureState.postureHalfOpened,
-          ),
-        ],
-      ),
-      child: child,
-    );
   }
 
   /// A quieter pane tone keeps cards distinct from their container.

@@ -3,34 +3,32 @@ import 'dart:ui' show DisplayFeature, DisplayFeatureState, DisplayFeatureType;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:noo/services/device_idiom.dart';
 import 'package:noo/widgets/noo/nav/noo_sidebar.dart';
 import 'package:noo/widgets/noo/noo_layout.dart';
 import 'package:noo/widgets/noo/overlays/noo_dialog.dart';
 import 'package:noo/widgets/noo/overlays/noo_sheet.dart';
 import 'noo_test_utils.dart';
+import 'package:noo/services/ios_hinge.dart';
 
 /// Foldables: the tablet layout's sidebar ends on the crease (50/50 on a
 /// book-style fold), and dialogs/sheets open on the right-hand screen.
 void main() {
   setUpNooTests();
-  tearDown(() => DeviceIdiom.isIPhone = false);
+  tearDown(() => debugDefaultTargetPlatformOverride = null);
 
   const fold = DisplayFeature(
     bounds: Rect.fromLTWH(420, 0, 0, 800),
     type: DisplayFeatureType.fold,
-    state: DisplayFeatureState.postureFlat,
+    state: DisplayFeatureState.postureHalfOpened,
   );
 
-  /// Runs [read] in a context with the given window, optionally behind
-  /// `NooLayout.withSyntheticFold` (the app's `MaterialApp.builder`).
+  /// Runs [read] in a context with the given window.
   Future<T?> readWith<T>(
     WidgetTester tester,
     T Function(BuildContext) read, {
     Size size = const Size(840, 800),
     List<DisplayFeature> features = const [],
     EdgeInsets padding = EdgeInsets.zero,
-    bool synthetic = false,
   }) async {
     T? value;
     final probe = Builder(
@@ -46,18 +44,66 @@ void main() {
           displayFeatures: features,
           padding: padding,
         ),
-        child: synthetic
-            ? Builder(
-                builder: (context) =>
-                    NooLayout.withSyntheticFold(context, probe),
-              )
-            : probe,
+        child: probe,
       ),
     );
     return value;
   }
 
   double? split(BuildContext context) => NooLayout.foldSplitWidth(context);
+
+  testWidgets('Duo switches from tablet to split and back on posture updates', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    double? width;
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(size: Size(669, 951)),
+        child: IosHingeLayout(
+          child: Builder(
+            builder: (context) {
+              width = NooLayout.foldSplitWidth(context);
+              return const SizedBox();
+            },
+          ),
+        ),
+      ),
+    );
+    expect(width, isNull);
+    IosHinge.partiallyOpen.value = true;
+    await tester.pump();
+    expect(width, 334.5);
+    IosHinge.partiallyOpen.value = false;
+    await tester.pump();
+    expect(width, isNull);
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  const flatFold = DisplayFeature(
+    bounds: Rect.fromLTWH(420, 0, 0, 800),
+    type: DisplayFeatureType.fold,
+    state: DisplayFeatureState.postureFlat,
+  );
+
+  testWidgets('Android flat and unknown folds use standard tablet layout', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    expect(await readWith(tester, split, features: [flatFold]), isNull);
+    expect(
+      await readWith(tester, NooLayout.popupAnchor, features: [flatFold]),
+      isNull,
+    );
+    const unknownFold = DisplayFeature(
+      bounds: Rect.fromLTWH(420, 0, 0, 800),
+      type: DisplayFeatureType.fold,
+      state: DisplayFeatureState.unknown,
+    );
+    expect(await readWith(tester, split, features: [unknownFold]), isNull);
+    expect(await readWith(tester, split, features: [fold]), 420);
+    debugDefaultTargetPlatformOverride = null;
+  });
 
   group('sidebar split', () {
     testWidgets('a vertical fold splits at the crease', (tester) async {
@@ -108,36 +154,26 @@ void main() {
     });
   });
 
-  group('iOS synthetic fold', () {
-    testWidgets('an iPhone in a tablet window gets a fold down the middle', (
-      tester,
-    ) async {
+  testWidgets(
+    'iOS foldables use the tablet layout without a half-width sidebar',
+    (tester) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
-      DeviceIdiom.isIPhone = true;
-      expect(await readWith(tester, split, synthetic: true), 420);
       expect(
-        await readWith(tester, NooLayout.popupAnchor, synthetic: true),
-        const Offset(840, 0),
+        await readWith(tester, NooLayout.isDesktop, size: const Size(669, 951)),
+        isTrue,
       );
-      debugDefaultTargetPlatformOverride = null;
-    });
-
-    testWidgets('an iPad, or a folded iPhone, gets none', (tester) async {
-      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
-      expect(await readWith(tester, split, synthetic: true), isNull);
-      DeviceIdiom.isIPhone = true;
+      expect(await readWith(tester, split, features: [flatFold]), isNull);
       expect(
-        await readWith(
-          tester,
-          split,
-          synthetic: true,
-          size: const Size(400, 800),
-        ),
+        await readWith(tester, NooLayout.popupAnchor, features: [flatFold]),
         isNull,
       );
+      expect(
+        await readWith(tester, NooLayout.isDesktop, size: const Size(466, 678)),
+        isFalse,
+      );
       debugDefaultTargetPlatformOverride = null;
-    });
-  });
+    },
+  );
 
   group('popups', () {
     testWidgets('anchor top-right on a foldable, default elsewhere', (

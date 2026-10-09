@@ -117,6 +117,7 @@ class ActivityView extends StatelessWidget {
     return ColoredBox(
       color: NooLayout.contentBackground(context),
       child: RefreshIndicator(
+        key: TabRefreshScope.keyOf(context),
         color: colors.accent,
         backgroundColor: colors.surface,
         onRefresh: () => context.read<FilesController>().refreshData(),

@@ -85,6 +85,7 @@ class _RecentViewState extends State<RecentView> {
     return ColoredBox(
       color: NooLayout.contentBackground(context),
       child: RefreshIndicator(
+        key: TabRefreshScope.keyOf(context),
         color: colors.accent,
         backgroundColor: colors.surface,
         onRefresh: recent.fetchAll,

@@ -464,22 +464,18 @@ Tablet sidebar layout uses a 600dp minimum shortest window side, regardless of
 orientation. Portrait iPads and Android tablets therefore keep the sidebar;
 landscape phones and narrow split-screen windows retain phone navigation.
 
-On an unfolded foldable the tablet layout's two columns (sidebar | content,
+On a partially open Android foldable the tablet layout's two columns (sidebar | content,
 in the shell and in tablet Settings) split at the fold instead: both pass
 `NooLayout.foldSplitWidth(context)` (called above their `SafeArea`) as
 `NooSidebar.width`. Only a vertical fold/hinge counts, so a Pixel Fold held in
 book posture splits 50/50 and rotated (fold horizontal) keeps the normal
-sidebar. Every dialog and sheet passes `anchorPoint:
+sidebar. Fully open (`postureFlat`) and unknown postures use the standard tablet
+sidebar and default popup placement. Every dialog and sheet passes `anchorPoint:
 NooLayout.popupAnchor(context)` so it opens on the right-hand screen, over the
 content - Flutter keeps popups to one side of a fold and otherwise picks the
 top-left one. New `showDialog`/`showModalBottomSheet`/`showGeneralDialog`
 calls must pass it too (`showNooSheet`/`showNooDialog` already do). Android
-reports folds in `MediaQuery.displayFeatures`; iOS has no fold API, so
-`NooLayout.withSyntheticFold` (in `MaterialApp.builder`) adds a half-opened
-vertical fold down the middle for an iPhone (`DeviceIdiom`, from the
-`dev.ayushya.noo/device` channel in `NativeServices.swift`, loaded before
-`runApp`) in a tablet-class window - only possible unfolded - and both
-platforms take the same path from there.
+reports folds in `MediaQuery.displayFeatures`. iOS 27.1 UIHingeInteraction updates feed IosHingeLayout through a method channel. Partially open Duo tablet windows split 50/50; fully open windows use the normal tablet sidebar. Folded phone-sized windows use phone navigation. Older iOS versions default to the normal responsive layout.
 
 About is the last Settings category. `SettingsAboutSection` reads installed
 version, build number and application identifier through `package_info_plus`,
@@ -514,3 +510,7 @@ Tablet content panes use the theme surface2 tone, including pinned filter header
 Tablet Settings hides bottom-navigation/menu/avatar-position/search-placement controls, upload-button style, swipe-action category, and bottom-tab tap-to-scroll preference. Frosted glass remains available for media viewer panels. Phone preferences stay saved when their controls are hidden.
 
 Pointer selection: NooPointerSelection tracks Flutter mouse presence and trackpad events across platforms. Selectable file rows, tables, tiles and photos expose separate checkboxes when pointer input is available. Checkbox taps toggle selection without opening content. Offline and single-file picker restrictions are preserved; touch-only long press behavior is unchanged. Trackpads without mouse presence are detected on first use, as Flutter has no universal attached-trackpad enumeration.
+
+For iOS apps running on Apple silicon Mac, SceneDelegate installs a UIKit context-menu interaction (UIKit delivers Mac secondary clicks through this path rather than tap recognizers) and sends logical coordinates through dev.ayushya.noo/secondary_click. MacSecondaryClick converts them to an isolated secondary pointer sequence so existing hit testing and row/card overflow handlers work. The workaround is Mac-only; native Android/iPad events are unchanged (Flutter issue #183094).
+
+The desktop/tablet shell toolbar shows a refresh icon before Upload (and on tabs without upload). Per-tab TabRefreshScope keys invoke the same RefreshIndicator callback as pull-to-refresh, preserving folder context, Offline reload and sync behavior.

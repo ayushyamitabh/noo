@@ -389,6 +389,7 @@ class _PhotosViewState extends State<PhotosView> {
         child: ColoredBox(
           color: NooLayout.contentBackground(context),
           child: RefreshIndicator(
+            key: TabRefreshScope.keyOf(context),
             color: colors.accent,
             backgroundColor: colors.surface,
             onRefresh: photosController.fetchAllMedia,

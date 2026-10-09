@@ -168,3 +168,18 @@ List<Widget> tabBottomInsetSlivers(BuildContext context) => [
 /// own inner `SafeArea` sees nothing left to add.
 Widget topBarSliver(PreferredSizeWidget topBar) =>
     SliverFloatingHeader(child: topBar);
+
+/// Lets shell refresh actions use exactly the same callback as pull-to-refresh.
+class TabRefreshScope extends InheritedWidget {
+  final GlobalKey<RefreshIndicatorState> refreshKey;
+  const TabRefreshScope({
+    super.key,
+    required this.refreshKey,
+    required super.child,
+  });
+  static GlobalKey<RefreshIndicatorState>? keyOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<TabRefreshScope>()?.refreshKey;
+  @override
+  bool updateShouldNotify(TabRefreshScope oldWidget) =>
+      refreshKey != oldWidget.refreshKey;
+}
