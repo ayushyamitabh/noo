@@ -49,7 +49,8 @@ class NooFileRow extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
 
-  /// Overflow menu tap. The button is hidden when null.
+  /// Overflow menu tap. The button is hidden when null. A right-click
+  /// (mouse or touchpad secondary click) anywhere on the row does the same.
   final VoidCallback? onMore;
 
   const NooFileRow({
@@ -87,6 +88,7 @@ class NooFileRow extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
+        onSecondaryTap: onMore,
         child: SizedBox(
           height: NooSizes.rowMobile,
           child: Padding(

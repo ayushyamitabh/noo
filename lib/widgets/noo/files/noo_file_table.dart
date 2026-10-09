@@ -177,6 +177,9 @@ class NooFileTableRow extends StatelessWidget {
   final Widget? actions;
   final VoidCallback? onTap;
   final VoidCallback? onDoubleTap;
+
+  /// Right-click (mouse or touchpad secondary click). Defaults to [onMore],
+  /// so right-clicking a row opens its overflow menu.
   final VoidCallback? onSecondaryTap;
   final VoidCallback? onLongPress;
 
@@ -220,7 +223,7 @@ class NooFileTableRow extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         onDoubleTap: onDoubleTap,
-        onSecondaryTap: onSecondaryTap,
+        onSecondaryTap: onSecondaryTap ?? onMore,
         onLongPress: onLongPress,
         child: SizedBox(
           height: NooSizes.rowDesktop,

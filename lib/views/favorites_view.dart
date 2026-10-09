@@ -448,9 +448,6 @@ class _FavoritesViewState extends State<FavoritesView> {
           _openFavorite(context, item, siblings);
         }
       },
-      // Desktop has no long-press gesture; right-click is this row's
-      // equivalent entry point into multi-select.
-      onSecondaryTap: () => _toggleSelection(item),
       onMore: () => _showItemActionsSheet(context, item),
     );
   }

@@ -35,7 +35,8 @@ class NooGridCard extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
 
-  /// Shows the overflow button when non-null.
+  /// Shows the overflow button when non-null. A right-click (mouse or
+  /// touchpad secondary click) anywhere on the card does the same.
   final VoidCallback? onMore;
 
   /// `ellipsis` on iOS/desktop, `ellipsis-vertical` on Android.
@@ -87,6 +88,7 @@ class NooGridCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
+        onSecondaryTap: onMore,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
