@@ -28,6 +28,23 @@ flutter test      # run tests
 flutter analyze   # static analysis / lints
 ```
 
+## Before pushing
+
+Update `distribution/whatsnew/whatsnew-en-US` before every push that
+contains a user-facing change, and commit it with (or before) that push.
+It's the release note Google Play shows testers when the next `Release-*`
+tag is built (`.gitea/workflows/release.yml`), so it must already describe
+everything on `main` since the last release by the time anyone tags one:
+
+- Compare against the latest release tag (`git tag -l 'Release-*'
+  --sort=-creatordate | head -1`). If the file still describes that
+  already-released version, replace it; otherwise add the new changes to
+  what's there.
+- Plain text, one short paragraph, user-facing language (what changed for
+  the user, not how). Hard limit 500 characters - Play rejects longer.
+- Skip only when the push has no user-visible change (tests, CI, docs,
+  refactors).
+
 ## Keeping docs current
 
 After making a change that affects architecture, server integration,
