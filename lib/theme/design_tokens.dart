@@ -9,7 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 ///
 /// Three sources feed this, matching the app's color settings: the fixed
 /// [light]/[dark] palettes below (the design system's own default look,
-/// also what the accent picker's "Default" violet swatch selects),
+/// also what the accent picker's "Default" Noo Blue swatch selects),
 /// [NooColors.fromDynamicScheme] when the user has Material You dynamic
 /// color turned on, or [NooColors.fromSeed] for a custom accent-picker
 /// swatch. [withAmoled] layers on top of any of the three when the user's
@@ -71,9 +71,9 @@ class NooColors extends ThemeExtension<NooColors> {
     fg1: Color(0xFF0E0D0B),
     fg2: Color(0xFF5A5852),
     fg3: Color(0xFF7C7A72),
-    accent: Color(0xFF8D0DE3),
-    accentText: Color(0xFF8D0DE3),
-    accentSoft: Color(0xFFECDFFF),
+    accent: Color(0xFF0055FC),
+    accentText: Color(0xFF0055FC),
+    accentSoft: Color(0xFFE2EAFF),
     danger: Color(0xFFA8202A),
     dangerSoft: Color(0xFFFDE7E7),
     dangerFill: Color(0xFFA8202A),
@@ -95,9 +95,9 @@ class NooColors extends ThemeExtension<NooColors> {
     fg1: Color(0xFFF3EFE6),
     fg2: Color(0xFFBDBAB1),
     fg3: Color(0xFF9E9B92),
-    accent: Color(0xFF8D0DE3),
-    accentText: Color(0xFFCBA5FD),
-    accentSoft: Color(0xFF2F0454),
+    accent: Color(0xFF0055FC),
+    accentText: Color(0xFF8FB0FF),
+    accentSoft: Color(0xFF102A6B),
     danger: Color(0xFFF49E9E),
     dangerSoft: Color(0xFF560F18),
     dangerFill: Color(0xFFA8202A),
@@ -182,7 +182,7 @@ class NooColors extends ThemeExtension<NooColors> {
   /// accent ("Ocean Teal") is meant to retint the brand color, not reshape
   /// the whole surface to match a wallpaper the way dynamic color does.
   /// [seedColor] equal to the fixed palette's own accent (the picker's
-  /// "Default" violet swatch) returns the untouched fixed palette, so the
+  /// "Default" Noo Blue swatch) returns the untouched fixed palette, so the
   /// out-of-box look stays pixel-identical rather than going through
   /// [ColorScheme.fromSeed]'s tonal-palette math for no reason.
   factory NooColors.fromSeed(Color seedColor, Brightness brightness) {

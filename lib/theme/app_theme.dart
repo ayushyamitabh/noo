@@ -5,14 +5,19 @@ import 'design_tokens.dart';
 class AppTheme {
   static const Color defaultNextcloudBlue = Color(0xFF0082C9);
 
-  /// The design system's own fixed violet - [NooColors.light]/`.dark`'s
-  /// `accent`, and the accent picker's "Default" swatch. Also
-  /// [SettingsController]'s initial [SettingsController.seedColor], so a
-  /// fresh install (or any device without Material You dynamic color) keeps
-  /// today's violet look rather than picking up the leftover
-  /// [defaultNextcloudBlue] default from before seed colors actually did
-  /// anything to the Noo-styled UI (see [NooColors.fromSeed]).
-  static const Color defaultAccent = Color(0xFF8D0DE3);
+  /// The design system's own fixed Noo Blue (the logo's blue) -
+  /// [NooColors.light]/`.dark`'s `accent`, and the accent picker's
+  /// "Default" swatch. Also [SettingsController]'s initial
+  /// [SettingsController.seedColor], so a fresh install (or any device
+  /// without Material You dynamic color) gets the brand look rather than
+  /// the leftover [defaultNextcloudBlue] default from before seed colors
+  /// actually did anything to the Noo-styled UI (see [NooColors.fromSeed]).
+  static const Color defaultAccent = Color(0xFF0055FC);
+
+  /// The pre-rebrand "Default" violet. A saved seed equal to this means the
+  /// user picked the old Default swatch, so [SettingsController] maps it to
+  /// [defaultAccent] on load instead of keeping a now-orphaned custom violet.
+  static const Color legacyDefaultAccent = Color(0xFF8D0DE3);
 
   // Flutter's Material 3 default (ZoomPageTransitionsBuilder) doesn't
   // implement Android's predictive-back gesture at all. Opting into
@@ -33,7 +38,7 @@ class AppTheme {
   static const _sliderTheme = SliderThemeData(year2023: false);
 
   static const List<Color> seedColors = [
-    defaultAccent, // Default (Noo Violet)
+    defaultAccent, // Default (Noo Blue)
     Color(0xFF0082C9), // Nextcloud Blue
     Color(0xFF009688), // Ocean Teal
     Color(0xFF6750A4), // Deep Purple

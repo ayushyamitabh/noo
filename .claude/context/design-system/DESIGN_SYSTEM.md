@@ -1,7 +1,7 @@
 # Noo Design System
 
 Noo is a Nextcloud client for iOS and Android. ("Noo" is a placeholder name.)
-Its visual language is warm neutrals with one violet accent, flat surfaces, pill-shaped controls, and no gradients.
+Its visual language is warm neutrals with one Noo Blue accent (the logo's blue), flat surfaces, pill-shaped controls, and no gradients.
 
 **Platform rule:** keep one visual language everywhere. Adapt only the navigation chrome (status bar, top bar, bottom bar, window controls) to each platform. Content components look the same on every platform.
 
@@ -28,9 +28,9 @@ Reference files in this project:
 | `fg-1` | Primary text | `#0E0D0B` | `#F3EFE6` |
 | `fg-2` | Secondary text, idle icons | `#5A5852` | `#BDBAB1` |
 | `fg-3` | Meta text, placeholders, trailing icons | `#7C7A72` | `#9E9B92` |
-| `accent` (`ac`) | Primary fills (buttons, FAB, toggle on, progress) | `#8D0DE3` | `#8D0DE3` |
-| `accent-text` (`act`) | Accent text and icons, active nav | `#8D0DE3` | `#CBA5FD` |
-| `accent-soft` (`acs`) | Selected and active backgrounds, tonal buttons | `#ECDFFF` | `#2F0454` |
+| `accent` (`ac`) | Primary fills (buttons, FAB, toggle on, progress) | `#0055FC` | `#0055FC` |
+| `accent-text` (`act`) | Accent text and icons, active nav | `#0055FC` | `#8FB0FF` |
+| `accent-soft` (`acs`) | Selected and active backgrounds, tonal buttons | `#E2EAFF` | `#102A6B` |
 | `danger` / `danger-soft` | Destructive text / bg | `#A8202A` / `#FDE7E7` | `#F49E9E` / `#560F18` |
 | `danger-fill` | Swipe-delete background (white text) | `#A8202A` | `#A8202A` |
 | `success` / `success-soft` | Synced, connected | `#3E7A23` / `#EAF5DF` | `#B7DD9F` / `#1E3F10` |

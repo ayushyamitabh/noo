@@ -255,7 +255,12 @@ class SettingsController extends ChangeNotifier {
         );
       }
       final seedColorValue = prefs.getInt(_prefSeedColor);
-      if (seedColorValue != null) _seedColor = Color(seedColorValue);
+      if (seedColorValue != null) {
+        final saved = Color(seedColorValue);
+        _seedColor = saved == AppTheme.legacyDefaultAccent
+            ? AppTheme.defaultAccent
+            : saved;
+      }
       _tapTabToScrollTop =
           prefs.getBool(_prefTapTabToScrollTop) ?? _tapTabToScrollTop;
 

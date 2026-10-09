@@ -34,7 +34,7 @@ String _seekBarStyleLabel(MediaProgressBarStyle style) {
 /// they're demoted into a separate "Advanced appearance" group beneath the
 /// main card rather than folded into it. The accent picker itself picks a
 /// [NooColors] variant (see [NooColors.fromSeed]/[NooColors.fromDynamicScheme]):
-/// "Default" is the fixed violet palette, the named swatches retint just
+/// "Default" is the fixed Noo Blue palette, the named swatches retint just
 /// the accent roles, and "Match wallpaper" (the `wallpaper`-icon swatch)
 /// follows Material You dynamic color instead.
 class SettingsAppearanceSection extends StatelessWidget {
