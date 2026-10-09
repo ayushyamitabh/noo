@@ -145,7 +145,10 @@ repo secret (service account with release permissions; the app's first
 release must be uploaded manually). Play rejects a repeated `versionCode`, so
 bump the `+N` in `pubspec.yaml` for every tag - re-tagging the same version
 will fail the upload. Release notes come from
-`distribution/whatsnew/whatsnew-en-US` (max 500 chars) - kept current
+`distribution/whatsnew/whatsnew-en-US` is a plain text list: one item per
+line starting with "- ", with no headings or blank lines. Keep the entire
+file within 500 characters, including bullet prefixes and newlines. Maintain
+this format when appending or replacing notes, and keep the list current
 with every user-facing push, not just at release time (see CLAUDE.md
 "Before pushing").
 

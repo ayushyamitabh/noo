@@ -40,8 +40,11 @@ everything on `main` since the last release by the time anyone tags one:
   --sort=-creatordate | head -1`). If the file still describes that
   already-released version, replace it; otherwise add the new changes to
   what's there.
-- Plain text, one short paragraph, user-facing language (what changed for
-  the user, not how). Hard limit 500 characters - Play rejects longer.
+- Plain text list: one item per line, each starting with "- ". Do not use
+  a paragraph, headings, or blank lines. Use user-facing language (what
+  changed for the user, not how). Keep this list format when appending or
+  replacing notes. Hard limit 500 characters for the entire file, including
+  bullet prefixes and newlines - Play rejects longer.
 - Skip only when the push has no user-visible change (tests, CI, docs,
   refactors).
 

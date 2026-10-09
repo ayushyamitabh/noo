@@ -1,1 +1,7 @@
-A fresh new look: a new Noo icon, Noo Blue as the default color, and an animated logo while Noo starts and on sign-in. PDFs now stay centered and can use the whole screen. On foldables, the sidebar splits at the fold and sheets open beside your files. Right-click a file with a mouse or touchpad to open its menu. Photos now shows your newest first. Fixed the blur flickering in when the account menu opens. Added tablet refresh, Mac right-click fixes, and tablet layout on fully open foldables.
+- New Noo icon, default Noo Blue, and animated startup and sign-in logo.
+- PDFs stay centered and can fill the screen.
+- Partially open foldables split at the fold; fully open use tablet layout.
+- Right-click file menus, including a Mac fix.
+- Refresh button in tablet layouts.
+- Photos show newest first.
+- Fixed blur flickering when the account menu opens.
