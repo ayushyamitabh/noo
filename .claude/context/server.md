@@ -1073,3 +1073,8 @@ to retain local data. Cleanup errors keep the saved account available for retry.
 Account display names from the OCS cloud/user response are cached in SavedAccount.displayName and used for account labels/avatars (username fallback). Authentication, IDs, DAV paths and native sync continue using the username. Cached names survive offline startup and inactive accounts; stale responses cannot update another session.
 
 Settings → Accounts lists the login username explicitly for identifying saved credentials; other account menus continue using the display name.
+
+Incoming drag/drop reuses the share-upload API and native transfer queues rather
+than introducing a separate WebDAV upload path. External file access is staged
+locally before destination selection so transient Android drag grants and iOS
+provider URLs do not need to survive the eventual background upload.

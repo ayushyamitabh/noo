@@ -1,8 +1,8 @@
 import 'package:flutter/services.dart';
 import 'native_channel.dart';
 
-/// A file shared to Noo from another app's "Share to..." sheet, before its
-/// bytes have been touched - just the `content://` Uri and whatever cheap
+/// A file shared or dropped into Noo from another app, before its
+/// upload starts - a source URI (staged file for drops) and whatever cheap
 /// metadata Android will hand over without reading the file itself.
 class SharedFileRef {
   final String uri;

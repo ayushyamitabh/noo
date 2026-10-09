@@ -225,6 +225,11 @@ class ShareUploadService : Service() {
                 }
             }
         } ?: throw IllegalStateException("Could not open ${file.uri}")
+        if (uri.scheme == "file") {
+            val source = File(uri.path ?: "")
+            val dropRoot = File(cacheDir, "incoming_drops").canonicalPath + File.separator
+            if (source.canonicalPath.startsWith(dropRoot)) source.delete()
+        }
         return target
     }
 

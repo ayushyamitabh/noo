@@ -238,6 +238,30 @@ enum NativeServices {
   // MARK: - Share Extension inbox
 
   private static let shareEvents = SinkStreamHandler()
+  private static let dropPreparation = SinkStreamHandler()
+  private static var preparingFileCount = 0
+
+  static func prepareDrop(_ count: Int) {
+    preparingFileCount += count
+    dropPreparation.sink?(preparingFileCount)
+  }
+
+  static func finishDrop(_ count: Int) {
+    preparingFileCount = max(0, preparingFileCount - count)
+    dropPreparation.sink?(preparingFileCount)
+  }
+
+  static var canReceiveDrop: Bool { shareEvents.sink != nil }
+
+  static func receiveDroppedFiles(_ items: [SharedItem]) {
+    guard !items.isEmpty else { return }
+    if let sink = shareEvents.sink {
+      sink(items.map(encode))
+    } else {
+      for item in items { try? FileManager.default.removeItem(atPath: item.path) }
+    }
+  }
+
 
   /// `share_intent`: files the Share Extension left in the App Group inbox.
   /// Cold start asks once (`getInitialShare`); a share that arrives while the
@@ -249,6 +273,8 @@ enum NativeServices {
         guard call.method == "getInitialShare" else { return result(FlutterMethodNotImplemented) }
         result(consumeShared().map(encode))
       }
+    FlutterEventChannel(name: "dev.ayushya.noo/drop_preparation", binaryMessenger: messenger)
+      .setStreamHandler(dropPreparation)
     FlutterEventChannel(name: "dev.ayushya.noo/share_intent/new", binaryMessenger: messenger)
       .setStreamHandler(shareEvents)
     NotificationCenter.default.addObserver(

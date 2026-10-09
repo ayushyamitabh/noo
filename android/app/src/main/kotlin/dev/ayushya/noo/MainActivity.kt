@@ -7,6 +7,9 @@ import android.content.ClipData
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.view.DragEvent
+import android.os.Bundle
+import android.widget.Toast
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -66,13 +69,82 @@ class MainActivity : FlutterFragmentActivity() {
     private val pickerFileProviderAuthority by lazy { "$packageName.picker.fileprovider" }
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var dropPreparationSink: EventChannel.EventSink? = null
+    private var preparingFileCount = 0
     private var newShareSink: EventChannel.EventSink? = null
     private var newPickSink: EventChannel.EventSink? = null
     private var syncStatusListener: ((SyncStatusBus.Status) -> Unit)? = null
     private var uploadCompletedListener: ((UploadEventBus.Completed) -> Unit)? = null
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        window.decorView.setOnDragListener { _, event ->
+            when (event.action) {
+                DragEvent.ACTION_DRAG_STARTED -> newShareSink != null &&
+                    event.clipDescription != null
+                DragEvent.ACTION_DROP -> receiveDrop(event)
+                else -> true
+            }
+        }
+    }
+
+    private fun receiveDrop(event: DragEvent): Boolean {
+        if (newShareSink == null) return false
+        val clip = event.clipData ?: return false
+        val uris = (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri }
+            .filter { it.scheme == "content" || it.scheme == "file" }
+        if (uris.isEmpty()) return false
+        // Drag grants expire with the activity. Stage off the UI thread before
+        // opening the picker so the background upload owns durable sources.
+        val permission = requestDragAndDropPermissions(event)
+        preparingFileCount += uris.size
+        dropPreparationSink?.success(preparingFileCount)
+        Thread {
+            val batch = File(cacheDir, "incoming_drops/${java.util.UUID.randomUUID()}")
+            try {
+                check(batch.mkdirs()) { "Could not prepare dropped files" }
+                val files = uris.mapIndexed { index, uri ->
+                    val metadata = uriMetadata(uri)
+                    val name = File(metadata["name"] as String).name
+                    val target = File(batch, index.toString())
+                    contentResolver.openInputStream(uri)?.use { input ->
+                        target.outputStream().use { output -> input.copyTo(output) }
+                    } ?: error("Could not read $name")
+                    metadata + mapOf("uri" to Uri.fromFile(target).toString(),
+                        "name" to name, "size" to target.length())
+                }
+                mainHandler.post {
+                    val sink = newShareSink
+                    if (sink != null) sink.success(files) else batch.deleteRecursively()
+                }
+            } catch (error: Exception) {
+                batch.deleteRecursively()
+                mainHandler.post {
+                    Toast.makeText(this, "Could not read dropped files: ${error.message}",
+                        Toast.LENGTH_LONG).show()
+                }
+            } finally {
+                permission?.release()
+                mainHandler.post {
+                    preparingFileCount = (preparingFileCount - uris.size).coerceAtLeast(0)
+                    dropPreparationSink?.success(preparingFileCount)
+                }
+            }
+        }.start()
+        return true
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.ayushya.noo/drop_preparation")
+            .setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
+                    dropPreparationSink = events
+                    events.success(preparingFileCount)
+                }
+                override fun onCancel(arguments: Any?) { dropPreparationSink = null }
+            })
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, shareIntentChannelName)
             .setMethodCallHandler { call, result ->

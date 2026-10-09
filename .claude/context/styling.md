@@ -514,3 +514,7 @@ Pointer selection: NooPointerSelection tracks Flutter mouse presence and trackpa
 For iOS apps running on Apple silicon Mac, SceneDelegate installs a UIKit context-menu interaction (UIKit delivers Mac secondary clicks through this path rather than tap recognizers) and sends logical coordinates through dev.ayushya.noo/secondary_click. MacSecondaryClick converts them to an isolated secondary pointer sequence so existing hit testing and row/card overflow handlers work. The workaround is Mac-only; native Android/iPad events are unchanged (Flutter issue #183094).
 
 The desktop/tablet shell toolbar shows a refresh icon before Upload (and on tabs without upload). Per-tab TabRefreshScope keys invoke the same RefreshIndicator callback as pull-to-refresh, preserving folder context, Offline reload and sync behavior.
+
+DropPreparationOverlay uses themed surface2 and foreground colors, a live-region
+preparation label, and an indeterminate spinner while native file providers stage
+an incoming drop. Its modal barrier prevents changing destinations mid-preparation.

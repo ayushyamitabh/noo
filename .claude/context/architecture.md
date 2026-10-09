@@ -419,3 +419,25 @@ selecting reads as replacing that row in place, not adding a strip
 beneath it. (An earlier version of this routed the selection bar through
 `SyncedHeaderScaffold`'s `selectionBar` param; that's gone along with the
 scaffold itself in these two tabs.)
+
+## Incoming file drops
+
+Android's decor view receives external URI drag events; iOS SceneDelegate attaches
+UIDropInteraction to the Flutter view (also used by iOS-on-Mac). Receivers accept
+drops only while the main shell is listening on the existing share-intent stream.
+Android requests transient drag URI permission and copies files on a worker thread
+into cache/incoming_drops before releasing that permission. iOS copies provider
+files inside their loadFileRepresentation callback into a SharedInbox batch, since
+the provider URL expires when the callback returns. Both emit SharedFileRef metadata
+on share_intent/new, preserving MainShellView → ShareUploadView → UploadService,
+including destination confirmation and the native background transfer queue.
+No upload starts on drop. Multi-file drops are all-or-nothing during staging;
+folders and non-file Android URIs are unsupported. Failed batches are deleted;
+iOS inbox files and Android drop sources are deleted after upload staging.
+Cancelled destination pickers can leave staged files in app cache/inbox, matching
+the existing share inbox behavior.
+
+The drop_preparation event stream reports the number of files being staged.
+DropPreparationOverlay in MaterialApp.builder shows an immediate themed modal
+spinner until all active batches finish (including failures), above every route.
+Android and iOS emit before requesting/copying file content and clear afterward.

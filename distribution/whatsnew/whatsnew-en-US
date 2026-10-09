@@ -5,3 +5,4 @@
 - Refresh button in tablet layouts.
 - Photos show newest first.
 - Fixed blur flickering when the account menu opens.
+- Drop files into Noo to choose an upload destination, with feedback while files are prepared.

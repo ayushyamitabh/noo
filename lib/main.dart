@@ -32,6 +32,7 @@ import 'views/lock_screen_view.dart';
 import 'views/login_view.dart';
 import 'views/share_upload_view.dart';
 import 'widgets/app_drawer.dart';
+import 'widgets/drop_preparation_overlay.dart';
 import 'widgets/app_tab_view_builder.dart';
 import 'widgets/tabs/tab_state_slivers.dart';
 import 'widgets/app_top_bar.dart';
@@ -142,8 +143,11 @@ class NextcloudApp extends StatelessWidget {
     return DynamicColorBuilder(
       builder: (lightDynamic, darkDynamic) {
         return MaterialApp(
-          builder: (context, child) =>
-              IosHingeLayout(child: NooPointerSelection(child: child!)),
+          builder: (context, child) => IosHingeLayout(
+            child: DropPreparationOverlay(
+              child: NooPointerSelection(child: child!),
+            ),
+          ),
           title: 'Noo',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light(
