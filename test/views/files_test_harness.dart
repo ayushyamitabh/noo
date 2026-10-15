@@ -98,6 +98,31 @@ class HarnessOps extends ItemOperations {
       [];
 }
 
+/// A Shares controller over fixed lists for each scope, with no fetching.
+class HarnessShares extends SharesController {
+  HarnessShares(
+    super.session, {
+    this.withYou = const [],
+    this.byYou = const [],
+  });
+  final List<NextcloudShare> withYou;
+  final List<NextcloudShare> byYou;
+  bool _withMe = false;
+  @override
+  List<NextcloudShare> get shares => _withMe ? withYou : byYou;
+  @override
+  bool get isLoading => false;
+  @override
+  String? get errorMessage => null;
+  @override
+  Future<void> fetchAll() async {}
+  @override
+  void setSharedWithMe(bool value) {
+    _withMe = value;
+    notifyListeners();
+  }
+}
+
 class HarnessConnectivity extends ConnectivityController {
   @override
   bool get isOffline => false;
@@ -178,6 +203,7 @@ Future<AppHarness> pumpWithApp(
   List<NextcloudItem> raw,
   Widget Function(ScrollController scroll) home, {
   Size size = const Size(400, 800),
+  SharesController Function(SessionController session)? sharesBuilder,
 }) async {
   // devicePixelRatio 1 so `size` is the logical size - `setSurfaceSize`
   // alone keeps the test default of 3, which makes a "400 wide" phone 133dp.
@@ -201,6 +227,7 @@ Future<AppHarness> pumpWithApp(
     favorites: favorites,
   );
   final scroll = ScrollController();
+  final shares = sharesBuilder?.call(session) ?? SharesController(session);
   await tester.pumpWidget(
     MultiProvider(
       providers: [
@@ -218,9 +245,7 @@ Future<AppHarness> pumpWithApp(
         ChangeNotifierProvider<TrashController>.value(
           value: TrashController(session),
         ),
-        ChangeNotifierProvider<SharesController>.value(
-          value: SharesController(session),
-        ),
+        ChangeNotifierProvider<SharesController>.value(value: shares),
         ChangeNotifierProvider<RecentController>.value(
           value: RecentController(session),
         ),
@@ -243,5 +268,6 @@ Future<AppHarness> pumpWithApp(
     pick,
     photos,
     favorites,
+    shares,
   ]);
 }

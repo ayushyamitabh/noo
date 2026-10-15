@@ -168,6 +168,16 @@ class _SharesViewState extends State<SharesView> {
     }
   }
 
+  /// Who a row is about. Under `With you` that's the owner (the permission
+  /// beside it is yours); under `By you` and `Links` *you're* the owner, so
+  /// it names the recipient instead - the permission beside it is what
+  /// *they* can do, not what you can.
+  String _whoLabel(NextcloudShare share) {
+    if (_scope == _ShareScope.withYou) return share.ownerDisplayName;
+    if (share.shareType == ShareType.publicLink) return 'Public link';
+    return share.sharedWithDisplayName ?? 'Someone';
+  }
+
   String _emptyMessage() {
     switch (_scope) {
       case _ShareScope.withYou:
@@ -206,7 +216,7 @@ class _SharesViewState extends State<SharesView> {
             ),
             name: share.name,
             meta:
-                '${share.ownerDisplayName} · ${_permissionLabel(share.permissions)}',
+                '${_whoLabel(share)} · ${_permissionLabel(share.permissions)}',
             iosStyle: NooLayout.iosStyle(context),
             onTap: () => _openShareSheet(context, share),
             trailing: Icon(_shareTypeIcon(share.shareType), size: 16),
@@ -243,8 +253,10 @@ class _SharesViewState extends State<SharesView> {
       sliver: SliverList(
         delegate: SliverChildBuilderDelegate((context, index) {
           if (index == 0) {
-            return const NooFileTableHeader(
-              col2Label: 'Owner',
+            return NooFileTableHeader(
+              col2Label: _scope == _ShareScope.withYou
+                  ? 'Owner'
+                  : 'Shared with',
               col3Label: 'Permission',
             );
           }
@@ -255,7 +267,7 @@ class _SharesViewState extends State<SharesView> {
               isDirectory: share.isFolder,
             ),
             name: share.name,
-            col2: share.ownerDisplayName,
+            col2: _whoLabel(share),
             col3: _permissionLabel(share.permissions),
             onTap: () => _openShareSheet(context, share),
           );
