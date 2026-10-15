@@ -215,6 +215,19 @@ blocks are noted where they matter:
   `lib/widgets/settings/` — Settings' 8 section widgets plus
   `settings_section.dart`'s `SettingsSection`/`showSettingsPicker` and
   `settings_dialogs.dart`'s `confirmRemoveAccount`.
+  `settings_search.dart` is Settings' search: a hand-maintained
+  `settingsSearchIndex` (label, category, keywords, optional scroll
+  `target`, `phoneOnly`/`hiddenOnIos` for options a layout doesn't have),
+  `searchSettings` (every word must match; label hits outrank keyword
+  hits), `SettingsSearchResults`, and `SettingsReveal`, which finds the
+  target row's `Text` by its exact string, scrolls it into view and flashes
+  an accent highlight. Phones put a `NooSearchField` above the category
+  list (a query swaps the list for results; a result pushes its category
+  screen); tablets put it in the sidebar's `search` slot and show results
+  in the content pane (a result selects its category in place). **Adding or
+  renaming a settings row means updating the index** -
+  `settings_search_test.dart` opens every entry and fails if its target
+  text isn't on the category screen.
   `lib/widgets/shell/shell_common.dart` — account/storage formatting,
   `openSettings`/`openSearch`, `showAccountSwitcher`, `ShellAvatarButton`,
   `ShellSearchLauncher`, shared by the mobile and wide tablet shell chrome.

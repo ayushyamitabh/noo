@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -103,9 +104,24 @@ class HarnessConnectivity extends ConnectivityController {
 }
 
 /// Mocks the platform channels the controllers touch on construction.
-void setUpFilesHarness() {
-  setUpAll(() {
+///
+/// [loadFonts] registers the app's bundled fonts so text measures like it
+/// does on a device (the test default is a much wider fallback font, which
+/// overflows tight rows that are fine in the app).
+void setUpFilesHarness({bool loadFonts = false}) {
+  setUpAll(() async {
     GoogleFonts.config.allowRuntimeFetching = false;
+    if (loadFonts) {
+      final manifest =
+          jsonDecode(await rootBundle.loadString('FontManifest.json')) as List;
+      for (final entry in manifest) {
+        final loader = FontLoader(entry['family'] as String);
+        for (final font in entry['fonts'] as List) {
+          loader.addFont(rootBundle.load(font['asset'] as String));
+        }
+        await loader.load();
+      }
+    }
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(
@@ -163,8 +179,12 @@ Future<AppHarness> pumpWithApp(
   Widget Function(ScrollController scroll) home, {
   Size size = const Size(400, 800),
 }) async {
-  await tester.binding.setSurfaceSize(size);
-  addTearDown(() => tester.binding.setSurfaceSize(null));
+  // devicePixelRatio 1 so `size` is the logical size - `setSurfaceSize`
+  // alone keeps the test default of 3, which makes a "400 wide" phone 133dp.
+  tester.view.devicePixelRatio = 1;
+  tester.view.physicalSize = size;
+  addTearDown(tester.view.resetDevicePixelRatio);
+  addTearDown(tester.view.resetPhysicalSize);
   final connectivity = HarnessConnectivity();
   final session = HarnessSession(connectivity);
   final files = HarnessFiles(session, raw);
