@@ -31,9 +31,9 @@ const int _kDesktopInlineActions = 4;
 /// count, and the bulk actions. This sits in the *content* pane's own
 /// pinned header slot on every platform (the shell's desktop toolbar,
 /// built separately in `main.dart`, never changes for selection), so
-/// mobile and desktop share the same fixed 56px height; only the gutter
-/// ([isDesktop] ? 24 : 12, matching `NooLayout.gutter`) and the actions'
-/// presentation differ:
+/// mobile and desktop share the same fixed 56px height and the same 12px
+/// side inset as the filter row below it (so it spans the container's full
+/// width); only the actions' presentation differs:
 /// - Mobile: the first [_kMobileInlineActions] actions as plain 20px
 ///   accent-text icons, no fill.
 /// - Wide panes: up to [_kDesktopInlineActions] as labelled tonal pills -
@@ -81,7 +81,9 @@ class NooSelectionBar extends StatelessWidget {
 
   Widget _buildBar(BuildContext context, double width) {
     final colors = context.nooColors;
-    final gutter = isDesktop ? NooSpace.xl : NooSpace.sm;
+    // The filter row it sits above is inset NooSpace.sm on every layout, so
+    // the bar spans the same width instead of floating in from the edges.
+    const gutter = NooSpace.sm;
     final labelled =
         isDesktop &&
         width >= 700 &&

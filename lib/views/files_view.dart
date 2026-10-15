@@ -29,7 +29,6 @@ import '../widgets/files_controls_row.dart';
 import '../widgets/item_icon.dart';
 import '../widgets/manage_synced_folders_sheet.dart';
 import '../widgets/noo/core/noo_button.dart';
-import '../widgets/noo/core/noo_chip.dart';
 import '../widgets/noo/files/noo_file_kind.dart';
 import '../widgets/noo/files/noo_file_row.dart';
 import '../widgets/noo/files/noo_file_table.dart';
@@ -127,6 +126,68 @@ class _SectionHeader extends StatelessWidget {
                 color: colors.fg3,
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A "jump to this section" button: a tonal accent pill with an arrow, so it
+/// reads as something to press rather than a tag. Hover/press feedback and a
+/// pointer cursor come from the [InkWell].
+class _JumpButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool compact;
+  final VoidCallback onTap;
+
+  const _JumpButton({
+    required this.icon,
+    required this.label,
+    required this.compact,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.nooColors;
+    return Semantics(
+      button: true,
+      child: Material(
+        color: colors.accentSoft,
+        shape: const StadiumBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          mouseCursor: SystemMouseCursors.click,
+          child: SizedBox(
+            height: compact ? 32 : 34,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 12, right: 10),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 16, color: colors.accentText),
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: NooText.body.copyWith(
+                      fontSize: compact ? 13 : 14,
+                      height: 1,
+                      fontWeight: FontWeight.w600,
+                      color: colors.accentText,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Icon(
+                    LucideIcons.arrowDown,
+                    size: 14,
+                    color: colors.accentText,
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -937,28 +998,28 @@ class _FilesViewState extends State<FilesView> {
     // to reach them. Tapping opens a collapsed section and scrolls to it.
     final jumpChips = <Widget>[
       if (externalItems.isNotEmpty)
-        NooChip(
+        _JumpButton(
           icon: LucideIcons.hardDrive,
-          outline: isDesktop,
+          compact: isDesktop,
+          label: 'External storage · ${externalItems.length}',
           onTap: () => _jumpToSection(
             _externalKey,
             stickyHeight,
             open: !_externalExpanded,
             expand: () => _externalExpanded = true,
           ),
-          child: Text('External storage · ${externalItems.length}'),
         ),
       if (sharedItems.isNotEmpty)
-        NooChip(
+        _JumpButton(
           icon: LucideIcons.users,
-          outline: isDesktop,
+          compact: isDesktop,
+          label: 'Shared with me · ${sharedItems.length}',
           onTap: () => _jumpToSection(
             _sharedKey,
             stickyHeight,
             open: !_sharedExpanded,
             expand: () => _sharedExpanded = true,
           ),
-          child: Text('Shared with me · ${sharedItems.length}'),
         ),
     ];
 
@@ -990,7 +1051,14 @@ class _FilesViewState extends State<FilesView> {
             child: Wrap(
               spacing: NooSpace.xs,
               runSpacing: NooSpace.xs,
-              children: jumpChips,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(
+                  'Jump to',
+                  style: NooText.meta.copyWith(color: colors.fg3),
+                ),
+                ...jumpChips,
+              ],
             ),
           ),
         ),

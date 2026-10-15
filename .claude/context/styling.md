@@ -214,8 +214,10 @@ blocks are noted where they matter:
   inside a folder (and with Mine / Shared) the list is flat. `NooFileRow`/
   `NooFileTableRow` take `shared:` and draw a `users` icon in accent-text
   beside the favorite star (the grid card has no slot for either). Under
-  the pinned controls row, one `NooChip` per non-empty section ("External
-  storage · N", "Shared with me · N") is the quick jump: it opens a
+  the pinned controls row, a "Jump to" label and one `_JumpButton` per
+  non-empty section ("External storage · N", "Shared with me · N" - a tonal
+  accent pill with an arrow, so it reads as a button, not a tag) is the quick
+  jump: it opens a
   collapsed section and scrolls to its header (`_jumpToSection` - a sliver
   list only builds near the viewport, so it scrolls toward the end until
   the header exists, then reveals it under the pinned row).

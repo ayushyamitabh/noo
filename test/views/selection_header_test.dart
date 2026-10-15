@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:noo/providers/settings_controller.dart';
+import 'package:noo/widgets/noo/lists/noo_selection_bar.dart';
 import 'package:noo/views/files_view.dart';
+import 'package:noo/widgets/files_controls_row.dart';
 
 import 'files_test_harness.dart';
 
@@ -132,6 +134,41 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
     expect(await margin(), before);
+    await app.finish(tester);
+  });
+
+  testWidgets('on a tablet the bar spans the same width as the filter row', (
+    tester,
+  ) async {
+    final app = await pumpWithApp(
+      tester,
+      listing,
+      (scroll) => FilesView(scrollController: scroll),
+      size: const Size(1100, 700),
+    );
+    // The filter row sits at the pane's 12px inset...
+    final filterRow = tester.getRect(find.byType(FilesControlsRow));
+    await select(tester);
+
+    // ...and the bar's card runs from that same inset to the mirrored one on
+    // the right, instead of floating in by the table's 24px gutter.
+    final card = tester.getRect(
+      find
+          .descendant(
+            of: find.byType(NooSelectionBar),
+            matching: find.byWidgetPredicate(
+              (w) =>
+                  w is Container &&
+                  w.decoration is BoxDecoration &&
+                  (w.decoration as BoxDecoration).border != null,
+            ),
+          )
+          .first,
+    );
+    expect(card.left, 12);
+    expect(card.right, 1100 - 12);
+    expect(card.left, filterRow.left);
+    expect(card.right, filterRow.right);
     await app.finish(tester);
   });
 }

@@ -111,6 +111,28 @@ void main() {
     await app.finish(tester);
   });
 
+  testWidgets('the jump chips are labelled, tappable buttons', (tester) async {
+    final app = await pumpFiles(tester);
+    app.files.setStorageScope(StorageScope.all);
+    await tester.pump(const Duration(milliseconds: 600));
+
+    expect(find.text('Jump to'), findsOneWidget);
+    for (final label in ['External storage · 1', 'Shared with me · 2']) {
+      // Each is an InkWell button (ripple, pointer cursor), not a static tag.
+      final button = find.ancestor(
+        of: find.text(label),
+        matching: find.byType(InkWell),
+      );
+      expect(button, findsOneWidget);
+      expect(tester.widget<InkWell>(button).onTap, isNotNull);
+      expect(
+        tester.widget<InkWell>(button).mouseCursor,
+        SystemMouseCursors.click,
+      );
+    }
+    await app.finish(tester);
+  });
+
   testWidgets('mine / shared filters drop the section for a flat list', (
     tester,
   ) async {
