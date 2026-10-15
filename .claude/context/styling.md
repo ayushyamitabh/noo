@@ -167,7 +167,10 @@ blocks are noted where they matter:
   breadcrumbs) never leaves - Top slides the action bar in above it by
   animating the pinned header's height (the bar is remembered for the
   slide-out, since its selection is already gone), Bottom doesn't touch the
-  header. Off restores the old behavior: the bar replaces the filters in the
+  header. The header is opaque over its whole height (bar included) -
+  the list scrolls under a pinned header, and a transparent bar region once let
+  rows show through (`selection_header_test.dart` samples the pixels). Off
+  restores the old behavior: the bar replaces the filters in the
   same slot (and Bottom removes the header). `controlsHeight` must match the
   filter row exactly (64, or 106 with Files' breadcrumbs).
   The mobile Action bar settings use one grouped card for Position and

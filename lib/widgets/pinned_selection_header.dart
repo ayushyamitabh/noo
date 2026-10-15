@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'noo/noo_layout.dart';
 import 'sticky_header_delegate.dart';
 
 /// The pinned header at the top of the Files / Photos / Favorites lists: the
@@ -62,7 +61,6 @@ class _PinnedSelectionHeaderState extends State<PinnedSelectionHeader> {
       );
     }
 
-    final background = NooLayout.contentBackground(context);
     return TweenAnimationBuilder<double>(
       tween: Tween(end: bar != null ? 1.0 : 0.0),
       duration: MediaQuery.disableAnimationsOf(context)
@@ -78,9 +76,11 @@ class _PinnedSelectionHeaderState extends State<PinnedSelectionHeader> {
         final barExtent = PinnedSelectionHeader.barHeight * t;
         return SliverPersistentHeader(
           pinned: true,
+          // Opaque over the whole header (bar included): the list scrolls
+          // under a pinned header, and rows must not show through the bar's
+          // margins or around the filter row.
           delegate: StickyHeaderDelegate(
-            // Transparent here; the filter row paints its own background.
-            floating: true,
+            floating: false,
             height: widget.controlsHeight + barExtent,
             child: Column(
               children: [
@@ -99,13 +99,7 @@ class _PinnedSelectionHeaderState extends State<PinnedSelectionHeader> {
                       ),
                     ),
                   ),
-                ColoredBox(
-                  color: background,
-                  child: SizedBox(
-                    height: widget.controlsHeight,
-                    child: widget.controls,
-                  ),
-                ),
+                SizedBox(height: widget.controlsHeight, child: widget.controls),
               ],
             ),
           ),

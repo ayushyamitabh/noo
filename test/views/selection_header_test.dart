@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:noo/providers/settings_controller.dart';
 import 'package:noo/views/files_view.dart';
@@ -86,6 +88,50 @@ void main() {
     await select(tester);
     expect(find.text('1 selected'), findsOneWidget);
     expect(find.text('Filters'), findsNothing);
+    await app.finish(tester);
+  });
+
+  testWidgets('rows scrolled under the header never show through it', (
+    tester,
+  ) async {
+    final key = GlobalKey();
+    final app = await pumpWithApp(
+      tester,
+      listing,
+      (scroll) => RepaintBoundary(
+        key: key,
+        child: FilesView(scrollController: scroll),
+      ),
+    );
+    await select(tester);
+
+    // The 4px margin under the action bar's card (header is the 56px bar over
+    // the filter row). Sampled with nothing beneath it, then with rows
+    // scrolled up under the header: a see-through header would show the row's
+    // surface the second time.
+    Future<List<int>> margin() async {
+      final boundary =
+          key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+      late List<int> rgb;
+      await tester.runAsync(() async {
+        final image = await boundary.toImage();
+        final data = (await image.toByteData())!.buffer.asUint8List();
+        int at(int x, int y, int c) => data[(y * image.width + x) * 4 + c];
+        rgb = [
+          for (final y in [53, 54, 55])
+            for (final c in [0, 1, 2]) at(200, y, c),
+        ];
+        image.dispose();
+      });
+      return rgb;
+    }
+
+    final before = await margin();
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(await margin(), before);
     await app.finish(tester);
   });
 }
