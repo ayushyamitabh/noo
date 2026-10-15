@@ -1209,6 +1209,11 @@ class _FilesViewState extends State<FilesView> {
       onClose: _clearSelection,
       isDesktop: NooLayout.isDesktop(context),
       iosStyle: NooLayout.iosStyle(context),
+      frosted: context.watch<SettingsController>().bottomBarFrosted,
+      frostedBlur: context.watch<SettingsController>().bottomBarFrostedBlur,
+      frostedOpacity: context
+          .watch<SettingsController>()
+          .bottomBarFrostedOpacity,
     );
   }
 

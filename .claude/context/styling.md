@@ -369,6 +369,13 @@ blocks are noted where they matter:
   The setting is labelled "Frosted glass" and also controls both media
   viewer panels through `FrostedGlassContainer`. Off uses an opaque surface
   without a backdrop filter; On uses the shared blur and tint opacity.
+  The multi-select action bar (`NooSelectionBar`) follows it too: the
+  screens (Files, Photos, Favorites, and Settings' preview) pass
+  `frosted`/`frostedBlur`/`frostedOpacity` from `SettingsController`
+  (the `noo/` kit never reads providers), and a frosted bar swaps the solid
+  card for a translucent `surface` fill over a `BackdropFilter` blur with no
+  drop shadow - the bottom bar's recipe. It's only visible because the
+  header slot is transparent while selecting, so rows scroll under it.
   Search starts inside the rail when a bottom avatar occupies the satellite;
   its row slot smoothly collapses as Search fades into that satellite while
   the avatar moves into the popup. Closing reverses the same path. The card

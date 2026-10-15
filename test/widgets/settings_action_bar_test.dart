@@ -102,4 +102,42 @@ void main() {
     expect(prefs.getString('ui_swipe_right_action'), 'details');
     expect(tester.takeException(), isNull);
   });
+
+  testNooWidgets('action preview follows the frosted glass settings', (
+    tester,
+    theme,
+    colors,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(380, 900);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final settings = SettingsController();
+    addTearDown(settings.dispose);
+    await pumpNoo(
+      tester,
+      ChangeNotifierProvider.value(
+        value: settings,
+        child: const SizedBox(
+          width: 340,
+          child: SingleChildScrollView(child: SettingsActionBarSection()),
+        ),
+      ),
+      theme: theme,
+      surfaceSize: const Size(380, 900),
+    );
+    await tester.pumpAndSettle();
+    final bar = find.byType(NooSelectionBar);
+    expect(tester.widget<NooSelectionBar>(bar).frosted, isFalse);
+
+    settings
+      ..setBottomBarFrosted(true)
+      ..setFrostedBlur(30)
+      ..setFrostedOpacity(0.4);
+    await tester.pumpAndSettle();
+    final frosted = tester.widget<NooSelectionBar>(bar);
+    expect(frosted.frosted, isTrue);
+    expect(frosted.frostedBlur, 30);
+    expect(frosted.frostedOpacity, 0.4);
+  });
 }

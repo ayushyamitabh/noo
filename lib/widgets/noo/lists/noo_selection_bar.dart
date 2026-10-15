@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../models/selection_action.dart';
@@ -52,6 +54,14 @@ class NooSelectionBar extends StatelessWidget {
   final bool isDesktop;
   final bool iosStyle;
 
+  /// The Settings -> Appearance frosted-glass preference, handed in by the
+  /// screen like `NooBottomBar` gets it: a translucent `surface` fill at
+  /// [frostedOpacity] over a [frostedBlur]-sigma backdrop blur, without the
+  /// solid card's shadow (the same recipe as the frosted bottom bar).
+  final bool frosted;
+  final double frostedBlur;
+  final double frostedOpacity;
+
   const NooSelectionBar({
     super.key,
     required this.count,
@@ -59,6 +69,9 @@ class NooSelectionBar extends StatelessWidget {
     required this.onClose,
     required this.isDesktop,
     this.iosStyle = false,
+    this.frosted = false,
+    this.frostedBlur = 20,
+    this.frostedOpacity = 0.72,
   });
 
   @override
@@ -111,68 +124,83 @@ class NooSelectionBar extends StatelessWidget {
     // margin plus the card's own 48px must add up to exactly that, or the
     // header overflows (see files_view.dart's `topRow` height comment for
     // the same warning about this exact number).
+    final radius = BorderRadius.circular(NooRadii.card);
+    final card = Container(
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      decoration: BoxDecoration(
+        color: frosted
+            ? colors.surface.withValues(alpha: frostedOpacity)
+            : colors.surface,
+        borderRadius: radius,
+        border: Border.all(color: colors.line),
+        boxShadow: frosted ? null : const [nooDialogShadow],
+      ),
+      child: Row(
+        children: [
+          Semantics(
+            button: true,
+            label: 'Cancel selection',
+            child: GestureDetector(
+              onTap: onClose,
+              child: Container(
+                width: 36,
+                height: 36,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: colors.surface2,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(LucideIcons.x, size: 18, color: colors.fg1),
+              ),
+            ),
+          ),
+          const SizedBox(width: NooSpace.xs),
+          Expanded(
+            child: Text(
+              '$count selected',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: NooText.cardTitle.copyWith(
+                fontSize: 17,
+                color: colors.fg1,
+              ),
+            ),
+          ),
+          const SizedBox(width: NooSpace.xs),
+          Align(
+            alignment: Alignment.centerRight,
+            child: labelled
+                ? _desktopActions(
+                    context,
+                    colors,
+                    inlineActions,
+                    overflowActions,
+                  )
+                : _mobileActions(
+                    context,
+                    colors,
+                    inlineActions,
+                    overflowActions,
+                  ),
+          ),
+        ],
+      ),
+    );
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: gutter, vertical: NooSpace.xxs),
-      child: Container(
-        height: 48,
-        padding: const EdgeInsets.symmetric(horizontal: 6),
-        decoration: BoxDecoration(
-          color: colors.surface,
-          borderRadius: BorderRadius.circular(NooRadii.card),
-          border: Border.all(color: colors.line),
-          boxShadow: const [nooDialogShadow],
-        ),
-        child: Row(
-          children: [
-            Semantics(
-              button: true,
-              label: 'Cancel selection',
-              child: GestureDetector(
-                onTap: onClose,
-                child: Container(
-                  width: 36,
-                  height: 36,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: colors.surface2,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(LucideIcons.x, size: 18, color: colors.fg1),
+      child: frosted
+          ? ClipRRect(
+              borderRadius: radius,
+              child: BackdropFilter(
+                filter: ImageFilter.blur(
+                  sigmaX: frostedBlur,
+                  sigmaY: frostedBlur,
                 ),
+                child: card,
               ),
-            ),
-            const SizedBox(width: NooSpace.xs),
-            Expanded(
-              child: Text(
-                '$count selected',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: NooText.cardTitle.copyWith(
-                  fontSize: 17,
-                  color: colors.fg1,
-                ),
-              ),
-            ),
-            const SizedBox(width: NooSpace.xs),
-            Align(
-              alignment: Alignment.centerRight,
-              child: labelled
-                  ? _desktopActions(
-                      context,
-                      colors,
-                      inlineActions,
-                      overflowActions,
-                    )
-                  : _mobileActions(
-                      context,
-                      colors,
-                      inlineActions,
-                      overflowActions,
-                    ),
-            ),
-          ],
-        ),
-      ),
+            )
+          : card,
     );
   }
 

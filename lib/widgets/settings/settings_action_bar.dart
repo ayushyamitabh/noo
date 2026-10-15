@@ -106,6 +106,7 @@ class _ActionBarPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.nooColors;
     final desktop = NooLayout.isDesktop(context);
+    final settings = context.watch<SettingsController>();
     return Container(
       padding: const EdgeInsets.all(NooSpace.sm),
       color: colors.surface2,
@@ -125,6 +126,9 @@ class _ActionBarPreview extends StatelessWidget {
                 count: 1,
                 isDesktop: desktop,
                 iosStyle: NooLayout.iosStyle(context),
+                frosted: settings.bottomBarFrosted,
+                frostedBlur: settings.bottomBarFrostedBlur,
+                frostedOpacity: settings.bottomBarFrostedOpacity,
                 onClose: () {},
                 actions: [
                   for (final kind in order)
