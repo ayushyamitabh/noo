@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:noo/providers/files_controller.dart';
 import 'package:noo/views/files_view.dart';
@@ -47,8 +48,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
 
     // Both chips show their counts; the sections hold the right items.
-    expect(find.text('Shared with me · 2'), findsOneWidget);
-    expect(find.text('External storage · 1'), findsOneWidget);
+    // (Icon-only on a phone: the label is each button's tooltip.)
+    expect(find.byTooltip('Shared with me · 2'), findsOneWidget);
+    expect(find.byTooltip('External storage · 1'), findsOneWidget);
 
     // The shared items aren't in the main list: the section header is the
     // only "Shared with me" label and sits after all of the regular items.
@@ -99,7 +101,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     expect(app.scroll.offset, 0);
 
-    await tester.tap(find.text('Shared with me · 2'));
+    await tester.tap(find.byTooltip('Shared with me · 2'));
     await tester.pump();
     await tester.pumpAndSettle();
 
@@ -111,16 +113,22 @@ void main() {
     await app.finish(tester);
   });
 
-  testWidgets('the jump chips are labelled, tappable buttons', (tester) async {
+  testWidgets('on a phone the jump buttons are icon-only buttons', (
+    tester,
+  ) async {
     final app = await pumpFiles(tester);
     app.files.setStorageScope(StorageScope.all);
     await tester.pump(const Duration(milliseconds: 600));
 
-    expect(find.text('Jump to'), findsOneWidget);
+    // No "Jump to" prefix and no text in the buttons themselves...
+    expect(find.text('Jump to'), findsNothing);
+    expect(find.text('External storage · 1'), findsNothing);
+    expect(find.text('Shared with me · 2'), findsNothing);
     for (final label in ['External storage · 1', 'Shared with me · 2']) {
-      // Each is an InkWell button (ripple, pointer cursor), not a static tag.
-      final button = find.ancestor(
-        of: find.text(label),
+      // ...but each is a real button (ripple, pointer cursor) with its icon,
+      // an arrow, and the label as tooltip.
+      final button = find.descendant(
+        of: find.byTooltip(label),
         matching: find.byType(InkWell),
       );
       expect(button, findsOneWidget);
@@ -129,6 +137,37 @@ void main() {
         tester.widget<InkWell>(button).mouseCursor,
         SystemMouseCursors.click,
       );
+      expect(
+        find.descendant(
+          of: find.byTooltip(label),
+          matching: find.byIcon(LucideIcons.arrowDown),
+        ),
+        findsOneWidget,
+      );
+    }
+    await app.finish(tester);
+  });
+
+  testWidgets('on a tablet they are labelled, with a Jump to prefix', (
+    tester,
+  ) async {
+    final app = await pumpWithApp(
+      tester,
+      listing,
+      (scroll) => FilesView(scrollController: scroll),
+      size: const Size(1100, 700),
+    );
+    app.files.setStorageScope(StorageScope.all);
+    await tester.pump(const Duration(milliseconds: 600));
+
+    expect(find.text('Jump to'), findsOneWidget);
+    for (final label in ['External storage · 1', 'Shared with me · 2']) {
+      final button = find.ancestor(
+        of: find.text(label),
+        matching: find.byType(InkWell),
+      );
+      expect(button, findsOneWidget);
+      expect(tester.widget<InkWell>(button).onTap, isNotNull);
     }
     await app.finish(tester);
   });

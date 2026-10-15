@@ -135,25 +135,31 @@ class _SectionHeader extends StatelessWidget {
 
 /// A "jump to this section" button: a tonal accent pill with an arrow, so it
 /// reads as something to press rather than a tag. Hover/press feedback and a
-/// pointer cursor come from the [InkWell].
+/// pointer cursor come from the [InkWell]. On phones ([iconOnly]) it's just
+/// the section icon and the arrow - the [label] stays as its tooltip and
+/// accessibility label.
 class _JumpButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool compact;
+  final bool iconOnly;
   final VoidCallback onTap;
 
   const _JumpButton({
     required this.icon,
     required this.label,
     required this.compact,
+    required this.iconOnly,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final colors = context.nooColors;
-    return Semantics(
+    final button = Semantics(
       button: true,
+      label: iconOnly ? 'Jump to $label' : null,
+      excludeSemantics: iconOnly,
       child: Material(
         color: colors.accentSoft,
         shape: const StadiumBorder(),
@@ -164,22 +170,24 @@ class _JumpButton extends StatelessWidget {
           child: SizedBox(
             height: compact ? 32 : 34,
             child: Padding(
-              padding: const EdgeInsets.only(left: 12, right: 10),
+              padding: EdgeInsets.only(left: 12, right: iconOnly ? 12 : 10),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(icon, size: 16, color: colors.accentText),
-                  const SizedBox(width: 6),
-                  Text(
-                    label,
-                    style: NooText.body.copyWith(
-                      fontSize: compact ? 13 : 14,
-                      height: 1,
-                      fontWeight: FontWeight.w600,
-                      color: colors.accentText,
+                  if (!iconOnly) ...[
+                    const SizedBox(width: 6),
+                    Text(
+                      label,
+                      style: NooText.body.copyWith(
+                        fontSize: compact ? 13 : 14,
+                        height: 1,
+                        fontWeight: FontWeight.w600,
+                        color: colors.accentText,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 6),
+                  ],
+                  SizedBox(width: iconOnly ? 4 : 6),
                   Icon(
                     LucideIcons.arrowDown,
                     size: 14,
@@ -192,6 +200,7 @@ class _JumpButton extends StatelessWidget {
         ),
       ),
     );
+    return iconOnly ? Tooltip(message: label, child: button) : button;
   }
 }
 
@@ -1001,6 +1010,7 @@ class _FilesViewState extends State<FilesView> {
         _JumpButton(
           icon: LucideIcons.hardDrive,
           compact: isDesktop,
+          iconOnly: !isDesktop,
           label: 'External storage · ${externalItems.length}',
           onTap: () => _jumpToSection(
             _externalKey,
@@ -1013,6 +1023,7 @@ class _FilesViewState extends State<FilesView> {
         _JumpButton(
           icon: LucideIcons.users,
           compact: isDesktop,
+          iconOnly: !isDesktop,
           label: 'Shared with me · ${sharedItems.length}',
           onTap: () => _jumpToSection(
             _sharedKey,
@@ -1053,10 +1064,13 @@ class _FilesViewState extends State<FilesView> {
               runSpacing: NooSpace.xs,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                Text(
-                  'Jump to',
-                  style: NooText.meta.copyWith(color: colors.fg3),
-                ),
+                // Phones show icons only, so the prefix is for the labelled
+                // tablet buttons.
+                if (isDesktop)
+                  Text(
+                    'Jump to',
+                    style: NooText.meta.copyWith(color: colors.fg3),
+                  ),
                 ...jumpChips,
               ],
             ),
