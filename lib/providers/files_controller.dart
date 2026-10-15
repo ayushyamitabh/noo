@@ -656,6 +656,36 @@ class FilesController extends ChangeNotifier
     );
   }
 
+  /// Puts the active account's list display prefs back to their defaults
+  /// (list view, All storage, All ownership, files + folders, hidden files
+  /// hidden, every folder sorted by name) and forgets the saved values.
+  /// Going *to* `hide` never needs the hidden-files unlock. Cache policy
+  /// isn't touched - it's refresh behavior, not a display pref.
+  Future<void> resetDisplayPrefs() async {
+    _isGridView = false;
+    _storageScope = StorageScope.all;
+    _ownershipFilter = OwnershipFilter.all;
+    _filesTypeFilter = FilesTypeFilter.all;
+    _hiddenFilter = HiddenFilesFilter.hide;
+    _folderSortField.clear();
+    _folderSortAscending.clear();
+    notifyListeners();
+    final id = session.activeAccountId;
+    if (id == null) return;
+    final prefs = await session.prefsFuture;
+    for (final key in [
+      _prefGridView,
+      _prefStorageScope,
+      _prefOwnershipFilter,
+      _prefFilesTypeFilter,
+      _prefShowHiddenFiles,
+      _prefHiddenFilter,
+      _prefFolderSort,
+    ]) {
+      await prefs.remove(session.accountStore.accountPrefKey(id, key));
+    }
+  }
+
   void setGridView(bool value) {
     if (_isGridView == value) return;
     _isGridView = value;

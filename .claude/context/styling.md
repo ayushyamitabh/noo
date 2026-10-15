@@ -178,6 +178,16 @@ blocks are noted where they matter:
   Their header backdrop is transparent, so content scrolls behind the inset
   `surface` card. A `line` border and `nooDialogShadow` match the floating
   bottom bar's solid treatment.
+- Settings → Appearance ends with a **Reset UI defaults** row (confirmed by
+  `confirmSettingsAction`). It calls `SettingsController.resetToDefaults()`
+  (every key in its `_allPrefKeys`) plus `FilesController`/
+  `PhotosController.resetDisplayPrefs()` (the *active account's* list prefs:
+  grid/list, storage, ownership, type, hidden, folder sorts, Photos filters).
+  It leaves accounts, the three locks, device sync and the Files cache policy
+  alone - several of those use `ui_`-prefixed keys but aren't display prefs,
+  so the reset lists keys explicitly rather than clearing by prefix. A new
+  preference key must be added to the matching reset list (the reset tests
+  compare against a fresh controller to catch a forgotten field).
 - Hidden files and external storage are each a three-way segmented row
   (`HiddenFilesFilterRow`/`StorageScopeRow`, `lib/widgets/filter_mode_rows.dart`,
   in both the Files and Photos filter sheets), not toggles:

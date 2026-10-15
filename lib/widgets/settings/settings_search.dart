@@ -162,6 +162,11 @@ const settingsSearchIndex = <SettingsSearchEntry>[
     hiddenOnIos: true,
   ),
   SettingsSearchEntry(
+    'Reset UI defaults',
+    'Appearance',
+    keywords: 'restore factory defaults clear preferences settings filters',
+  ),
+  SettingsSearchEntry(
     'Default tab',
     'Tabs',
     keywords: 'start open home first screen launch',

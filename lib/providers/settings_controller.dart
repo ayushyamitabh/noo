@@ -365,6 +365,69 @@ class SettingsController extends ChangeNotifier {
     }
   }
 
+  /// Every preference key this controller persists - what [resetToDefaults]
+  /// clears.
+  static const _allPrefKeys = [
+    _prefThemeMode,
+    _prefUseDynamicColor,
+    _prefSeedColor,
+    _prefTabOrder,
+    _prefSelectionBarPosition,
+    _prefKeepFiltersSelecting,
+    _prefSelectionActionOrder,
+    _prefHiddenTabs,
+    _prefDefaultTab,
+    _prefSwipeLeftAction,
+    _prefSwipeRightAction,
+    _prefFabStyle,
+    _prefBottomBarStyle,
+    _prefBottomBarFrosted,
+    _prefFrostedBlur,
+    _prefFrostedOpacity,
+    _prefAvatarPosition,
+    _prefNavMenuStyle,
+    _prefSearchInBottomBar,
+    _prefAmoledDark,
+    _prefMediaProgressBarStyle,
+    _prefTapTabToScrollTop,
+  ];
+
+  /// Puts every preference this controller owns - appearance, tabs, action
+  /// bar, swipe actions, navigation - back to its default and forgets the
+  /// saved values. (Per-account list prefs live on `FilesController`/
+  /// `PhotosController`; accounts, locks and device sync aren't UI prefs.)
+  Future<void> resetToDefaults() async {
+    _seedColor = AppTheme.defaultAccent;
+    _themeMode = ThemeMode.system;
+    _bottomBarStyle = NooBottomBarStyle.attached;
+    _navMenuStyle = NooNavMenuStyle.drawer;
+    _avatarPosition = AvatarPosition.top;
+    _bottomBarFrosted = false;
+    _frostedBlur = FrostedGlassPreset.standard.blur;
+    _frostedOpacity = FrostedGlassPreset.standard.opacity;
+    _searchInBottomBar = false;
+    _useDynamicColor = true;
+    _amoledDark = false;
+    _mediaProgressBarStyle = MediaProgressBarStyle.wavy;
+    _tapTabToScrollTop = true;
+    _selectionBarPosition = SelectionBarPosition.top;
+    _keepFiltersWhileSelecting = true;
+    _tabOrder = AppTab.values.toList();
+    _hiddenTabs = {};
+    _defaultTab = AppTab.files;
+    _selectionActionOrder = SelectionActionKind.values.toList();
+    _swipeLeftAction = SwipeAction.delete;
+    _swipeRightAction = SwipeAction.favorite;
+    _fabStyle = FabStyle.auto;
+    // A fresh install trims to the visible-tab cap on first load; do the same.
+    _enforceMaxVisibleTabs();
+    notifyListeners();
+    final prefs = await _prefsFuture;
+    for (final key in _allPrefKeys) {
+      await prefs.remove(key);
+    }
+  }
+
   void setSeedColor(Color color) {
     _seedColor = color;
     _useDynamicColor = false;

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
+import '../../providers/files_controller.dart';
+import '../../providers/photos_controller.dart';
 import '../../providers/settings_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/design_tokens.dart';
@@ -13,6 +15,7 @@ import '../noo/noo_layout.dart';
 import '../noo/overlays/noo_dialog.dart';
 import '../noo/overlays/noo_sheet.dart';
 import '../seek_bar_painter.dart';
+import 'settings_dialogs.dart';
 import 'settings_section.dart';
 
 String _seekBarStyleLabel(MediaProgressBarStyle style) {
@@ -153,9 +156,55 @@ class SettingsAppearanceSection extends StatelessWidget {
               ),
           ],
         ),
+        const SizedBox(height: NooSpace.xl),
+        SettingsSection(
+          title: 'Reset',
+          children: [
+            NooSettingsRow(
+              icon: LucideIcons.rotateCcw,
+              danger: true,
+              label: const Text('Reset UI defaults'),
+              subtitle: const Text(
+                'Appearance, tabs, action bar, swipe actions and list '
+                'filters. Accounts, locks and sync are not affected',
+              ),
+              onTap: () => _resetUiDefaults(context),
+            ),
+          ],
+        ),
       ],
     );
   }
+}
+
+/// Confirms, then puts every UI preference back to its default: the global
+/// ones on [SettingsController] plus the active account's list prefs on
+/// `FilesController`/`PhotosController`.
+Future<void> _resetUiDefaults(BuildContext context) async {
+  final settings = context.read<SettingsController>();
+  final files = context.read<FilesController>();
+  final photos = context.read<PhotosController>();
+  final messenger = ScaffoldMessenger.of(context);
+  final confirmed = await confirmSettingsAction(
+    context,
+    title: 'Reset UI defaults',
+    message:
+        'This puts the theme, tabs, action bar, swipe actions, filters, sort '
+        'and view choices back to their defaults. Your accounts, locks and '
+        'sync settings stay as they are.',
+    confirmLabel: 'Reset',
+    danger: true,
+  );
+  if (!confirmed) return;
+  await settings.resetToDefaults();
+  await files.resetDisplayPrefs();
+  await photos.resetDisplayPrefs();
+  messenger.showSnackBar(
+    const SnackBar(
+      content: Text('UI settings reset to defaults'),
+      behavior: SnackBarBehavior.floating,
+    ),
+  );
 }
 
 /// The "Theme" row: label on its own line, then the System/Light/Dark

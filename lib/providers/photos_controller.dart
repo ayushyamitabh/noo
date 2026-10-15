@@ -110,10 +110,35 @@ class PhotosController extends ChangeNotifier {
             : prefs.getBool(k(_prefSortAscending)) ?? _defaultSortAscending;
         notifyListeners();
       } catch (e) {
-        debugPrint('[PhotosController] Account-activation prefs restore failed: $e');
+        debugPrint(
+          '[PhotosController] Account-activation prefs restore failed: $e',
+        );
       }
     }
     unawaited(fetchAllMedia());
+  }
+
+  /// Puts the active account's Photos view prefs back to their defaults
+  /// (everything, hidden files hidden, newest first) and forgets the saved
+  /// values.
+  Future<void> resetDisplayPrefs() async {
+    _showFavoritesOnly = false;
+    _hiddenFilter = HiddenFilesFilter.hide;
+    _sortField = _defaultSortField;
+    _sortAscending = _defaultSortAscending;
+    notifyListeners();
+    final id = session.activeAccountId;
+    if (id == null) return;
+    final prefs = await session.prefsFuture;
+    for (final key in [
+      _prefShowFavoritesOnlyPhotos,
+      _prefShowHiddenPhotos,
+      _prefHiddenFilterPhotos,
+      _prefSortField,
+      _prefSortAscending,
+    ]) {
+      await prefs.remove(session.accountStore.accountPrefKey(id, key));
+    }
   }
 
   /// Loads every image/video across the whole account for the Photos tab.
@@ -186,7 +211,10 @@ class PhotosController extends ChangeNotifier {
     if (_sortField == field) return;
     _sortField = field;
     notifyListeners();
-    _persistAccountPref(_prefSortField, (p, key) => p.setString(key, field.name));
+    _persistAccountPref(
+      _prefSortField,
+      (p, key) => p.setString(key, field.name),
+    );
   }
 
   void toggleSortOrder() {
