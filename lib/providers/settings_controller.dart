@@ -78,6 +78,7 @@ class SettingsController extends ChangeNotifier {
   static const _prefSeedColor = 'ui_seed_color';
   static const _prefTabOrder = 'ui_tab_order';
   static const _prefSelectionBarPosition = 'ui_selection_bar_position';
+  static const _prefKeepFiltersSelecting = 'ui_keep_filters_selecting';
   static const _prefSelectionActionOrder = 'ui_selection_action_order';
   static const _prefHiddenTabs = 'ui_hidden_tabs';
   static const _prefDefaultTab = 'ui_default_tab';
@@ -113,6 +114,7 @@ class SettingsController extends ChangeNotifier {
 
   bool _tapTabToScrollTop = true;
   SelectionBarPosition _selectionBarPosition = SelectionBarPosition.top;
+  bool _keepFiltersWhileSelecting = true;
 
   List<AppTab> _tabOrder = AppTab.values.toList();
   Set<AppTab> _hiddenTabs = {};
@@ -169,6 +171,10 @@ class SettingsController extends ChangeNotifier {
   bool get tapTabToScrollTop => _tapTabToScrollTop;
   SelectionBarPosition get selectionBarPosition => _selectionBarPosition;
 
+  /// Whether the filter row stays on screen while items are selected (the
+  /// action bar then appears beside it instead of replacing it).
+  bool get keepFiltersWhileSelecting => _keepFiltersWhileSelecting;
+
   /// The cap a screen should actually enforce for the *regular*, user-
   /// reorderable tabs - one below [defaultMaxVisibleTabs] while
   /// [searchInBottomBar] is on, since Search then takes that freed-up slot
@@ -213,6 +219,9 @@ class SettingsController extends ChangeNotifier {
             position.name == prefs.getString(_prefSelectionBarPosition),
         orElse: () => SelectionBarPosition.top,
       );
+      _keepFiltersWhileSelecting =
+          prefs.getBool(_prefKeepFiltersSelecting) ??
+          _keepFiltersWhileSelecting;
       final bottomBarStyleName = prefs.getString(_prefBottomBarStyle);
       if (bottomBarStyleName != null) {
         _bottomBarStyle = NooBottomBarStyle.values.firstWhere(
@@ -412,6 +421,13 @@ class SettingsController extends ChangeNotifier {
     _prefsFuture.then(
       (p) => p.setString(_prefSelectionBarPosition, position.name),
     );
+  }
+
+  void setKeepFiltersWhileSelecting(bool value) {
+    if (_keepFiltersWhileSelecting == value) return;
+    _keepFiltersWhileSelecting = value;
+    notifyListeners();
+    _prefsFuture.then((p) => p.setBool(_prefKeepFiltersSelecting, value));
   }
 
   void setBottomBarStyle(NooBottomBarStyle style) {

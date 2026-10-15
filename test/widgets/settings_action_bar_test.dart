@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:noo/models/selection_action.dart';
 import 'package:noo/providers/settings_controller.dart';
+import 'package:noo/widgets/noo/core/noo_toggle.dart';
 import 'package:noo/widgets/noo/lists/noo_selection_bar.dart';
 import 'package:noo/widgets/settings/settings_action_bar.dart';
 import 'package:noo/widgets/settings/settings_swipe.dart';
@@ -139,5 +140,37 @@ void main() {
     expect(frosted.frosted, isTrue);
     expect(frosted.frostedBlur, 30);
     expect(frosted.frostedOpacity, 0.4);
+  });
+
+  testNooWidgets('Keep filters visible toggles the setting (on by default)', (
+    tester,
+    theme,
+    colors,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(380, 1200);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final settings = SettingsController();
+    addTearDown(settings.dispose);
+    await pumpNoo(
+      tester,
+      ChangeNotifierProvider.value(
+        value: settings,
+        child: const SizedBox(
+          width: 340,
+          child: SingleChildScrollView(child: SettingsActionBarSection()),
+        ),
+      ),
+      theme: theme,
+      surfaceSize: const Size(380, 1200),
+    );
+    await tester.pumpAndSettle();
+    expect(settings.keepFiltersWhileSelecting, isTrue);
+    expect(find.text('Keep filters visible'), findsOneWidget);
+
+    await tester.tap(find.byType(NooToggle));
+    await tester.pumpAndSettle();
+    expect(settings.keepFiltersWhileSelecting, isFalse);
   });
 }

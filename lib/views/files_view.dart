@@ -45,7 +45,7 @@ import '../widgets/noo/nav/noo_bottom_bar.dart';
 import '../widgets/noo/noo_layout.dart';
 import '../widgets/noo/overlays/noo_sheet.dart';
 import '../widgets/share_sheet.dart';
-import '../widgets/sticky_header_delegate.dart';
+import '../widgets/pinned_selection_header.dart';
 import '../widgets/selection_bar_overlay.dart';
 import '../widgets/tabs/tab_state_slivers.dart';
 import '../widgets/synced_header_scaffold.dart' show formatBytes;
@@ -704,6 +704,9 @@ class _FilesViewState extends State<FilesView> {
         _isSelecting &&
         context.watch<SettingsController>().selectionBarPosition ==
             SelectionBarPosition.bottom;
+    final keepFilters = context
+        .watch<SettingsController>()
+        .keepFiltersWhileSelecting;
     final colors = context.nooColors;
     // Display prefs (grid/list, filters, sort) live on FilesController for
     // both tabs; `browser` is the tab's own folder listing.
@@ -731,49 +734,47 @@ class _FilesViewState extends State<FilesView> {
         .where((i) => _selectedIds.contains(i.id))
         .toList();
 
-    final topRow = _isSelecting
-        ? _buildSelectionBar(context, selectedItems)
-        : Padding(
-            padding: const EdgeInsets.fromLTRB(
-              NooSpace.sm,
-              NooSpace.sm,
-              NooSpace.sm,
-              NooSpace.xs,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: FilesControlsRow(
-                        folderPath: browser.currentFolderPath,
-                        showStorageScope: !_offline,
-                      ),
-                    ),
-                    if (_offline) ...[
-                      const SizedBox(width: NooSpace.xs),
-                      _HeaderIconButton(
-                        icon: LucideIcons.folderSync,
-                        tooltip: 'Manage synced folders',
-                        onTap: () => ManageSyncedFoldersSheet.show(context),
-                      ),
-                    ],
-                  ],
+    final topRow = Padding(
+      padding: const EdgeInsets.fromLTRB(
+        NooSpace.sm,
+        NooSpace.sm,
+        NooSpace.sm,
+        NooSpace.xs,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: FilesControlsRow(
+                  folderPath: browser.currentFolderPath,
+                  showStorageScope: !_offline,
                 ),
-                if (hasBreadcrumbs) ...[
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    height: 32,
-                    child: FileBreadcrumbRow(
-                      pathStack: browser.pathStack,
-                      onTap: (index) => browser.navigateToPathIndex(index),
-                    ),
-                  ),
-                ],
+              ),
+              if (_offline) ...[
+                const SizedBox(width: NooSpace.xs),
+                _HeaderIconButton(
+                  icon: LucideIcons.folderSync,
+                  tooltip: 'Manage synced folders',
+                  onTap: () => ManageSyncedFoldersSheet.show(context),
+                ),
               ],
+            ],
+          ),
+          if (hasBreadcrumbs) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 32,
+              child: FileBreadcrumbRow(
+                pathStack: browser.pathStack,
+                onTap: (index) => browser.navigateToPathIndex(index),
+              ),
             ),
-          );
+          ],
+        ],
+      ),
+    );
 
     // One sliver group per layout (grid / desktop table / mobile list) for
     // an arbitrary slice of items - [StorageScope.all] renders two of them,
@@ -926,7 +927,11 @@ class _FilesViewState extends State<FilesView> {
 
     // Height of the pinned controls row (see its `StickyHeaderDelegate`
     // below) - what a section header has to be scrolled clear of.
-    final stickyHeight = _isSelecting ? 56.0 : (hasBreadcrumbs ? 106.0 : 64.0);
+    final controlsHeight = hasBreadcrumbs ? 106.0 : 64.0;
+    final barInHeader = _isSelecting && !selectionAtBottom;
+    final stickyHeight = keepFilters
+        ? controlsHeight + (barInHeader ? PinnedSelectionHeader.barHeight : 0)
+        : (_isSelecting ? 56.0 : controlsHeight);
 
     // Quick jump: one chip per section, so a long list needn't be scrolled
     // to reach them. Tapping opens a collapsed section and scrolls to it.
@@ -963,18 +968,18 @@ class _FilesViewState extends State<FilesView> {
       // (+ breadcrumbs), while selecting it's the selection bar (see
       // `topRow` above): either way it's the one thing that always stays
       // at the very top of the scroll view.
-      if (!selectionAtBottom)
-        SliverPersistentHeader(
-          pinned: true,
-          delegate: StickyHeaderDelegate(
-            floating: _isSelecting,
-            // 20 (topRow's own top+bottom padding) + 44 (FilesControlsRow's
-            // fixed height) [+ 10 gap + 32 breadcrumbs height, if present].
-            // Getting this wrong overflows the sliver header by exactly the
-            // shortfall - a real bug this shipped with once already.
-            height: stickyHeight,
-            child: topRow,
-          ),
+      if (keepFilters || !selectionAtBottom)
+        PinnedSelectionHeader(
+          // 20 (topRow's own top+bottom padding) + 44 (FilesControlsRow's
+          // fixed height) [+ 10 gap + 32 breadcrumbs height, if present].
+          // Getting this wrong overflows the sliver header by exactly the
+          // shortfall - a real bug this shipped with once already.
+          controlsHeight: controlsHeight,
+          controls: topRow,
+          keepControls: keepFilters,
+          selectionBar: barInHeader
+              ? _buildSelectionBar(context, selectedItems)
+              : null,
         ),
       if (_offline)
         SliverToBoxAdapter(child: _buildOfflineSummary(context, sync)),

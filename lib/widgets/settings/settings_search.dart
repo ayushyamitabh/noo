@@ -184,6 +184,11 @@ const settingsSearchIndex = <SettingsSearchEntry>[
     target: 'Position',
   ),
   SettingsSearchEntry(
+    'Keep filters visible',
+    'Action bar',
+    keywords: 'selection filter bar breadcrumbs hide show multi-select',
+  ),
+  SettingsSearchEntry(
     'Action bar actions',
     'Action bar',
     keywords: 'reorder more selection share delete move copy favorite',

@@ -176,9 +176,10 @@ void setUpFilesHarness({bool loadFonts = false}) {
 /// Everything a test wants to poke after [pumpWithApp].
 class AppHarness {
   final HarnessFiles files;
+  final SettingsController settings;
   final ScrollController scroll;
   final List<ChangeNotifier> _controllers;
-  AppHarness(this.files, this.scroll, this._controllers);
+  AppHarness(this.files, this.settings, this.scroll, this._controllers);
 
   /// Unmounts the app and disposes its controllers. Call at the end of every
   /// test: the binding checks for pending timers (ConnectivityController
@@ -258,7 +259,7 @@ Future<AppHarness> pumpWithApp(
     ),
   );
   await tester.pump(const Duration(milliseconds: 600));
-  return AppHarness(files, scroll, [
+  return AppHarness(files, settings, scroll, [
     connectivity,
     session,
     files,

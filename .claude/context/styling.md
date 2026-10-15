@@ -160,6 +160,16 @@ blocks are noted where they matter:
   Scaffold's MediaQuery bottom padding so attached/floating/frosted navigation
   and safe areas are accounted for without counting their height twice.
   The shell hides Android's Upload FAB during selection via view callbacks.
+  The header itself is `PinnedSelectionHeader`
+  (`lib/widgets/pinned_selection_header.dart`, shared by the three tabs):
+  with "Keep filters visible" (`SettingsController.keepFiltersWhileSelecting`,
+  `ui_keep_filters_selecting`, **on by default**) the filter row (+ Files'
+  breadcrumbs) never leaves - Top slides the action bar in above it by
+  animating the pinned header's height (the bar is remembered for the
+  slide-out, since its selection is already gone), Bottom doesn't touch the
+  header. Off restores the old behavior: the bar replaces the filters in the
+  same slot (and Bottom removes the header). `controlsHeight` must match the
+  filter row exactly (64, or 106 with Files' breadcrumbs).
   The mobile Action bar settings use one grouped card for Position and
   the reorder list, with no nested rounded corners or repeated page title.
   Their header backdrop is transparent, so content scrolls behind the inset

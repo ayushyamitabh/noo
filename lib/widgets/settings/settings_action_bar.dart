@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../../models/selection_action.dart';
 import '../../providers/settings_controller.dart';
@@ -8,6 +9,7 @@ import '../noo/lists/noo_selection_bar.dart';
 import '../noo/lists/noo_settings_row.dart';
 import '../noo/lists/noo_grouped_list.dart';
 import '../noo/core/noo_segmented_control.dart';
+import '../noo/core/noo_toggle.dart';
 import '../noo/noo_layout.dart';
 import 'settings_section.dart';
 
@@ -55,6 +57,17 @@ class SettingsActionBarSection extends StatelessWidget {
         ],
       ),
     );
+    final keepFiltersRow = NooSettingsRow(
+      icon: LucideIcons.listFilter,
+      label: const Text('Keep filters visible'),
+      subtitle: const Text(
+        'Filters and breadcrumbs stay in place while items are selected',
+      ),
+      trailing: NooToggle(
+        checked: settings.keepFiltersWhileSelecting,
+        onChanged: settings.setKeepFiltersWhileSelecting,
+      ),
+    );
     final colors = context.nooColors;
 
     if (!desktop) {
@@ -63,6 +76,7 @@ class SettingsActionBarSection extends StatelessWidget {
         children: [
           _ActionBarPreview(order: settings.selectionActionOrder),
           positionRow,
+          keepFiltersRow,
           orderList,
         ],
       );
@@ -89,6 +103,8 @@ class SettingsActionBarSection extends StatelessWidget {
           _ActionBarPreview(order: settings.selectionActionOrder),
           const SizedBox(height: NooSpace.md),
           positionRow,
+          const SizedBox(height: NooSpace.md),
+          keepFiltersRow,
           const SizedBox(height: NooSpace.md),
           orderList,
         ],
