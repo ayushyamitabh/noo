@@ -9,6 +9,7 @@ import '../noo/lists/noo_settings_row.dart';
 import '../noo/lists/noo_tab_order_row.dart';
 import '../noo/noo_layout.dart';
 import 'settings_section.dart';
+import '../noo/overlays/noo_messenger.dart';
 
 /// Settings section 7: bottom-nav tab order, visibility (pinned = shown, up
 /// to [SettingsController.maxVisibleTabs] - one fewer while Appearance's
@@ -57,7 +58,7 @@ class SettingsTabsSection extends StatelessWidget {
     // just the tab's current pinned (= visible) state flipped.
     final error = settings.setTabHidden(tab, pinned);
     if (error != null && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      NooMessenger.of(context).showSnackBar(
         SnackBar(content: Text(error), behavior: SnackBarBehavior.floating),
       );
     }

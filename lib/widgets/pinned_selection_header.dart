@@ -6,10 +6,9 @@ import 'sticky_header_delegate.dart';
 /// selecting.
 ///
 /// With [keepControls] (the default - "Keep filters visible" in Settings →
-/// Action bar) the filter row never leaves: in the top position the action
-/// bar slides in *above* it, growing the header smoothly, so the filters
-/// stay on screen and nothing pops in or out. In the bottom position the
-/// caller passes no [selectionBar] and the header doesn't change at all.
+/// Action bar) the filter row never leaves and this is just the controls; in
+/// the top position the caller adds a [PinnedSelectionBar] after it, which
+/// floats over the top of the list. In the bottom position nothing changes.
 ///
 /// Without it the bar replaces the filter row in the same slot, like it used
 /// to - no animation, the header just changes height.
@@ -21,8 +20,8 @@ class PinnedSelectionHeader extends StatefulWidget {
   final Widget controls;
   final double controlsHeight;
 
-  /// The action bar while it lives in the header (top position); null when
-  /// not selecting or when the bar is at the bottom.
+  /// The action bar that replaces the controls when [keepControls] is off
+  /// (top position); unused otherwise - see [PinnedSelectionBar].
   final Widget? selectionBar;
   final bool keepControls;
 
@@ -39,14 +38,9 @@ class PinnedSelectionHeader extends StatefulWidget {
 }
 
 class _PinnedSelectionHeaderState extends State<PinnedSelectionHeader> {
-  /// The bar to keep drawing while it slides back out, after the caller has
-  /// already stopped passing one (its selection is gone by then).
-  Widget? _leavingBar;
-
   @override
   Widget build(BuildContext context) {
     final bar = widget.selectionBar;
-    if (bar != null) _leavingBar = bar;
 
     if (!widget.keepControls) {
       return SliverPersistentHeader(
@@ -61,46 +55,103 @@ class _PinnedSelectionHeaderState extends State<PinnedSelectionHeader> {
       );
     }
 
-    return TweenAnimationBuilder<double>(
-      tween: Tween(end: bar != null ? 1.0 : 0.0),
-      duration: MediaQuery.disableAnimationsOf(context)
-          ? Duration.zero
-          : const Duration(milliseconds: 240),
-      curve: Curves.easeOutCubic,
-      onEnd: () {
-        if (widget.selectionBar == null && _leavingBar != null) {
-          setState(() => _leavingBar = null);
+    // Keep-filters mode: the header is just the controls. The action bar is
+    // the separate [PinnedSelectionBar] sliver that follows it.
+    return SliverPersistentHeader(
+      pinned: true,
+      delegate: StickyHeaderDelegate(
+        floating: false,
+        height: widget.controlsHeight,
+        child: widget.controls,
+      ),
+    );
+  }
+}
+
+/// The multi-select action bar in the top position with "Keep filters
+/// visible" on: a pinned sliver right after the [PinnedSelectionHeader]'s
+/// filter row. Its background is transparent, so the bar reads as a card
+/// floating over the files list - rows scroll underneath its margins - while
+/// still reserving its own height at the top of the list (nothing is hidden
+/// at scroll offset 0).
+///
+/// Keep it in the sliver list for as long as the top position is in use and
+/// pass [bar] only while selecting: it slides down into place when [bar]
+/// appears and back up under the filter row when it goes null (the last bar
+/// is kept drawing for the exit).
+class PinnedSelectionBar extends StatefulWidget {
+  final Widget? bar;
+  const PinnedSelectionBar({super.key, this.bar});
+
+  @override
+  State<PinnedSelectionBar> createState() => _PinnedSelectionBarState();
+}
+
+class _PinnedSelectionBarState extends State<PinnedSelectionBar>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 240),
+    value: widget.bar != null ? 1 : 0,
+  );
+  late final Animation<double> _curve = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeOutCubic,
+    reverseCurve: Curves.easeInCubic,
+  );
+  Widget? _lastBar;
+
+  @override
+  void initState() {
+    super.initState();
+    _lastBar = widget.bar;
+  }
+
+  @override
+  void didUpdateWidget(PinnedSelectionBar old) {
+    super.didUpdateWidget(old);
+    final instant = MediaQuery.disableAnimationsOf(context);
+    if (widget.bar != null) {
+      _lastBar = widget.bar;
+      instant ? _controller.value = 1 : _controller.forward();
+    } else {
+      instant ? _controller.value = 0 : _controller.reverse();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bar = _lastBar;
+    return AnimatedBuilder(
+      animation: _curve,
+      builder: (context, _) {
+        final t = _curve.value;
+        if (bar == null || _controller.isDismissed) {
+          return const SliverToBoxAdapter(child: SizedBox.shrink());
         }
-      },
-      builder: (context, t, _) {
-        final barExtent = PinnedSelectionHeader.barHeight * t;
         return SliverPersistentHeader(
           pinned: true,
-          // Opaque over the whole header (bar included): the list scrolls
-          // under a pinned header, and rows must not show through the bar's
-          // margins or around the filter row.
           delegate: StickyHeaderDelegate(
-            floating: false,
-            height: widget.controlsHeight + barExtent,
-            child: Column(
-              children: [
-                if (_leavingBar != null && barExtent > 0)
-                  SizedBox(
-                    height: barExtent,
-                    child: ClipRect(
-                      child: Opacity(
-                        opacity: t,
-                        child: OverflowBox(
-                          alignment: Alignment.bottomCenter,
-                          minHeight: PinnedSelectionHeader.barHeight,
-                          maxHeight: PinnedSelectionHeader.barHeight,
-                          child: _leavingBar,
-                        ),
-                      ),
-                    ),
-                  ),
-                SizedBox(height: widget.controlsHeight, child: widget.controls),
-              ],
+            floating: true,
+            height: PinnedSelectionHeader.barHeight * t,
+            child: ClipRect(
+              child: Opacity(
+                opacity: t,
+                child: OverflowBox(
+                  // Bottom-aligned inside the growing, clipped slot, so the
+                  // bar slides down into place from under the filter row.
+                  alignment: Alignment.bottomCenter,
+                  minHeight: PinnedSelectionHeader.barHeight,
+                  maxHeight: PinnedSelectionHeader.barHeight,
+                  child: bar,
+                ),
+              ),
             ),
           ),
         );

@@ -39,6 +39,8 @@ object SyncEngine {
         val lastModified: Long,
         val size: Long,
         val isFolder: Boolean,
+        /** `nc:mount-type` = external - only the mount's root folder carries it. */
+        val isExternal: Boolean = false,
     )
 
     data class FileState(
@@ -89,7 +91,38 @@ object SyncEngine {
      */
     val syncLock = Mutex()
 
+    /**
+     * Bumped by the app's "Cancel" button (and when "Sync everything" is
+     * turned off mid-run). Every run notes the value when it is *scheduled to
+     * start* (before waiting for [syncLock]): a run that sees a different
+     * value was cancelled - the one in progress stops at its next check
+     * (between transfers, between folder listings, inside a download), saves
+     * what it already finished and ends, and any run that was only queued
+     * behind it (a periodic job that came due, a second "Sync now") never
+     * starts. Runs that begin after the cancel carry the new value and are
+     * unaffected.
+     */
+    val cancelGeneration = java.util.concurrent.atomic.AtomicInteger(0)
+
+    /**
+     * What a pass is about to download doesn't fit on the device (with
+     * [STORAGE_RESERVE_BYTES] to spare). Raised before any of that path's
+     * transfers start, so nothing is left half-done; the run ends and the app
+     * tells the user.
+     */
+    class InsufficientStorageException(val needed: Long, val available: Long) :
+        Exception("Not enough storage: needs $needed bytes, $available available")
+
+    /** Free space always left alone, so syncing can't fill the phone completely. */
+    const val STORAGE_RESERVE_BYTES = 100L * 1024 * 1024
+
+    /** Thrown inside a run when [cancelGeneration] (or WorkManager) says stop. */
+    class SyncCancelledException : Exception("Sync cancelled")
+
     private const val TAG = "NooSync"
+
+    /** Suffix of an in-progress download; never listed or treated as a file. */
+    const val PART_SUFFIX = ".noo-part"
     private const val STATE_PREFS = "noo_sync_state"
     private val rfc1123 =
         SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US)
@@ -278,8 +311,9 @@ object SyncEngine {
         val url = "$cleanServer/remote.php/dav/files/$username$encodedPath"
 
         val body = """<?xml version="1.0" encoding="utf-8" ?>
-<d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">
+<d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns" xmlns:nc="http://nextcloud.org/ns">
   <d:prop>
+    <nc:mount-type/>
     <d:getlastmodified/>
     <d:getcontentlength/>
     <d:resourcetype/>
@@ -353,6 +387,9 @@ object SyncEngine {
                 val fileId = propEl.getElementsByTagNameNS("http://owncloud.org/ns", "fileid")
                     .item(0)?.textContent ?: hrefPathNorm
 
+                val mountType = propEl.getElementsByTagNameNS("http://nextcloud.org/ns", "mount-type")
+                    .item(0)?.textContent?.trim()
+
                 entries.add(
                     RemoteEntry(
                         path = hrefPathNorm,
@@ -361,6 +398,7 @@ object SyncEngine {
                         lastModified = lastModStr?.let { runCatching { rfc1123.parse(it)?.time }.getOrNull() } ?: 0L,
                         size = sizeStr?.toLongOrNull() ?: 0L,
                         isFolder = isFolder,
+                        isExternal = mountType == "external",
                     ),
                 )
             }
@@ -368,20 +406,42 @@ object SyncEngine {
             return entries
     }
 
-    /** Recursively walks [rootPath] (Depth-1 PROPFINDs, breadth-first) into a flat manifest. */
+    /**
+     * Recursively walks [rootPath] (Depth-1 PROPFINDs, breadth-first) into a flat manifest.
+     *
+     * Walking from the account root ("Sync everything") leaves external-storage
+     * mounts out unless [includeExternal] (the separate "Sync external storage"
+     * setting) is on - that mode is for cloud files by default, and a NAS-sized
+     * mount would otherwise be mirrored to the device. A folder the user picked
+     * explicitly is always synced, as its own root.
+     *
+     * [isCancelled] is checked before every listing; true throws
+     * [SyncCancelledException]. [onSkippedExternal] gets the path of each
+     * external mount left out, so the caller can tell "not walked" from
+     * "deleted on the server" for what's already on the device under it.
+     */
     fun walkRemoteTree(
         serverUrl: String,
         username: String,
         authHeader: String,
         rootPath: String,
+        includeExternal: Boolean = false,
+        isCancelled: () -> Boolean = { false },
+        onSkippedExternal: ((String) -> Unit)? = null,
     ): List<RemoteEntry> {
         val result = mutableListOf<RemoteEntry>()
         val queue = ArrayDeque<String>()
+        val skipExternal = !includeExternal && rootPath.trim().trim('/').isEmpty()
         queue.add(rootPath)
         while (queue.isNotEmpty()) {
+            if (isCancelled()) throw SyncCancelledException()
             val current = queue.removeFirst()
             val children = propfindChildren(serverUrl, username, authHeader, current)
             for (child in children) {
+                if (skipExternal && child.isExternal) {
+                    onSkippedExternal?.invoke(child.path)
+                    continue
+                }
                 result.add(child)
                 if (child.isFolder) queue.add(child.path)
             }
@@ -395,9 +455,20 @@ object SyncEngine {
         authHeader: String,
         remotePath: String,
         destination: File,
+        isCancelled: (() -> Boolean)? = null,
     ): Boolean {
         val url = davUrl(serverUrl, username, remotePath)
-        val ok = DavTransfer.get(url, authHeader, destination)
+        // Written beside the destination and moved into place only once
+        // complete: a cancelled or failed download must never leave a
+        // truncated file where the next pass would mistake it for a local
+        // edit (a conflict) or for the real thing.
+        val part = File(destination.parentFile, destination.name + PART_SUFFIX)
+        var ok = DavTransfer.get(url, authHeader, part, isCancelled = isCancelled)
+        if (ok) {
+            destination.delete()
+            ok = part.renameTo(destination)
+        }
+        if (!ok) part.delete()
         Log.d(
             TAG,
             if (ok) {
@@ -519,7 +590,13 @@ object SyncEngine {
         }
     }
 
-    fun removeLocalSync(context: Context, accountId: String, path: String) {
+    /**
+     * Stops tracking [path] (clears its recorded sync state and root markers)
+     * and, with [deleteFiles], deletes its local copy too. Without it the files
+     * stay on the device as plain leftovers - the "Delete files when removed
+     * from sync" setting being off.
+     */
+    fun removeLocalSync(context: Context, accountId: String, path: String, deleteFiles: Boolean = true) {
         val root = syncRoot(context, accountId)
         val state = loadState(context, accountId).toMutableMap()
 
@@ -553,8 +630,8 @@ object SyncEngine {
         }
 
         val target = if (cleanPath.isEmpty()) root else File(root, cleanPath)
-        if (target.exists()) target.deleteRecursively()
-        Log.d(TAG, "removeLocalSync($path) -> removed ${toRemove.size} state entries")
+        if (deleteFiles && target.exists()) target.deleteRecursively()
+        Log.d(TAG, "removeLocalSync($path, deleteFiles=$deleteFiles) -> removed ${toRemove.size} state entries")
     }
 
     fun folderIsSyncedUnder(itemPath: String, syncedFolders: List<String>): String? {

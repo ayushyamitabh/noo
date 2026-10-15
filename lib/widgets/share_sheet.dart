@@ -28,6 +28,7 @@ import 'noo/overlays/noo_overlay_header.dart';
 import 'noo/overlays/noo_share_parts.dart';
 import 'noo/overlays/noo_sheet.dart';
 import 'noo/overlays/noo_text_field.dart';
+import 'noo/overlays/noo_messenger.dart';
 
 /// Builds the "internal link" URL for a file, or null if [fileId] isn't a
 /// numeric Nextcloud file id (WebDAV `oc:fileid` was missing for this item).
@@ -191,7 +192,7 @@ class _ShareSheetState extends State<ShareSheet> {
   Future<void> _addSharee(NextcloudSharee sharee) async {
     if (_pendingShareeKey != null) return;
     final ops = context.read<ItemOperations>();
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = NooMessenger.of(context);
     setState(() => _pendingShareeKey = _shareeKey(sharee));
     final share = await ops.createShare(
       path: widget.item.path,
@@ -225,7 +226,7 @@ class _ShareSheetState extends State<ShareSheet> {
   Future<void> _addEmail(String email) async {
     setState(() => _isAddingPerson = true);
     final ops = context.read<ItemOperations>();
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = NooMessenger.of(context);
     final share = await ops.createShare(
       path: widget.item.path,
       shareType: 4,
@@ -257,7 +258,7 @@ class _ShareSheetState extends State<ShareSheet> {
 
   Future<void> _createPublicLink() async {
     final ops = context.read<ItemOperations>();
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = NooMessenger.of(context);
     final share = await ops.createShare(path: widget.item.path, shareType: 3);
     if (!mounted) return;
     if (share == null) {
@@ -274,7 +275,7 @@ class _ShareSheetState extends State<ShareSheet> {
 
   Future<void> _removeShare(NextcloudShare share) async {
     final ops = context.read<ItemOperations>();
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = NooMessenger.of(context);
     final success = await ops.deleteShare(share);
     if (!mounted) return;
     if (success) {
@@ -310,7 +311,7 @@ class _ShareSheetState extends State<ShareSheet> {
 
   void _copy(String text, String label) {
     Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(context).showSnackBar(
+    NooMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Copied $label'),
         behavior: SnackBarBehavior.floating,
@@ -327,7 +328,7 @@ class _ShareSheetState extends State<ShareSheet> {
     final sync = context.read<SyncStatusController>();
     if (session.service == null) return;
     setState(() => _isSharingFile = true);
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = NooMessenger.of(context);
     try {
       // Already mirrored locally by device sync? Share that copy straight
       // away instead of a fresh WebDAV fetch - see
@@ -423,7 +424,7 @@ class _ShareSheetState extends State<ShareSheet> {
   Future<void> _setPermission(NextcloudShare share, bool edit) async {
     if (((share.permissions & 2) != 0) == edit) return;
     final ops = context.read<ItemOperations>();
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = NooMessenger.of(context);
     final reshare = share.permissions & 16;
     final base = edit ? (share.isFolder ? 15 : 3) : 1;
     final permissions = base | reshare;

@@ -36,3 +36,24 @@ enum SyncItemStatus { none, syncing, synced, conflict }
 /// scoped to whatever folder is currently browsed) - see
 /// `SyncStatusController.syncHeaderStatus`.
 enum SyncHeaderStatus { off, syncing, done, alert }
+
+/// A sync pass that stopped because what it had to download wouldn't fit on
+/// the device (with a little room to spare). [serial] changes with every new
+/// occurrence, so a screen can alert once per event.
+class StorageShortfall {
+  final int neededBytes;
+  final int availableBytes;
+  final int serial;
+
+  /// What the pass was syncing for the first time was dropped, exactly as if
+  /// the user had cancelled it (removed from the synced list, partial files
+  /// deleted) - see `SyncStatusController.cancelSync`.
+  final bool removedFromSync;
+
+  const StorageShortfall({
+    required this.neededBytes,
+    required this.availableBytes,
+    required this.serial,
+    this.removedFromSync = false,
+  });
+}

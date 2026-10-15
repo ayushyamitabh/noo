@@ -26,7 +26,7 @@ const int _kDesktopInlineActions = 4;
 /// build ad hoc.
 ///
 /// A floating `surface` card (radius 20), with the bottom bar's border
-/// and shadow - selection reads as a distinct mode, not
+/// but no drop shadow - selection reads as a distinct mode, not
 /// just a row of buttons floating on `bg` - with a close circle, the
 /// count, and the bulk actions. This sits in the *content* pane's own
 /// pinned header slot on every platform (the shell's desktop toolbar,
@@ -56,8 +56,8 @@ class NooSelectionBar extends StatelessWidget {
 
   /// The Settings -> Appearance frosted-glass preference, handed in by the
   /// screen like `NooBottomBar` gets it: a translucent `surface` fill at
-  /// [frostedOpacity] over a [frostedBlur]-sigma backdrop blur, without the
-  /// solid card's shadow (the same recipe as the frosted bottom bar).
+  /// [frostedOpacity] over a [frostedBlur]-sigma backdrop blur, the same
+  /// recipe as the frosted bottom bar (the solid card has no shadow either).
   final bool frosted;
   final double frostedBlur;
   final double frostedOpacity;
@@ -136,7 +136,6 @@ class NooSelectionBar extends StatelessWidget {
             : colors.surface,
         borderRadius: radius,
         border: Border.all(color: colors.line),
-        boxShadow: frosted ? null : const [nooDialogShadow],
       ),
       child: Row(
         children: [

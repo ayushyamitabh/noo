@@ -517,7 +517,7 @@ void main() {
       theme: theme,
     );
 
-    testNooWidgets('solid by default: opaque surface card, shadow, no blur', (
+    testNooWidgets('solid by default: opaque surface card, no shadow, no blur', (
       tester,
       theme,
       c,
@@ -526,7 +526,7 @@ void main() {
       expect(find.byType(BackdropFilter), findsNothing);
       final card = barCard(tester);
       expect(card.color, c.surface);
-      expect(card.boxShadow, isNotEmpty);
+      expect(card.boxShadow, isNull);
     });
 
     testNooWidgets('frosted: blurred backdrop, translucent fill, no shadow', (

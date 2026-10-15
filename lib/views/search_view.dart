@@ -9,8 +9,12 @@ import 'package:provider/provider.dart';
 import '../models/app_tab.dart';
 import '../models/nextcloud_item.dart';
 import '../providers/files_controller.dart';
+import '../providers/session_controller.dart';
 import '../providers/settings_controller.dart';
 import '../theme/design_tokens.dart';
+import '../widgets/files_controls_row.dart';
+import '../widgets/noo/media/noo_grid_card.dart';
+import '../widgets/synced_header_scaffold.dart' show formatBytes;
 import '../widgets/noo/files/noo_file_kind.dart';
 import '../widgets/noo/files/noo_file_row.dart';
 import '../widgets/noo/files/noo_file_table.dart';
@@ -30,6 +34,10 @@ class SearchView extends StatefulWidget {
   @override
   State<SearchView> createState() => _SearchViewState();
 }
+
+/// Pseudo folder path keying search's own sort in the per-folder sort map,
+/// so sorting results never changes how a real folder is sorted.
+const _searchSortKey = '/__search__';
 
 class _SearchViewState extends State<SearchView> {
   final _controller = TextEditingController();
@@ -229,9 +237,94 @@ class _SearchViewState extends State<SearchView> {
         title: 'No results found',
       );
     }
-    return desktop
-        ? _buildDesktopResults(context)
-        : _buildMobileResults(context);
+    final files = context.watch<FilesController>();
+    final shown = files.applyFilesDisplayPrefs(
+      _results,
+      folderPath: _searchSortKey,
+    );
+    final gutter = NooLayout.gutter(context);
+    return Column(
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(gutter, NooSpace.xs, gutter, 0),
+          child: const FilesControlsRow(folderPath: _searchSortKey),
+        ),
+        Expanded(
+          child: shown.isEmpty
+              ? _buildMessage(
+                  context,
+                  icon: LucideIcons.searchX,
+                  iconColor: colors.fg3,
+                  title: 'No results match your filters',
+                )
+              : files.isGridView
+              ? _buildGridResults(context, shown, desktop)
+              : desktop
+              ? _buildDesktopResults(context, shown)
+              : _buildMobileResults(context, shown),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGridResults(
+    BuildContext context,
+    List<NextcloudItem> items,
+    bool desktop,
+  ) {
+    final colors = context.nooColors;
+    final thumbHeight = desktop ? 118.0 : 104.0;
+    return GridView.builder(
+      padding: EdgeInsets.fromLTRB(
+        NooLayout.gutter(context),
+        NooSpace.xs,
+        NooLayout.gutter(context),
+        NooSpace.xl,
+      ),
+      gridDelegate: NooLayout.fileGridDelegate(context),
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        final item = items[index];
+        final kind = NooFileKind.from(
+          name: item.name,
+          mimeType: item.mimeType,
+          isDirectory: item.isFolder,
+        );
+        return NooGridCard(
+          name: item.name,
+          meta: item.isFolder ? 'Folder' : formatBytes(item.size),
+          placeholderColor: kind.background(colors),
+          icon: kind.icon,
+          iconColor: kind.foreground(colors),
+          thumbnailHeight: thumbHeight,
+          thumbnail: _thumbnailFor(context, item, extent: thumbHeight),
+          verticalOverflowIcon: !NooLayout.iosStyle(context),
+          onTap: () => _openResult(item),
+        );
+      },
+    );
+  }
+
+  Widget? _thumbnailFor(
+    BuildContext context,
+    NextcloudItem item, {
+    required double extent,
+  }) {
+    final isMedia =
+        (item.type == NextcloudItemType.image ||
+            item.type == NextcloudItemType.video) &&
+        item.previewUrl != null;
+    if (!isMedia) return null;
+    return Image.network(
+      item.previewUrl!,
+      width: extent,
+      height: extent,
+      headers: context.read<SessionController>().service?.authHeaders,
+      fit: BoxFit.cover,
+      filterQuality: FilterQuality.low,
+      gaplessPlayback: true,
+      errorBuilder: (ctx, err, stack) => const SizedBox.shrink(),
+    );
   }
 
   Widget _buildMessage(
@@ -269,7 +362,7 @@ class _SearchViewState extends State<SearchView> {
     );
   }
 
-  Widget _buildMobileResults(BuildContext context) {
+  Widget _buildMobileResults(BuildContext context, List<NextcloudItem> items) {
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(
         NooSpace.sm,
@@ -278,9 +371,9 @@ class _SearchViewState extends State<SearchView> {
         NooSpace.xl,
       ),
       physics: const BouncingScrollPhysics(),
-      itemCount: _results.length,
+      itemCount: items.length,
       itemBuilder: (context, index) {
-        final item = _results[index];
+        final item = items[index];
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: ClipRRect(
@@ -303,7 +396,7 @@ class _SearchViewState extends State<SearchView> {
     );
   }
 
-  Widget _buildDesktopResults(BuildContext context) {
+  Widget _buildDesktopResults(BuildContext context, List<NextcloudItem> items) {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(
         horizontal: NooSpace.xl,
@@ -316,7 +409,7 @@ class _SearchViewState extends State<SearchView> {
             col2Label: 'Modified',
             col3Label: 'Location',
           ),
-          for (final item in _results)
+          for (final item in items)
             NooFileTableRow(
               kind: NooFileKind.from(
                 name: item.name,

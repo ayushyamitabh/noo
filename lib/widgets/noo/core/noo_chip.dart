@@ -11,6 +11,7 @@ class NooChip extends StatelessWidget {
   final IconData? icon;
   final bool selected;
   final NooChipTrailing trailing;
+
   /// filled = mobile (surface fill, 34px); outline = desktop (1px line, 32px)
   final bool outline;
   final VoidCallback? onTap;

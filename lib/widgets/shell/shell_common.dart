@@ -15,6 +15,7 @@ import '../noo/lists/noo_settings_row.dart';
 import '../noo/noo_layout.dart';
 import '../noo/overlays/noo_dialog.dart';
 import '../noo/overlays/noo_sheet.dart';
+import '../noo/overlays/noo_messenger.dart';
 
 // Small pieces shared by the mobile drawer/top bar and the desktop
 // sidebar/toolbar, so both shells show the same account/storage data and
@@ -252,7 +253,7 @@ class ShellAvatarButton extends StatelessWidget {
     if (target == null || !context.mounted) return;
 
     HapticFeedback.selectionClick();
-    ScaffoldMessenger.of(context).showSnackBar(
+    NooMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Switched to ${target.username}'),
         behavior: SnackBarBehavior.floating,

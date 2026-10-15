@@ -91,6 +91,11 @@ void main() {
     app.settings.setThemeMode(ThemeMode.light);
     app.files.setStorageScope(StorageScope.external);
 
+    // Below the fold on a tablet now that Appearance holds the action bar.
+    await tester.ensureVisible(
+      find.widgetWithText(NooSettingsRow, 'Reset UI defaults'),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(NooSettingsRow, 'Reset UI defaults'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(NooButton, 'Reset'));

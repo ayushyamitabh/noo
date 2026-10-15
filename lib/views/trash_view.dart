@@ -13,6 +13,7 @@ import '../widgets/noo/lists/noo_banner.dart';
 import '../widgets/noo/noo_layout.dart';
 import '../widgets/tabs/tab_location.dart';
 import '../widgets/tabs/tab_state_slivers.dart';
+import '../widgets/noo/overlays/noo_messenger.dart';
 
 /// The Trash tab: a retention banner (`NooBanner`, with "Empty trash" as
 /// its danger action) then the trashed-items list, per `DESIGN_SYSTEM.md`
@@ -235,7 +236,7 @@ class _TrashViewState extends State<TrashView> {
       : 'recently';
 
   Future<void> _restore(BuildContext context, NextcloudItem item) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = NooMessenger.of(context);
     final success = await context.read<TrashController>().restore(item);
     messenger.showSnackBar(
       SnackBar(
@@ -278,7 +279,7 @@ class _TrashViewState extends State<TrashView> {
     );
     if (confirmed != true || !context.mounted) return;
 
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = NooMessenger.of(context);
     final success = await context.read<TrashController>().deleteForever(item);
     messenger.showSnackBar(
       SnackBar(
@@ -322,7 +323,7 @@ class _TrashViewState extends State<TrashView> {
     if (confirmed != true || !context.mounted) return;
 
     final controller = context.read<TrashController>();
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = NooMessenger.of(context);
     var succeeded = 0;
     for (final item in trash) {
       if (await controller.deleteForever(item)) succeeded++;

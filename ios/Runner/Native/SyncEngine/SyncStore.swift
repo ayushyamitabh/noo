@@ -121,7 +121,9 @@ final class SyncStore {
   /// forgets its entries - called when the user turns sync off for that path.
   /// Without clearing the state too, a later re-add would see the (now
   /// missing) local file as "deleted, server unchanged" and not pull it back.
-  func removeLocalSync(accountId: String, path: String) {
+  /// With [deleteFiles] false only the tracking goes (the "Delete files when
+  /// removed from sync" setting being off): the files stay as plain leftovers.
+  func removeLocalSync(accountId: String, path: String, deleteFiles: Bool = true) {
     var cleanPath = path.trimmingCharacters(in: .whitespaces)
     if cleanPath.hasPrefix("/") { cleanPath.removeFirst() }
     while cleanPath.hasSuffix("/") { cleanPath.removeLast() }
@@ -157,6 +159,7 @@ final class SyncStore {
       saveRootMarkers(accountId: accountId, markers)
     }
 
+    guard deleteFiles else { return }
     let root = syncRoot(accountId: accountId)
     let target = cleanPath.isEmpty ? root : root.appendingPathComponent(cleanPath)
     if fileManager.fileExists(atPath: target.path) { try? fileManager.removeItem(at: target) }

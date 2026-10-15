@@ -52,11 +52,18 @@ class SortMenuButton extends StatelessWidget {
               SizedBox(
                 width: 20,
                 child: f == field
-                    ? Icon(Icons.check_rounded, size: 18, color: colors.accentText)
+                    ? Icon(
+                        Icons.check_rounded,
+                        size: 18,
+                        color: colors.accentText,
+                      )
                     : null,
               ),
               const SizedBox(width: 8),
-              Text(sortFieldLabel(f), style: NooText.body.copyWith(color: colors.fg1)),
+              Text(
+                sortFieldLabel(f),
+                style: NooText.body.copyWith(color: colors.fg1),
+              ),
             ],
           ),
         );

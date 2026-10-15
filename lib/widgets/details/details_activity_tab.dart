@@ -63,7 +63,10 @@ class _DetailsActivityTabState extends State<DetailsActivityTab> {
               const SizedBox(height: NooSpace.sm),
               Text(
                 'No recent activity',
-                style: NooText.cardTitle.copyWith(fontSize: 16, color: colors.fg2),
+                style: NooText.cardTitle.copyWith(
+                  fontSize: 16,
+                  color: colors.fg2,
+                ),
               ),
             ],
           ),

@@ -71,9 +71,8 @@ class BottomNavBar extends StatelessWidget {
               size: NooBottomBar.rowHeight(style, barStyle),
             )
           : null,
-      avatarMenuProgress: avatarInBottomBar
-          ? AvatarNavigationScope.maybeOf(context)?.progress ?? 0
-          : 0,
+      // The avatar slot turns into a close button in place, so Search and
+      // the rail never rearrange while the popup opens.
     );
   }
 }

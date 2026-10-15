@@ -114,7 +114,7 @@ Gotchas:
   `FilesView` uses the single-item action-bar handlers, with the existing
   delete confirmation retained. Labels/icons update for favorited and synced
   items. Swipes remain disabled during selection, picking, and offline browsing.
-- Settings → Action bar shows the real `NooSelectionBar` above its reorder
+- Settings → Appearance → Action bar shows the real `NooSelectionBar` above its reorder
   list. It updates immediately and supports the same More sheet; preview
   actions only show feedback, never operate on files. The bar scales down
   inside Settings' narrower column while keeping the mobile/tablet split.
@@ -153,7 +153,7 @@ blocks are noted where they matter:
   view-mode row shared by Files and Offline (`showStorageScope: false` for
   Offline), and reused as-is by Favorites.
 - Selection action bars in Files, Photos, and Favorites have a global
-  Settings → Action bar → Position choice: Top (default) or Bottom,
+  Settings → Appearance → Action bar → Position choice: Top (default) or Bottom,
   persisted as `ui_selection_bar_position`. Top stays pinned in the content
   header; Bottom uses `SelectionBarOverlay` above navigation (or the content
   pane's bottom on desktop), with extra list clearance. The overlay uses
@@ -173,7 +173,7 @@ blocks are noted where they matter:
   restores the old behavior: the bar replaces the filters in the
   same slot (and Bottom removes the header). `controlsHeight` must match the
   filter row exactly (64, or 106 with Files' breadcrumbs).
-  The mobile Action bar settings use one grouped card for Position and
+  The mobile Action bar settings (a section of Appearance) use one grouped card for Position and
   the reorder list, with no nested rounded corners or repeated page title.
   Their header backdrop is transparent, so content scrolls behind the inset
   `surface` card. A `line` border and `nooDialogShadow` match the floating
@@ -329,7 +329,7 @@ blocks are noted where they matter:
   instead of a corner badge. `NooBottomBar` later gained its own, unrelated
   `NooBottomBarStyle.floating` (Settings → Appearance → "Bottom bar") -
   don't confuse the two: this one is still non-blurred, just inset with a
-  `line` border and `nooDialogShadow` (also used by floating selection bars - see
+  `line` border and `nooDialogShadow` (selection bars no longer use it - they have no shadow; see
   that constant's doc comment) instead of edge to edge (no opacity/blur knob
   either). `floating` ignores `NooNavStyle` and always uses the Android row
   (icon-only idle tabs, sliding pill, 64px), so iOS matches Android there;
@@ -369,8 +369,10 @@ blocks are noted where they matter:
   `easeInOutCubicEmphasized`. The card expands from the real avatar anchor;
   its controls fade in after the expansion starts. Top moves the content pane
   down through `AvatarNavigationBody`, keeping bottom navigation stationary.
-  Bottom moves the avatar upward into the card's bottom-right corner and
-  overlays the list immediately above navigation. Both use the Files gutter.
+  Bottom never moves the avatar: its slot in the bar cross-fades (with a
+  quarter turn) into a close button in place, the card grows upward from
+  just above that slot and overlays the list immediately above navigation,
+  and the bar (rail, Search) does not rearrange. Both use the Files gutter.
   The floating rail beside a bottom avatar shows text only on the selected
   tab. Attached iOS also shows text only for the selected tab and keeps the full-width bar,
   with the avatar inside the trailing end. Its popup expands upward with
@@ -402,12 +404,11 @@ blocks are noted where they matter:
   card for a translucent `surface` fill over a `BackdropFilter` blur with no
   drop shadow - the bottom bar's recipe. It's only visible because the
   header slot is transparent while selecting, so rows scroll under it.
-  Search starts inside the rail when a bottom avatar occupies the satellite;
-  its row slot smoothly collapses as Search fades into that satellite while
-  the avatar moves into the popup. Closing reverses the same path. The card
+  Search stays inside the rail when a bottom avatar occupies the satellite
+  (it no longer slides into the satellite slot). The card
   retains hidden tabs, Settings, account switching, Add Account, and Manage
   Accounts. Account controls scroll on short screens. Tap outside, tap the
-  popup avatar, or system Back to close. Reduced motion opens/closes without
+  close button/avatar, or system Back to close. Reduced motion opens/closes without
   the transition. Drawer gestures are disabled in avatar mode. Standalone
   top bars outside the shell retain `showGeneralDialog` as a fallback.
   `ShellAvatarButton` keeps its vertical-swipe account shortcuts in either
@@ -582,3 +583,17 @@ The desktop/tablet shell toolbar shows a refresh icon before Upload (and on tabs
 DropPreparationOverlay uses themed surface2 and foreground colors, a live-region
 preparation label, and an indeterminate spinner while native file providers stage
 an incoming drop. Its modal barrier prevents changing destinations mid-preparation.
+
+- **Sheet zoom-out.** While a `showNooSheet` bottom sheet is open on a phone the
+  page beneath shrinks to 91% with a 28px corner radius, on black, and grows
+  back as the sheet closes (`SheetZoom` in `widgets/noo/overlays/sheet_zoom.dart`).
+  `showNooSheet` passes the route a dedicated `AnimationController`
+  (`transitionAnimationController`), so the zoom follows the sheet's own
+  entrance/exit - including dragging it down to dismiss. The page side is
+  `ZoomOutOnSheet`, wrapped around every route by `AppTheme`'s
+  `_ZoomAwareTransitions` (a sheet is a route above the page, so scaling
+  the navigator would scale the sheet too); `MaterialApp.builder` puts black
+  behind the navigator. Skipped on tablet-class layouts and with reduced
+  motion. A new sheet should use `showNooSheet` to get it; a bare
+  `showModalBottomSheet` won't zoom.
+

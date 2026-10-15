@@ -1,8 +1,7 @@
-- Files shows items shared with you in a "Shared with me" section, with quick-jump chips.
-- New Shared items filter: all, mine, or shared with me.
-- Share sheet shows the real owner of items shared with you.
-- Shares tab lists each shared item once and says who it's shared with.
-- Search Settings to jump to any option.
-- Selection action bar follows frosted glass; filters stay put while selecting.
-- External storage now shows by default.
-- Reset UI defaults in Settings > Appearance.
+- Cancel button while syncing drops the item; Offline list updates live.
+- Sync everything is cloud-only; new Sync external storage option.
+- Warns when there's not enough storage to sync.
+- New setting to delete files when removed from sync.
+- Offline tab and search get Files' sort/filter controls.
+- Shares: swipe between With you, By you and Links.
+- iOS-style banners; pages zoom out behind bottom sheets.

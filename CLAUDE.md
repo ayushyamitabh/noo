@@ -36,10 +36,19 @@ It's the release note Google Play shows testers when the next `Release-*`
 tag is built (`.gitea/workflows/release.yml`), so it must already describe
 everything on `main` since the last release by the time anyone tags one:
 
-- Compare against the latest release tag (`git tag -l 'Release-*'
-  --sort=-creatordate | head -1`). If the file still describes that
-  already-released version, replace it; otherwise add the new changes to
-  what's there.
+- **Replace or append?** Look at the last commit on the branch you're
+  pushing (`git tag --points-at HEAD 'Release-*'`; if that prints a tag,
+  the last commit is a release):
+  - The last commit has a `Release-*` tag: the file still describes that
+    already-released version, so **replace** it with notes for the new
+    changes only.
+  - The last commit has no `Release-*` tag: nothing has been released since
+    the notes were last written, so **append** the new changes to what's
+    there (merge duplicates and drop items the new changes supersede, to
+    stay under the limit below).
+  If unsure, `git describe --tags --match 'Release-*' --abbrev=0` gives the
+  latest release tag; the file belongs to that release only if its text
+  matches what shipped.
 - Plain text list: one item per line, each starting with "- ". Do not use
   a paragraph, headings, or blank lines. Use user-facing language (what
   changed for the user, not how). Keep this list format when appending or

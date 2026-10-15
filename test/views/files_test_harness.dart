@@ -81,6 +81,12 @@ class HarnessFiles extends FilesController {
   String? get errorMessage => null;
   @override
   Future<void> refreshData() async {}
+
+  /// Canned search results, when a test sets them.
+  List<NextcloudItem>? searchResults;
+  @override
+  Future<List<NextcloudItem>> searchFiles(String query) async =>
+      searchResults ?? await super.searchFiles(query);
 }
 
 /// Share lookups answer with no shares, as for a freshly shared file.
@@ -107,20 +113,16 @@ class HarnessShares extends SharesController {
   });
   final List<NextcloudShare> withYou;
   final List<NextcloudShare> byYou;
-  bool _withMe = false;
   @override
-  List<NextcloudShare> get shares => _withMe ? withYou : byYou;
+  List<NextcloudShare> get withMeShares => withYou;
+  @override
+  List<NextcloudShare> get byMeShares => byYou;
   @override
   bool get isLoading => false;
   @override
   String? get errorMessage => null;
   @override
   Future<void> fetchAll() async {}
-  @override
-  void setSharedWithMe(bool value) {
-    _withMe = value;
-    notifyListeners();
-  }
 }
 
 class HarnessConnectivity extends ConnectivityController {

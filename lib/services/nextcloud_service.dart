@@ -437,7 +437,7 @@ class NextcloudService {
         .replaceAll('>', '&gt;');
     final body =
         '''<?xml version="1.0" encoding="utf-8" ?>
-<d:searchrequest xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">
+<d:searchrequest xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns" xmlns:nc="http://nextcloud.org/ns">
   <d:basicsearch>
     <d:select>
       <d:prop>
@@ -448,6 +448,9 @@ class NextcloudService {
         <d:resourcetype/>
         <oc:favorite/>
         <oc:fileid/>
+        <nc:mount-type/>
+        <oc:owner-id/>
+        <oc:owner-display-name/>
       </d:prop>
     </d:select>
     <d:from>
@@ -500,6 +503,9 @@ class NextcloudService {
       String? mimeType;
       bool isFav = false;
       String? fileId;
+      String? mountType;
+      String? ownerId;
+      String? ownerDisplayName;
 
       for (var prop in props) {
         if (!isCollection) {
@@ -528,6 +534,15 @@ class NextcloudService {
               prop.findLocalChildren('favorite').firstOrNull?.innerText == '1';
         }
         fileId ??= prop.findLocalChildren('fileid').firstOrNull?.innerText;
+        mountType ??= prop
+            .findLocalChildren('mount-type')
+            .firstOrNull
+            ?.innerText;
+        ownerId ??= prop.findLocalChildren('owner-id').firstOrNull?.innerText;
+        ownerDisplayName ??= prop
+            .findLocalChildren('owner-display-name')
+            .firstOrNull
+            ?.innerText;
       }
 
       var decodedHref = Uri.decodeFull(href);
@@ -562,8 +577,28 @@ class NextcloudService {
           mimeType: mimeType,
           previewUrl:
               '$_cleanServerUrl/core/preview?fileId=$validId&x=500&y=500',
+          mountType: mountType,
+          ownerId: ownerId,
+          ownerDisplayName: ownerDisplayName,
         ),
       );
+    }
+
+    // Only a mount's root carries `mount-type`, so a match deeper inside an
+    // external mount would otherwise slip past the storage filter. Inherit
+    // it from any external root that is itself in the results.
+    final externalRoots = [
+      for (final r in results)
+        if (r.isExternalStorage) '${r.path}/',
+    ];
+    if (externalRoots.isNotEmpty) {
+      for (var i = 0; i < results.length; i++) {
+        final r = results[i];
+        if (r.mountType == null &&
+            externalRoots.any((root) => r.path.startsWith(root))) {
+          results[i] = r.copyWith(mountType: 'external');
+        }
+      }
     }
 
     debugPrint(

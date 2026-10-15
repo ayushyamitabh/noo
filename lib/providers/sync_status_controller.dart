@@ -46,8 +46,10 @@ class SyncStatusController extends ChangeNotifier with WidgetsBindingObserver {
   static const prefSyncedPaths = 'ui_synced_folders';
   static const _prefSyncedPathTypes = 'ui_synced_folder_types';
   static const prefSyncEverything = 'ui_sync_everything';
+  static const prefSyncExternal = 'ui_sync_external';
   static const _prefSyncOnCellular = 'ui_sync_on_cellular';
   static const _prefSyncNotifications = 'ui_sync_notifications';
+  static const _prefAutoDelete = 'ui_sync_auto_delete';
 
   List<String> _syncedPaths = [];
   // path -> isFolder, keyed the same as [_syncedPaths] - missing entries
@@ -55,8 +57,30 @@ class SyncStatusController extends ChangeNotifier with WidgetsBindingObserver {
   // common case.
   Map<String, bool> _syncedPathTypes = {};
   bool _syncEverything = false;
+  // Whether "Sync everything" also mirrors external storage (it doesn't by
+  // default - cloud files only). Folders picked by hand always sync.
+  bool _syncExternal = false;
+  bool _isCancellingSync = false;
+  StorageShortfall? _storageShortfall;
+  // The stop native last reported and the app already dealt with (dropped
+  // the item / the user cancelled) - native keeps reporting it until the next
+  // run starts, so it's remembered here to not show it again.
+  int? _ackedNeeded;
+  int? _ackedAvailable;
+  int _shortfallSerial = 0;
+  // What the run in progress is syncing *for the first time* - paths added
+  // since the last pass finished, and "Sync everything" if it was just turned
+  // on. Cancelling drops exactly these (a cancelled refresh of something
+  // already synced just stops), so a cancelled item can't start again on the
+  // next refresh. Cleared whenever a pass finishes on its own.
+  final Set<String> _pendingPaths = {};
+  bool _everythingPending = false;
   bool _syncOnCellular = false;
   bool _syncNotifications = true;
+  // Whether files are deleted from the device once they stop being synced
+  // (a path removed, "Sync everything" / external storage turned off). Off
+  // keeps them as leftovers, listed under "On this device" to remove by hand.
+  bool _autoDeleteRemoved = true;
 
   bool _isSyncingNow = false;
   Set<String> _syncingFileIds = {};
@@ -109,13 +133,28 @@ class SyncStatusController extends ChangeNotifier with WidgetsBindingObserver {
 
   List<String> get syncedPaths => List.unmodifiable(_syncedPaths);
   bool get syncEverything => _syncEverything;
+  bool get syncExternal => _syncExternal;
+
+  /// A cancel was requested and the run hasn't wound down yet.
+  bool get isCancellingSync => _isCancellingSync;
+
+  /// Set while the last pass's "not enough space" stop is unresolved;
+  /// cleared when the next pass starts.
+  StorageShortfall? get storageShortfall => _storageShortfall;
   bool get syncOnCellular => _syncOnCellular;
 
   /// Whether background (automatic) sync runs may post progress/summary
   /// notifications. Conflicts and user-initiated "Sync now" always notify.
   bool get syncNotifications => _syncNotifications;
 
+  /// See [_autoDeleteRemoved].
+  bool get autoDeleteRemoved => _autoDeleteRemoved;
+
   bool get isSyncingNow => _isSyncingNow;
+
+  /// How many files native sync currently records as synced - changes as a
+  /// long run progresses, so lists of what's on the device know to re-read.
+  int get syncedFileCount => _syncedFileIds.length;
 
   bool get _hasSyncScope => _syncEverything || _syncedPaths.isNotEmpty;
 
@@ -144,8 +183,12 @@ class SyncStatusController extends ChangeNotifier with WidgetsBindingObserver {
   /// sync - either explicitly (one of [_syncedPaths]) or via
   /// [_syncEverything]. Shared by [syncStatusFor] (folders) and
   /// [localSyncedFilePath] (files).
-  bool _isPathInSyncScope(String path) {
-    if (_syncEverything) return true;
+  ///
+  /// "Sync everything" is cloud files only unless [syncExternal] is on, so
+  /// [externalMountRoot] (an external-storage mount's root folder) isn't
+  /// covered by it otherwise - only by an explicit synced folder.
+  bool _isPathInSyncScope(String path, {bool externalMountRoot = false}) {
+    if (_syncEverything && (_syncExternal || !externalMountRoot)) return true;
     final normalized = path.endsWith('/')
         ? path.substring(0, path.length - 1)
         : path;
@@ -156,6 +199,10 @@ class SyncStatusController extends ChangeNotifier with WidgetsBindingObserver {
       return normalized == f || normalized.startsWith('$f/');
     });
   }
+
+  /// Whether [path] is kept on the device by sync - itself picked, inside a
+  /// picked folder, or covered by "Sync everything".
+  bool isPathCoveredBySync(String path) => _isPathInSyncScope(path);
 
   /// True if any pending conflict falls under [folderPath].
   bool _folderHasConflict(String folderPath) {
@@ -176,7 +223,12 @@ class SyncStatusController extends ChangeNotifier with WidgetsBindingObserver {
   /// rather than tracked per-item like a file's is.
   SyncItemStatus syncStatusFor(NextcloudItem item) {
     if (item.isFolder) {
-      if (!_isPathInSyncScope(item.path)) return SyncItemStatus.none;
+      if (!_isPathInSyncScope(
+        item.path,
+        externalMountRoot: item.isExternalStorage,
+      )) {
+        return SyncItemStatus.none;
+      }
       if (_folderHasConflict(item.path)) return SyncItemStatus.conflict;
       if (_isSyncingNow) return SyncItemStatus.syncing;
       return SyncItemStatus.synced;
@@ -194,6 +246,7 @@ class SyncStatusController extends ChangeNotifier with WidgetsBindingObserver {
     _syncOnCellular = prefs.getBool(_prefSyncOnCellular) ?? _syncOnCellular;
     _syncNotifications =
         prefs.getBool(_prefSyncNotifications) ?? _syncNotifications;
+    _autoDeleteRemoved = prefs.getBool(_prefAutoDelete) ?? _autoDeleteRemoved;
     notifyListeners();
   }
 
@@ -210,6 +263,11 @@ class SyncStatusController extends ChangeNotifier with WidgetsBindingObserver {
     _syncedPaths = [];
     _syncedPathTypes = {};
     _syncEverything = false;
+    _syncExternal = false;
+    _isCancellingSync = false;
+    _storageShortfall = null;
+    _pendingPaths.clear();
+    _everythingPending = false;
     _isSyncingNow = false;
     _syncingFileIds = {};
     _syncedFileIds = {};
@@ -247,7 +305,9 @@ class SyncStatusController extends ChangeNotifier with WidgetsBindingObserver {
           try {
             _syncedPaths = (jsonDecode(pathsJson) as List).cast<String>();
           } catch (e) {
-            debugPrint('[SyncStatusController] Synced paths restore failed: $e');
+            debugPrint(
+              '[SyncStatusController] Synced paths restore failed: $e',
+            );
             _syncedPaths = [];
           }
         } else {
@@ -260,16 +320,21 @@ class SyncStatusController extends ChangeNotifier with WidgetsBindingObserver {
               (k, v) => MapEntry(k as String, v as bool),
             );
           } catch (e) {
-            debugPrint('[SyncStatusController] Synced path types restore failed: $e');
+            debugPrint(
+              '[SyncStatusController] Synced path types restore failed: $e',
+            );
             _syncedPathTypes = {};
           }
         } else {
           _syncedPathTypes = {};
         }
         _syncEverything = prefs.getBool(k(prefSyncEverything)) ?? false;
+        _syncExternal = prefs.getBool(k(prefSyncExternal)) ?? false;
         notifyListeners();
       } catch (e) {
-        debugPrint('[SyncStatusController] Account-activation prefs restore failed: $e');
+        debugPrint(
+          '[SyncStatusController] Account-activation prefs restore failed: $e',
+        );
       }
     }
     // Only now is it safe for addSyncedPaths/removeSyncedPaths to mutate
@@ -386,7 +451,46 @@ class SyncStatusController extends ChangeNotifier with WidgetsBindingObserver {
         snapshot.accountId != session.activeAccountId) {
       return;
     }
+    final needed = snapshot.storageNeededBytes;
+    final available = snapshot.storageAvailableBytes;
+    if (needed == null || available == null) {
+      _storageShortfall = null;
+      _ackedNeeded = _ackedAvailable = null;
+    } else if (needed == _ackedNeeded && available == _ackedAvailable) {
+      _storageShortfall = null;
+    } else if (_storageShortfall?.neededBytes != needed ||
+        _storageShortfall?.availableBytes != available) {
+      // Not enough room: behave exactly like a cancel - what this pass was
+      // syncing for the first time is dropped and its partial files removed,
+      // so it isn't retried on every refresh just to fail again.
+      final dropPaths = _pendingPaths.where(_syncedPaths.contains).toList();
+      final dropEverything = _everythingPending && _syncEverything;
+      _pendingPaths.clear();
+      _everythingPending = false;
+      final drops = dropPaths.isNotEmpty || dropEverything;
+      _storageShortfall = StorageShortfall(
+        neededBytes: needed,
+        availableBytes: available,
+        serial: ++_shortfallSerial,
+        removedFromSync: drops,
+      );
+      if (drops) {
+        unawaited(
+          _dropPending(
+            dropPaths,
+            dropEverything,
+          ).then((_) => _clearShortfall()),
+        );
+      }
+    }
+    final wasSyncing = _isSyncingNow;
     _isSyncingNow = snapshot.syncing;
+    if (wasSyncing && !snapshot.syncing && !_isCancellingSync) {
+      // The pass finished by itself: everything it was syncing is done.
+      _pendingPaths.clear();
+      _everythingPending = false;
+    }
+    if (!snapshot.syncing) _isCancellingSync = false;
     _syncingFileIds = snapshot.syncingFileIds;
     _syncedFileIds = snapshot.syncedFileIds;
     _syncConflicts = snapshot.conflicts;
@@ -440,6 +544,7 @@ class SyncStatusController extends ChangeNotifier with WidgetsBindingObserver {
       if (_syncedPaths.contains(path)) return;
       _syncedPaths = [..._syncedPaths, path];
       _syncedPathTypes = {..._syncedPathTypes, path: isFolder};
+      _pendingPaths.add(path);
       changed = true;
     });
     if (!changed) return;
@@ -466,7 +571,15 @@ class SyncStatusController extends ChangeNotifier with WidgetsBindingObserver {
   /// doc comment for why a multi-item loop of individual calls is unsafe
   /// for `reschedule`/native side effects, even though removal itself
   /// (unlike adding) doesn't trigger a one-off sync to race.
-  Future<void> removeSyncedPaths(List<String> paths) async {
+  ///
+  /// [deleteFiles] says whether their local copies are deleted too; it
+  /// defaults to the "Delete files when removed from sync" setting. Either way
+  /// native stops tracking them, so their "synced" badges clear.
+  Future<void> removeSyncedPaths(
+    List<String> paths, {
+    bool? deleteFiles,
+  }) async {
+    final delete = deleteFiles ?? _autoDeleteRemoved;
     await _accountLoadedGate.future;
     var changed = false;
     for (final path in paths) {
@@ -480,8 +593,24 @@ class SyncStatusController extends ChangeNotifier with WidgetsBindingObserver {
     _persistSyncedPaths();
     unawaited(SyncService.reschedule(session, this));
     _restartAutoSyncTimer();
-    for (final path in paths) {
-      unawaited(SyncService.removeLocalSync(session, path));
+    // The native side forgets these files' synced state without announcing
+    // it, so fetch a fresh snapshot once it's done - otherwise their "synced"
+    // badges would stay until some later sync event happened to refresh them.
+    unawaited(
+      Future.wait([
+        for (final path in paths)
+          SyncService.removeLocalSync(session, path, deleteFiles: delete),
+      ]).then((_) => _refreshStatus()),
+    );
+  }
+
+  Future<void> _refreshStatus() async {
+    final id = session.activeAccountId;
+    if (id == null) return;
+    try {
+      _applySnapshot(await SyncService.getStatus(id));
+    } catch (e) {
+      debugPrint('[SyncStatusController] Status refresh failed: $e');
     }
   }
 
@@ -489,18 +618,197 @@ class SyncStatusController extends ChangeNotifier with WidgetsBindingObserver {
     if (_syncEverything == value) return;
     _syncEverything = value;
     notifyListeners();
-    final id = session.activeAccountId;
-    if (id != null) {
-      session.prefsFuture.then(
-        (p) => p.setBool(
-          session.accountStore.accountPrefKey(id, prefSyncEverything),
-          value,
-        ),
-      );
+    _persistAccountBool(prefSyncEverything, value);
+    _everythingPending = value;
+    if (!value) {
+      // Whatever "everything" run is in flight must stop now - left alone it
+      // keeps downloading into a mirror nothing is configured to own, which
+      // is how files ended up on the device that couldn't be un-synced.
+      unawaited(_cancelRunSilently().then((_) => _handleLeftovers()));
     }
     unawaited(SyncService.reschedule(session, this));
     _restartAutoSyncTimer();
-    if (value) unawaited(_syncNowSilently());
+    // On: start mirroring. Off: only a hand-picked path left to refresh.
+    if (_hasSyncScope) unawaited(_syncNowSilently());
+  }
+
+  /// Whether "Sync everything" also mirrors external storage. Changing it
+  /// restarts a running "everything" pass so it picks the new scope up.
+  void setSyncExternal(bool value) {
+    if (_syncExternal == value) return;
+    _syncExternal = value;
+    notifyListeners();
+    _persistAccountBool(prefSyncExternal, value);
+    if (!_syncEverything) return;
+    unawaited(
+      _cancelRunSilently().then((_) async {
+        if (!value) await _handleExternalLeftovers();
+      }),
+    );
+    unawaited(SyncService.reschedule(session, this));
+    unawaited(_syncNowSilently());
+  }
+
+  /// "Sync everything" was turned off: what it put on the device that no
+  /// picked path keeps is no longer synced. Deleted, or (setting off) just
+  /// forgotten so it stays as a leftover.
+  Future<void> _handleLeftovers() async {
+    await _waitUntilIdle();
+    try {
+      for (final item in await deviceOnlyItems()) {
+        await SyncService.removeLocalSync(
+          session,
+          item.path,
+          deleteFiles: _autoDeleteRemoved,
+        );
+      }
+      await _refreshStatus();
+    } catch (e) {
+      debugPrint('[SyncStatusController] Leftover cleanup failed: $e');
+    }
+  }
+
+  /// "Sync external storage" was turned off while syncing everything: the
+  /// external mounts' copies stop being synced - same treatment as above,
+  /// except for any mount a picked path still covers.
+  Future<void> _handleExternalLeftovers() async {
+    await _waitUntilIdle();
+    try {
+      for (final root in files.externalMountRoots) {
+        if (_syncedPaths.any((p) => root == p || root.startsWith('$p/'))) {
+          continue;
+        }
+        await SyncService.removeLocalSync(
+          session,
+          root,
+          deleteFiles: _autoDeleteRemoved,
+        );
+      }
+      await _refreshStatus();
+    } catch (e) {
+      debugPrint('[SyncStatusController] External cleanup failed: $e');
+    }
+  }
+
+  void _persistAccountBool(String key, bool value) {
+    final id = session.activeAccountId;
+    if (id == null) return;
+    session.prefsFuture.then(
+      (p) => p.setBool(session.accountStore.accountPrefKey(id, key), value),
+    );
+  }
+
+  /// The "Cancel" button while "Syncing...": stops the run in progress and
+  /// drops whatever it was syncing for the first time - those paths leave the
+  /// synced list (so the next refresh doesn't start them again) and their
+  /// partly downloaded files are deleted. A cancelled refresh of something
+  /// that was already synced just stops; nothing is removed. Returns how many
+  /// items were dropped.
+  Future<int> cancelSync() async {
+    if (!_isSyncingNow || _isCancellingSync) return 0;
+    _isCancellingSync = true;
+    notifyListeners();
+    final dropPaths = _pendingPaths.where(_syncedPaths.contains).toList();
+    final dropEverything = _everythingPending && _syncEverything;
+    _pendingPaths.clear();
+    _everythingPending = false;
+    var dropped = 0;
+    try {
+      await SyncService.cancelSync(session);
+      dropped = await _dropPending(dropPaths, dropEverything);
+      // Cancelled: whatever "not enough storage" stop came before is moot.
+      _clearShortfall();
+    } catch (e) {
+      debugPrint('[SyncStatusController] Cancel failed: $e');
+    } finally {
+      _isCancellingSync = false;
+      notifyListeners();
+    }
+    return dropped;
+  }
+
+  /// The "not enough storage" state is dealt with - hides it (until native
+  /// reports a different one) instead of leaving it on screen.
+  void _clearShortfall() {
+    final shortfall = _storageShortfall;
+    if (shortfall == null) return;
+    _ackedNeeded = shortfall.neededBytes;
+    _ackedAvailable = shortfall.availableBytes;
+    _storageShortfall = null;
+    notifyListeners();
+  }
+
+  /// Drops what a cancelled (or storage-starved) pass was syncing for the
+  /// first time: [paths] leave the synced list and their partly downloaded
+  /// files are deleted (native waits for the stopped run to finish saving),
+  /// and - if [everything] - "Sync everything" is turned off and what it put
+  /// on the device that no picked path keeps is removed. Returns how many
+  /// items were dropped.
+  Future<int> _dropPending(List<String> paths, bool everything) async {
+    var dropped = 0;
+    try {
+      if (paths.isNotEmpty) {
+        await removeSyncedPaths(paths, deleteFiles: true);
+        dropped += paths.length;
+      }
+      if (everything) {
+        setSyncEverything(false);
+        await _waitUntilIdle();
+        final leftovers = await deviceOnlyItems();
+        for (final item in leftovers) {
+          await SyncService.removeLocalSync(session, item.path);
+        }
+        await _refreshStatus();
+        dropped += 1;
+      }
+    } catch (e) {
+      debugPrint('[SyncStatusController] Dropping pending sync failed: $e');
+    }
+    return dropped;
+  }
+
+  /// Completes once no sync run is in progress (or after a timeout).
+  Future<void> _waitUntilIdle() async {
+    if (!_isSyncingNow) return;
+    final idle = Completer<void>();
+    void check() {
+      if (!_isSyncingNow && !idle.isCompleted) idle.complete();
+    }
+
+    addListener(check);
+    try {
+      await idle.future.timeout(const Duration(seconds: 20));
+    } on TimeoutException {
+      // Give up waiting; removal below is still safe (native serialises it).
+    } finally {
+      removeListener(check);
+    }
+  }
+
+  Future<void> _cancelRunSilently() async {
+    try {
+      await SyncService.cancelSync(session);
+    } catch (e) {
+      debugPrint('[SyncStatusController] Cancel failed: $e');
+    }
+  }
+
+  /// Files and folders in the on-device mirror that nothing is configured to
+  /// sync - see [DeviceOnlyItem]; while "Sync everything" is on, the
+  /// mirror's top level instead (it owns the whole mirror).
+  Future<List<DeviceOnlyItem>> deviceOnlyItems() async {
+    final id = session.activeAccountId;
+    if (id == null) return const [];
+    // "Sync everything" owns the whole mirror: show what it has put there.
+    if (_syncEverything) return SyncService.mirrorTopLevel(id);
+    return SyncService.deviceOnlyItems(id, _syncedPaths);
+  }
+
+  /// Deletes [path]'s copy from the device (and its recorded sync state)
+  /// without it being - or needing to be - a configured synced path.
+  Future<void> removeDeviceCopy(String path) async {
+    await SyncService.removeLocalSync(session, path);
+    await _refreshStatus();
   }
 
   void setSyncNotifications(bool value) {
@@ -511,6 +819,13 @@ class SyncStatusController extends ChangeNotifier with WidgetsBindingObserver {
     // Baked into each periodic job's input, so the jobs have to be
     // re-enqueued for the change to reach background runs.
     unawaited(SyncService.reschedule(session, this));
+  }
+
+  void setAutoDeleteRemoved(bool value) {
+    if (_autoDeleteRemoved == value) return;
+    _autoDeleteRemoved = value;
+    notifyListeners();
+    session.prefsFuture.then((p) => p.setBool(_prefAutoDelete, value));
   }
 
   void setSyncOnCellular(bool value) {

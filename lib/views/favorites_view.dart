@@ -34,6 +34,7 @@ import '../widgets/tabs/tab_state_slivers.dart';
 import '../widgets/synced_header_scaffold.dart' show formatBytes;
 import 'file_viewer_screen.dart';
 import 'move_copy_destination_picker.dart';
+import '../widgets/noo/overlays/noo_messenger.dart';
 
 /// Every favorited file/folder across the whole account, account-wide - a
 /// real tab rather than a filter toggle scoped to whatever folder the
@@ -176,7 +177,7 @@ class _FavoritesViewState extends State<FavoritesView> {
     List<NextcloudItem> items,
   ) async {
     final ops = context.read<ItemOperations>();
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = NooMessenger.of(context);
     messenger.showSnackBar(
       const SnackBar(
         content: Text('Creating share link(s)…'),
@@ -229,7 +230,7 @@ class _FavoritesViewState extends State<FavoritesView> {
     _clearSelection();
     if (files.isEmpty) return;
 
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = NooMessenger.of(context);
     try {
       await DownloadService.startDownload(session, files);
       messenger.showSnackBar(
@@ -284,7 +285,7 @@ class _FavoritesViewState extends State<FavoritesView> {
     if (confirmed != true || !context.mounted) return;
 
     final ops = context.read<ItemOperations>();
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = NooMessenger.of(context);
     var succeeded = 0;
     for (final item in items) {
       final success = await ops.deleteItem(item.path);
@@ -311,7 +312,7 @@ class _FavoritesViewState extends State<FavoritesView> {
     );
     if (!mounted || result == null) return;
     _clearSelection();
-    ScaffoldMessenger.of(context).showSnackBar(
+    NooMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           '${copy ? 'Copied' : 'Moved'} ${result.succeeded} of ${items.length} item(s)',
@@ -535,9 +536,13 @@ class _FavoritesViewState extends State<FavoritesView> {
           controlsHeight: 64,
           keepControls: keepFilters,
           controls: controlsRow,
-          selectionBar: _isSelecting && !selectionAtBottom
+          selectionBar: _isSelecting && !selectionAtBottom && !keepFilters
               ? _buildSelectionBar(context, selectedItems)
               : null,
+        ),
+      if (keepFilters && !selectionAtBottom)
+        PinnedSelectionBar(
+          bar: _isSelecting ? _buildSelectionBar(context, selectedItems) : null,
         ),
       if (favoritesController.isLoading && favorites.isEmpty)
         const SliverFillRemaining(

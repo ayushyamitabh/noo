@@ -145,6 +145,13 @@ final class SyncCoordinator {
     startRun(stored.withNotify(config.notify), force: force, wifiOnly: wifiOnly)
   }
 
+  /// The "Cancel" button, or "Sync everything" turned off mid-run: stops
+  /// [accountId]'s run - and any queued behind it - which keeps everything it
+  /// already finished (the runner saves as it goes) and ends.
+  func cancelSync(accountId: String) {
+    cancelRun(accountId: accountId, invalidateQueued: true)
+  }
+
   /// Stops [accountId]'s run, if any. [invalidateQueued] also stops runs that
   /// are only waiting their turn from ever starting.
   private func cancelRun(accountId: String, invalidateQueued: Bool) {
@@ -204,10 +211,10 @@ final class SyncCoordinator {
     }
   }
 
-  func removeLocalSync(accountId: String, path: String) async {
+  func removeLocalSync(accountId: String, path: String, deleteFiles: Bool = true) async {
     cancelRun(accountId: accountId, invalidateQueued: true)
     _ = try? await mutex.withLock {
-      store.removeLocalSync(accountId: accountId, path: path)
+      store.removeLocalSync(accountId: accountId, path: path, deleteFiles: deleteFiles)
     }
   }
 
@@ -226,6 +233,8 @@ final class SyncCoordinator {
       "syncing": busMatches && status.syncing,
       "syncingFileIds": busMatches ? Array(status.syncingFileIds) : [],
       "syncedFileIds": synced,
+      "storageNeededBytes": (busMatches ? status.storageShortfall?.needed : nil) as Any,
+      "storageAvailableBytes": (busMatches ? status.storageShortfall?.available : nil) as Any,
       "missingRoots": missing,
       // Conflicts are per account (a file id is only unique within one).
       "conflicts": status.conflicts.filter { $0.accountId == accountId }.map {
@@ -267,6 +276,11 @@ final class SyncCoordinator {
           SyncNotifications.summary(summary, username: config.username, accountId: config.accountId)
         }
         SyncNotifications.conflicts(summary.conflicts, username: config.username)
+        if let shortfall = summary.storageShortfall {
+          SyncNotifications.lowStorage(
+            needed: shortfall.needed, available: shortfall.available, username: config.username,
+            accountId: config.accountId)
+        }
       }
     } catch {
       // Cancelled while waiting for its turn - nothing ran.
@@ -441,6 +455,17 @@ enum SyncNotifications {
     content.title = "Noo sync · \(username)"
     content.body = parts.joined(separator: ", ")
     // One per account, so a newer summary replaces an older one in place.
+    post(content, id: "sync.summary.\(accountId)")
+  }
+
+  /// Always posts: the sync can't continue until the user frees space or syncs less.
+  static func lowStorage(needed: Int64, available: Int64, username: String, accountId: String) {
+    let formatter = ByteCountFormatter()
+    formatter.countStyle = .file
+    let content = UNMutableNotificationContent()
+    content.title = "Not enough storage to sync · \(username)"
+    content.body =
+      "Needs \(formatter.string(fromByteCount: needed)), only \(formatter.string(fromByteCount: available)) free on this device."
     post(content, id: "sync.summary.\(accountId)")
   }
 

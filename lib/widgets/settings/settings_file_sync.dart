@@ -14,6 +14,7 @@ import '../noo/nav/noo_top_bar.dart';
 import '../noo/nav/noo_toolbar.dart';
 import '../noo/noo_layout.dart';
 import 'settings_section.dart';
+import '../noo/overlays/noo_messenger.dart';
 
 /// Settings section 4: device sync (which folders/files mirror locally,
 /// notifications, cellular use, and a manual "Sync now").
@@ -21,25 +22,47 @@ class SettingsFileSyncSection extends StatefulWidget {
   const SettingsFileSyncSection({super.key});
 
   @override
-  State<SettingsFileSyncSection> createState() => _SettingsFileSyncSectionState();
+  State<SettingsFileSyncSection> createState() =>
+      _SettingsFileSyncSectionState();
 }
 
 class _SettingsFileSyncSectionState extends State<SettingsFileSyncSection> {
   bool _syncingNow = false;
 
-  Future<void> _syncNow(SessionController session, SyncStatusController sync) async {
+  Future<void> _syncNow(
+    SessionController session,
+    SyncStatusController sync,
+  ) async {
     setState(() => _syncingNow = true);
     try {
       await SyncService.syncNow(session, sync);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not start sync: $e'), behavior: SnackBarBehavior.floating),
+        NooMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not start sync: $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     } finally {
       if (mounted) setState(() => _syncingNow = false);
     }
+  }
+
+  Future<void> _cancelSync(SyncStatusController sync) async {
+    final messenger = NooMessenger.of(context);
+    final dropped = await sync.cancelSync();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          dropped > 0
+              ? 'Sync cancelled - removed from this device'
+              : 'Sync cancelled',
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   /// The Offline tab has its own chrome-free content (see the shared
@@ -79,15 +102,46 @@ class _SettingsFileSyncSectionState extends State<SettingsFileSyncSection> {
         NooSettingsRow(
           icon: LucideIcons.cloud,
           label: const Text('Sync everything'),
-          subtitle: const Text('Mirror the whole account instead of picking folders'),
-          trailing: NooToggle(checked: everything, onChanged: sync.setSyncEverything),
+          subtitle: const Text(
+            'Mirror all cloud files instead of picking folders - external storage is not included',
+          ),
+          trailing: NooToggle(
+            checked: everything,
+            onChanged: sync.setSyncEverything,
+          ),
+        ),
+        NooSettingsRow(
+          icon: LucideIcons.hardDrive,
+          label: const Text('Sync external storage'),
+          subtitle: const Text(
+            'Also mirror external storage when syncing everything. Folders '
+            'you pick yourself always sync',
+          ),
+          trailing: NooToggle(
+            checked: sync.syncExternal,
+            onChanged: sync.setSyncExternal,
+          ),
+        ),
+        NooSettingsRow(
+          icon: LucideIcons.trash2,
+          label: const Text('Delete files when removed from sync'),
+          subtitle: const Text(
+            'Removing a folder from sync, or turning off Sync everything or '
+            'external storage, also deletes its copy on this device. Off '
+            'keeps the files - they stay listed under "On this device" to '
+            'remove by hand',
+          ),
+          trailing: NooToggle(
+            checked: sync.autoDeleteRemoved,
+            onChanged: sync.setAutoDeleteRemoved,
+          ),
         ),
         NooSettingsRow(
           icon: LucideIcons.hardDriveDownload,
           label: const Text('View offline files'),
           subtitle: Text(
             everything
-                ? 'Every folder in this account is synced'
+                ? 'Every cloud folder in this account is synced'
                 : folders.isEmpty
                 ? 'Nothing synced yet'
                 : '${folders.length} synced folder${folders.length == 1 ? '' : 's'}/file${folders.length == 1 ? '' : 's'}',
@@ -101,22 +155,40 @@ class _SettingsFileSyncSectionState extends State<SettingsFileSyncSection> {
             'Show a notification when a background sync updates files. '
             'Conflicts and "Sync now" always notify.',
           ),
-          trailing: NooToggle(checked: sync.syncNotifications, onChanged: sync.setSyncNotifications),
+          trailing: NooToggle(
+            checked: sync.syncNotifications,
+            onChanged: sync.setSyncNotifications,
+          ),
         ),
         NooSettingsRow(
           icon: LucideIcons.signal,
           label: const Text('Sync on cellular'),
           subtitle: const Text('Off = background sync only runs on Wi-Fi'),
-          trailing: NooToggle(checked: sync.syncOnCellular, onChanged: sync.setSyncOnCellular),
+          trailing: NooToggle(
+            checked: sync.syncOnCellular,
+            onChanged: sync.setSyncOnCellular,
+          ),
         ),
         NooSettingsRow(
           icon: LucideIcons.refreshCw,
           label: const Text('Sync now'),
-          trailing: _syncingNow
+          subtitle: sync.isSyncingNow ? const Text('Syncing…') : null,
+          trailing: sync.isSyncingNow
+              ? NooButton(
+                  variant: NooButtonVariant.tonal,
+                  size: NooButtonSize.compact,
+                  disabled: sync.isCancellingSync,
+                  onTap: () => _cancelSync(sync),
+                  child: Text(sync.isCancellingSync ? 'Cancelling…' : 'Cancel'),
+                )
+              : _syncingNow
               ? SizedBox(
                   width: 18,
                   height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: colors.accentText),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: colors.accentText,
+                  ),
                 )
               : NooButton(
                   variant: NooButtonVariant.tonal,

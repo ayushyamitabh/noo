@@ -98,7 +98,10 @@ class NooActivityItem extends StatelessWidget {
                     ),
                     if (time != null) ...[
                       const SizedBox(height: NooSpace.xxs),
-                      Text(time!, style: NooText.meta.copyWith(color: colors.fg3)),
+                      Text(
+                        time!,
+                        style: NooText.meta.copyWith(color: colors.fg3),
+                      ),
                     ],
                   ],
                 ),

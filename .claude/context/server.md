@@ -515,7 +515,55 @@ the whole engine is plain Kotlin using Android's WorkManager directly.
   (`ui_sync_everything`, per account) works the
   same way - when on, `SyncService` sends `['/']` as the path list instead
   of `syncedPaths`, mirroring the whole account rather than requiring
-  per-item opt-in. `syncOnCellular` is a plain global pref. `syncEverything`
+  per-item opt-in. **"Sync everything" is cloud files only:** a walk that
+  starts at the account root (`['/']`) skips external-storage mounts
+  (`nc:mount-type` = `external`, which both native walkers now request -
+  `SyncEngine.walkRemoteTree` / `DavSyncClient.walk`) unless the separate
+  per-account `syncExternal` pref (`ui_sync_external`, Settings → File sync →
+  "Sync external storage", sent to native as `includeExternal`) is on.
+  Folders picked by hand always sync, external or not, since each is its
+  own walk root - with "Sync everything" on the path list sent to native is
+  `['/', ...picked]` (`SyncService.pathsToSync`), not just `['/']`, or an
+  external folder picked by hand would never be walked. Native skips a
+  picked path the root walk already listed, and what's on the device under
+  an external mount the root walk left out is excluded from that walk's
+  "deleted on the server" diff (`onSkippedExternal`) - it's left alone, so
+  it's either synced by its own path or shows up as a device-only item. **Cancelling:** `SyncService.cancelSync` (Offline summary
+  card and Settings → Sync now show "Cancel" while syncing, and turning
+  "Sync everything" or "Sync external storage" off/on cancels the run it
+  invalidates) bumps `SyncEngine.cancelGeneration` on Android (a run notes it before waiting for the lock, so a queued run - a periodic job that came due - also never starts after a cancel; checked between
+  transfers, between folder listings and inside a download; the
+  `SyncCancelledException` unwinds to the run's `finally`, which saves what
+  finished) and cancels the account's task on iOS (`SyncCoordinator.
+  cancelSync`). Downloads land in a `*.noo-part` temp file renamed into
+  place when complete, so a cancelled one never leaves a truncated file
+  (the Offline listing and `deviceOnlyItems` ignore `.noo-part`). **Cancel
+drops the item:** `SyncStatusController.cancelSync` removes whatever the run
+was syncing for the first time (`_pendingPaths` - paths added since the last
+pass finished - and "Sync everything" if it was just turned on) from the
+synced list and deletes its partly downloaded files, so a refresh can't start
+it again; cancelling a refresh of something already synced only stops it.
+Android's `removeLocalSync` takes `SyncEngine.syncLock`, so the deletion
+waits for the cancelled run to finish saving its state instead of racing it. **Live
+  progress:** Android flushes the on-disk sync state at most every 3 s
+  during a run (iOS every 5 transfers) and `MainActivity` coalesces status
+  events (250 ms, built off the main thread); `OfflineController` re-reads
+  the folder (throttled to 2 s) while a sync is running instead of only when
+  it ends. **Storage check:** after diffing a path and before its first transfer, native sums the downloads and compares with the free space on the mirror's volume (Android `usableSpace`, iOS `volumeAvailableCapacityForImportantUsage`) minus a 100 MB reserve; if it doesn't fit the run stops (`InsufficientStorageException` / `SyncRunner`'s `break`), publishes `storageShortfall` on the status bus (cleared when the next run starts) and posts a notification. A shortfall behaves like a cancel: `SyncStatusController` drops what the pass was syncing for the first time (`_dropPending`, the same path `cancelSync` uses - paths removed from the synced list, partial files deleted, a just-enabled "Sync everything" turned off) so it isn't retried on every refresh. `SyncStatusController.storageShortfall` drives a once-per-event dialog in `MainShellView` and the Offline summary card. **Device-only items:** the Offline mirror can hold files nothing
+  is configured to sync (turn "Sync everything" off, or cancel mid-run), so
+  "Manage synced folders" also lists `SyncStatusController.deviceOnlyItems`
+  (`SyncService.deviceOnlyItems`: mirror entries not covered by a synced
+  path, looking inside folders that merely contain one) with a "remove from
+  device" action (`removeDeviceCopy` -> `removeLocalSync`); with
+  "Sync everything" on it lists the mirror's top level (read-only). Native
+  forgets files' synced state on `removeLocalSync` without publishing, so
+  `SyncStatusController` fetches a fresh `getStatus` after every removal -
+  otherwise the Files tab's synced badges stay stale until the next sync
+  event. The Offline tab's item menu never offers "Sync to device" (they're
+  already on the device): "Stop syncing to device" for a picked path,
+  "Remove from device" for a leftover, nothing for something a synced parent
+  folder or "Sync everything" keeps.
+  `syncOnCellular` is a plain global pref. `syncEverything`
   and `syncOnCellular` are managed from Settings → Device Sync (a "Sync
   everything" switch, the cellular toggle, a manual "Sync now", and a
   "View offline files" row that pushes the Offline tab - see below); the

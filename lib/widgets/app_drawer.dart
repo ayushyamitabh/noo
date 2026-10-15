@@ -63,9 +63,7 @@ class AppDrawer extends StatelessWidget {
           NooDrawerItem(
             icon: tab.icon,
             label: tab.label,
-            count: tab == AppTab.trash && trashCount > 0
-                ? '$trashCount'
-                : null,
+            count: tab == AppTab.trash && trashCount > 0 ? '$trashCount' : null,
             onTap: () {
               Navigator.pop(context);
               settings.requestTab(tab);

@@ -11,6 +11,7 @@ import 'noo/lists/noo_settings_row.dart';
 import 'noo/overlays/noo_dialog.dart';
 import 'noo/overlays/noo_sheet.dart';
 import 'noo/overlays/noo_text_field.dart';
+import 'noo/overlays/noo_messenger.dart';
 
 /// The Files tab's "+"/FAB action: upload a file or create a folder into
 /// the current folder. Shared by `FilesView`'s own create button and
@@ -54,9 +55,11 @@ void _showCreateFolderDialog(BuildContext context) {
     Navigator.pop(ctx);
     final success = await files.createFolder(name);
     if (ctx.mounted) {
-      ScaffoldMessenger.of(ctx).showSnackBar(
+      NooMessenger.of(ctx).showSnackBar(
         SnackBar(
-          content: Text(success ? 'Created folder $name' : 'Failed to create folder'),
+          content: Text(
+            success ? 'Created folder $name' : 'Failed to create folder',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );

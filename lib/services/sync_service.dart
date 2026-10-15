@@ -25,6 +25,11 @@ class SyncStatusSnapshot {
   /// web) - the app drops them from its synced list.
   final Set<String> missingRoots;
 
+  /// Set when the last pass stopped for lack of space: what it needed to
+  /// download and what was free.
+  final int? storageNeededBytes;
+  final int? storageAvailableBytes;
+
   const SyncStatusSnapshot({
     required this.accountId,
     required this.syncing,
@@ -32,6 +37,8 @@ class SyncStatusSnapshot {
     required this.syncedFileIds,
     required this.conflicts,
     this.missingRoots = const {},
+    this.storageNeededBytes,
+    this.storageAvailableBytes,
   });
 
   factory SyncStatusSnapshot.fromMap(Map<dynamic, dynamic> map) {
@@ -51,8 +58,20 @@ class SyncStatusSnapshot {
       missingRoots: ((map['missingRoots'] as List?) ?? const [])
           .cast<String>()
           .toSet(),
+      storageNeededBytes: (map['storageNeededBytes'] as num?)?.toInt(),
+      storageAvailableBytes: (map['storageAvailableBytes'] as num?)?.toInt(),
     );
   }
+}
+
+/// A file or folder that's in the on-device mirror but isn't covered by any
+/// synced path - what's left behind when "Sync everything" is turned off (or
+/// a run is cut short), and so can't be stopped from the synced-paths list.
+class DeviceOnlyItem {
+  /// Remote-style path ("/Docs/a.txt"), the same form synced paths use.
+  final String path;
+  final bool isFolder;
+  const DeviceOnlyItem(this.path, {required this.isFolder});
 }
 
 /// Talks to `SyncWorker`/`SyncEngine.kt`'s Android WorkManager-based device
@@ -100,8 +119,9 @@ class SyncService {
         final isActive = account.id == session.activeAccountId;
         final config = isActive
             ? _SyncConfig(
-                paths: sync.syncEverything ? ['/'] : sync.syncedPaths,
+                paths: pathsToSync(sync.syncEverything, sync.syncedPaths),
                 intervalMinutes: sync.backgroundSyncIntervalMinutes,
+                includeExternal: sync.syncExternal,
               )
             : _SyncConfig.fromPrefs(prefs, store.accountPrefKey, account.id);
         final password = await store.readPassword(account.id);
@@ -125,6 +145,7 @@ class SyncService {
           'wifiOnly': wifiOnly,
           'intervalMinutes': config.intervalMinutes,
           'notify': sync.syncNotifications,
+          'includeExternal': config.includeExternal,
         });
       } catch (e) {
         debugPrint('[SyncService] Could not schedule ${account.id}: $e');
@@ -139,6 +160,15 @@ class SyncService {
       'accountId': accountId,
     });
   }
+
+  /// The paths a pass walks: with "Sync everything" the account root *plus*
+  /// every path picked by hand. The root walk leaves external storage out, so
+  /// an external folder the user chose explicitly has to be a root of its own
+  /// (native skips picked paths the root walk already covered).
+  static List<String> pathsToSync(bool everything, List<String> picked) =>
+      everything
+      ? ['/', ...picked.where((path) => path != '/')]
+      : List.of(picked);
 
   static String _basicAuth(SavedAccount account, String password) =>
       'Basic ${base64Encode(utf8.encode('${account.username}:$password'))}';
@@ -183,7 +213,7 @@ class SyncService {
       throw Exception('Not logged in.');
     }
 
-    final paths = sync.syncEverything ? ['/'] : sync.syncedPaths;
+    final paths = pathsToSync(sync.syncEverything, sync.syncedPaths);
     await invokeOrExplain(_channel, 'syncNow', 'Syncing', {
       'accountId': accountId,
       'serverUrl': session.serverUrl,
@@ -192,8 +222,86 @@ class SyncService {
       'folders': jsonEncode(paths),
       'force': force,
       'notify': sync.syncNotifications,
+      'includeExternal': sync.syncExternal,
       if (respectNetworkSetting) 'wifiOnly': !sync.syncOnCellular,
     });
+  }
+
+  /// Stops the sync run in progress (and any one-off run queued behind it).
+  /// The run finishes the transfer it's on, keeps everything it already
+  /// downloaded, and ends - the periodic schedule is untouched.
+  static Future<void> cancelSync(SessionController session) async {
+    final accountId = session.activeAccountId;
+    if (accountId == null) return;
+    await invokeIfAvailable(_channel, 'cancelSync', {'accountId': accountId});
+  }
+
+  /// Everything in [accountId]'s on-device mirror that no path in
+  /// [syncedPaths] covers: files and folders left over from "Sync everything"
+  /// (or a run that was cut short), which the synced-paths list alone can't
+  /// show or stop. A folder that merely contains synced paths is looked
+  /// into rather than reported itself.
+  static Future<List<DeviceOnlyItem>> deviceOnlyItems(
+    String accountId,
+    List<String> syncedPaths,
+  ) async {
+    final base = await baseDirectory();
+    if (base == null) return const [];
+    final root = Directory(p.join(base.path, 'sync', accountId));
+    if (!root.existsSync()) return const [];
+
+    String normalize(String path) => path.length > 1 && path.endsWith('/')
+        ? path.substring(0, path.length - 1)
+        : path;
+    final synced = syncedPaths.map(normalize).toList();
+    bool covered(String path) =>
+        synced.any((s) => path == s || path.startsWith('$s/'));
+    bool holdsSynced(String path) => synced.any((s) => s.startsWith('$path/'));
+
+    final found = <DeviceOnlyItem>[];
+    Future<void> visit(Directory dir, String remote) async {
+      await for (final entity in dir.list(followLinks: false)) {
+        final name = p.basename(entity.path);
+        // An interrupted download's temp file, not a real item.
+        if (name.endsWith('.noo-part')) continue;
+        final path = remote == '/' ? '/$name' : '$remote/$name';
+        if (covered(path)) continue;
+        if (entity is Directory) {
+          if (holdsSynced(path)) {
+            await visit(entity, path);
+          } else {
+            found.add(DeviceOnlyItem(path, isFolder: true));
+          }
+        } else if (entity is File) {
+          found.add(DeviceOnlyItem(path, isFolder: false));
+        }
+      }
+    }
+
+    await visit(root, '/');
+    found.sort((a, b) => a.path.toLowerCase().compareTo(b.path.toLowerCase()));
+    return found;
+  }
+
+  /// The top-level files/folders in [accountId]'s on-device mirror - what
+  /// "Sync everything" has put on the device, for the manage sheet to show.
+  static Future<List<DeviceOnlyItem>> mirrorTopLevel(String accountId) async {
+    final base = await baseDirectory();
+    if (base == null) return const [];
+    final root = Directory(p.join(base.path, 'sync', accountId));
+    if (!root.existsSync()) return const [];
+    final found = <DeviceOnlyItem>[];
+    await for (final entity in root.list(followLinks: false)) {
+      final name = p.basename(entity.path);
+      if (name.endsWith('.noo-part')) continue;
+      if (entity is Directory) {
+        found.add(DeviceOnlyItem('/$name', isFolder: true));
+      } else if (entity is File) {
+        found.add(DeviceOnlyItem('/$name', isFolder: false));
+      }
+    }
+    found.sort((a, b) => a.path.toLowerCase().compareTo(b.path.toLowerCase()));
+    return found;
   }
 
   /// One-shot status snapshot - used to seed [SyncStatusController]'s state
@@ -256,15 +364,21 @@ class SyncService {
   /// actually goes away instead of just stopping future updates. See
   /// `SyncEngine.removeLocalSync`'s doc comment for why the state also has
   /// to be cleared, not just the files.
+  ///
+  /// With [deleteFiles] false only the tracking goes - the sync state and
+  /// root markers - and the files stay on the device (the "Delete files when
+  /// removed from sync" setting being off).
   static Future<void> removeLocalSync(
     SessionController session,
-    String path,
-  ) async {
+    String path, {
+    bool deleteFiles = true,
+  }) async {
     final accountId = session.activeAccountId;
     if (accountId == null) return;
     await invokeIfAvailable(_channel, 'removeLocalSync', {
       'accountId': accountId,
       'path': path,
+      'deleteFiles': deleteFiles,
     });
   }
 
@@ -306,7 +420,14 @@ class _SyncConfig {
   /// Null = background sync off for this account.
   final int? intervalMinutes;
 
-  const _SyncConfig({required this.paths, required this.intervalMinutes});
+  /// Whether "Sync everything" also mirrors external storage.
+  final bool includeExternal;
+
+  const _SyncConfig({
+    required this.paths,
+    required this.intervalMinutes,
+    this.includeExternal = false,
+  });
 
   /// Reads a *non-active* account's persisted settings - the same per-account
   /// keys `SyncStatusController`/`FilesController` write. Malformed values
@@ -317,6 +438,9 @@ class _SyncConfig {
     String accountId,
   ) {
     var paths = <String>[];
+    final includeExternal =
+        prefs.getBool(key(accountId, SyncStatusController.prefSyncExternal)) ??
+        false;
     try {
       final everything =
           prefs.getBool(
@@ -326,11 +450,10 @@ class _SyncConfig {
       final json = prefs.getString(
         key(accountId, SyncStatusController.prefSyncedPaths),
       );
-      if (everything) {
-        paths = ['/'];
-      } else if (json != null) {
-        paths = (jsonDecode(json) as List).cast<String>();
-      }
+      final picked = json == null
+          ? <String>[]
+          : (jsonDecode(json) as List).cast<String>();
+      paths = SyncService.pathsToSync(everything, picked);
     } catch (e) {
       debugPrint('[SyncService] Unreadable sync paths for $accountId: $e');
     }
@@ -357,6 +480,7 @@ class _SyncConfig {
     return _SyncConfig(
       paths: paths,
       intervalMinutes: policy == CachePolicy.interval ? minutes : null,
+      includeExternal: includeExternal,
     );
   }
 }

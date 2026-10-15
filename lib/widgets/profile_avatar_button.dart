@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../providers/session_controller.dart';
 import '../views/account_view.dart';
 import 'noo/core/noo_avatar.dart';
+import 'noo/overlays/noo_messenger.dart';
 
 /// Top-bar avatar button that opens the account screen. Replaces the old
 /// "Account" bottom-nav destination, matching how Google Drive surfaces
@@ -28,7 +29,7 @@ class ProfileAvatarButton extends StatelessWidget {
     if (target == null || !context.mounted) return;
 
     HapticFeedback.selectionClick();
-    ScaffoldMessenger.of(context).showSnackBar(
+    NooMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Switched to ${target.label}'),
         behavior: SnackBarBehavior.floating,

@@ -27,6 +27,7 @@ import '../widgets/viewer/media_pdf_preview.dart';
 import '../widgets/viewer/media_text_preview.dart';
 import '../widgets/viewer/media_unsupported_preview.dart';
 import '../widgets/viewer/media_video_preview.dart';
+import '../widgets/noo/overlays/noo_messenger.dart';
 
 const _textPreviewExtensions = {
   '.txt',
@@ -267,7 +268,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
           : await _downloadToTemp(session, item);
       if (path == null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          NooMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('This file is no longer available offline'),
             ),
@@ -277,13 +278,13 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
       }
       final result = await OpenFile.open(path);
       if (mounted && result.type != ResultType.done) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        NooMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Could not open file: ${result.message}')),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        NooMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to open ${item.name}: $e')),
         );
       }
@@ -302,7 +303,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
     try {
       await DownloadService.startDownload(session, [item]);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        NooMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
               'Downloading ${item.name} - see the notification for progress',
@@ -312,7 +313,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
+        NooMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Download failed: $e')));
       }
@@ -398,7 +399,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
     setState(() => _isBusy = false);
 
     if (!success) {
-      ScaffoldMessenger.of(
+      NooMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Failed to delete ${item.name}')));
       return;

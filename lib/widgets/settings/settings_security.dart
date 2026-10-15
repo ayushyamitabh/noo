@@ -5,6 +5,7 @@ import '../../providers/session_controller.dart';
 import '../noo/core/noo_toggle.dart';
 import '../noo/lists/noo_settings_row.dart';
 import 'settings_section.dart';
+import '../noo/overlays/noo_messenger.dart';
 
 /// Settings section 3: three independent locks - opening the app, switching
 /// accounts, and revealing hidden files - each behind the device's own PIN/
@@ -22,7 +23,7 @@ class SettingsSecuritySection extends StatelessWidget {
   }) async {
     final success = await change();
     if (!success && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      NooMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             turningOn

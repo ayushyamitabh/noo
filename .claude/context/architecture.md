@@ -92,7 +92,8 @@ new provider instance):
   [`SharesController`](../../lib/providers/shares_controller.dart) /
   [`RecentController`](../../lib/providers/recent_controller.dart) — one
   per remaining tab, each just `items`/`isLoading`/`errorMessage` plus that
-  tab's own fetch/mutate methods. All three (plus Photos/Favorites) share
+  tab's own fetch/mutate methods (Shares holds both scopes, `withMeShares`/
+  `byMeShares`, fetched together; the view picks one by its own scope). All three (plus Photos/Favorites) share
   one shape: capture `session.sessionGeneration` at fetch entry, set
   loading/clear error, fetch, check the generation before writing the
   result, `notifyListeners()`.
@@ -125,7 +126,9 @@ new provider instance):
   server. Owns no display prefs: `items` runs the
   listing through `FilesController.applyFilesDisplayPrefs` (hidden files,
   files/folders filter, per-folder sort keyed by the same remote path,
-  minus the cloud/external scope) and `FilesView` reads grid/list from
+  cloud/external and mine/shared - the local listing has no `mount-type`, so
+  `FilesController` remembers mount roots seen in online listings,
+  `mountTypeFor`, persisted per account, and `items` stamps them on) and `FilesView` reads grid/list from
   `FilesController`, so both tabs share one set of controls
   (`FilesControlsRow`). `FilesController` restores those prefs on the
   account-*ready* event too (memoized `_restoreDisplayPrefs`) so they apply

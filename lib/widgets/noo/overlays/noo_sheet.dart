@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../../theme/design_tokens.dart';
 import '../noo_layout.dart';
+import 'sheet_zoom.dart';
 
 /// Fraction of the available height a sheet can reach before it switches
 /// from sizing to its content to a draggable peek (see [_NooSheetBody]).
@@ -24,8 +27,12 @@ Future<T?> showNooSheet<T>(
   required List<Widget> children,
 }) {
   final colors = context.nooColors;
-  return showModalBottomSheet<T>(
+  // Drives the page beneath zooming out as the sheet opens (and back as it
+  // closes) - see [SheetZoom].
+  final zoom = SheetZoom.open(context);
+  final sheet = showModalBottomSheet<T>(
     context: context,
+    transitionAnimationController: zoom,
     anchorPoint: NooLayout.popupAnchor(context),
     backgroundColor: colors.surface,
     barrierColor: colors.scrim,
@@ -38,6 +45,10 @@ Future<T?> showNooSheet<T>(
     ),
     builder: (context) => _NooSheetBody(children: children),
   );
+  if (zoom != null) {
+    unawaited(sheet.whenComplete(() => SheetZoom.release(zoom)));
+  }
+  return sheet;
 }
 
 /// Caps content at [_kNooSheetPeekFraction] of the available height from the

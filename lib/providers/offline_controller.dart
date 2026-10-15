@@ -23,9 +23,10 @@ import 'session_controller.dart';
 /// local, so it's safe to run even on a provisional/offline login (see
 /// that method's doc comment).
 ///
-/// Display controls (grid/list, sort, hidden files, files/folders filter)
-/// aren't kept here - [items] runs the listing through the Files tab's own
-/// [FilesController] prefs so the two tabs always agree.
+/// Display controls (grid/list, sort, hidden files, files/folders filter,
+/// storage scope, ownership) aren't kept here - [items] runs the listing
+/// through the Files tab's own [FilesController] prefs so the two tabs
+/// always agree.
 class OfflineController extends ChangeNotifier
     with WidgetsBindingObserver
     implements FolderBrowser {
@@ -37,6 +38,9 @@ class OfflineController extends ChangeNotifier
   bool _isLoading = false;
   String? _errorMessage;
   bool _wasSyncing = false;
+  // While a sync runs, the listing follows it (see [_onStatusSnapshot]).
+  Timer? _liveReload;
+  int _lastSyncedCount = -1;
   // Resolved once in _load - lets [localFileFor] stay synchronous so it can
   // be called straight from a widget's build.
   String? _syncBasePath;
@@ -56,12 +60,15 @@ class OfflineController extends ChangeNotifier
   @override
   String get currentFolderPath => _pathStack.last;
   @override
-  List<NextcloudItem> get items => files.applyFilesDisplayPrefs(
-    _items,
-    folderPath: currentFolderPath,
-    // The local mirror has no cloud/external distinction to filter on.
-    applyStorageScope: false,
-  );
+  List<NextcloudItem> get items => files.applyFilesDisplayPrefs([
+    // The local listing has no `mount-type`; mount roots are remembered from
+    // earlier online listings, so the same cloud/external and mine/shared
+    // filters as Files apply here.
+    for (final item in _items)
+      files.mountTypeFor(item.path) == null
+          ? item
+          : item.copyWith(mountType: files.mountTypeFor(item.path)),
+  ], folderPath: currentFolderPath);
   // Only "loading" while there's nothing to show yet - a reload over an
   // already-listed folder (e.g. the automatic one after a sync pass
   // finishes) swaps the list in place instead of flashing a spinner.
@@ -71,6 +78,9 @@ class OfflineController extends ChangeNotifier
   String? get errorMessage => _errorMessage;
 
   void _onAccountCleared() {
+    _liveReload?.cancel();
+    _liveReload = null;
+    _lastSyncedCount = -1;
     _pathStack = const ['/'];
     _items = [];
     _isLoading = false;
@@ -92,7 +102,19 @@ class OfflineController extends ChangeNotifier
 
   void _onStatusSnapshot(SyncStatusSnapshot snapshot) {
     if (_wasSyncing && !snapshot.syncing) {
+      _liveReload?.cancel();
       unawaited(_load());
+    } else if (snapshot.syncing) {
+      // A long sync keeps adding files: re-read the folder as they land
+      // (throttled) instead of waiting for the whole pass to finish.
+      final count = snapshot.syncedFileIds.length;
+      if (count != _lastSyncedCount) {
+        _lastSyncedCount = count;
+        _liveReload ??= Timer(const Duration(seconds: 2), () {
+          _liveReload = null;
+          unawaited(_load());
+        });
+      }
     }
     _wasSyncing = snapshot.syncing;
   }
@@ -207,6 +229,8 @@ class OfflineController extends ChangeNotifier
     final items = <NextcloudItem>[];
     await for (final entity in dir.list(followLinks: false)) {
       final name = p.basename(entity.path);
+      // An in-flight download's temp file, not a file yet.
+      if (name.endsWith('.noo-part')) continue;
       final remotePath = folderPath == '/' ? '/$name' : '$folderPath/$name';
       if (entity is Directory) {
         items.add(
@@ -239,6 +263,7 @@ class OfflineController extends ChangeNotifier
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _liveReload?.cancel();
     _statusSub?.cancel();
     super.dispose();
   }

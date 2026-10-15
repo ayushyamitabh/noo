@@ -13,6 +13,7 @@ import '../widgets/noo/overlays/noo_text_field.dart';
 import '../widgets/settings/settings_dialogs.dart';
 import '../widgets/shell/shell_common.dart';
 import 'login_webview_view.dart';
+import '../widgets/noo/overlays/noo_messenger.dart';
 
 class LoginView extends StatefulWidget {
   /// True when this is pushed from Settings ("Add account") on top of an
@@ -77,7 +78,7 @@ class _LoginViewState extends State<LoginView> {
     final session = context.read<SessionController>();
     final success = await session.switchAccount(account.id);
     if (success || !mounted) return;
-    ScaffoldMessenger.of(context)
+    NooMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(

@@ -11,14 +11,17 @@ class NooSearchField extends StatelessWidget {
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
   final bool autofocus;
+
   /// true = iOS inline field (radius 12, 38px, 16px text, below the large
   /// title); false = the generic 36px pill used everywhere else (also the
   /// Android "expands from a top-bar icon" search field once expanded).
   final bool ios;
+
   /// True when placed directly on a `surface` background (uses surface-2
   /// fill instead of surface, so it doesn't disappear against it).
   final bool onSurface;
   final double? width;
+
   /// A trailing widget (e.g. a clear button), shown after the input.
   final Widget? trailing;
 

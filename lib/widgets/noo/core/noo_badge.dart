@@ -9,7 +9,11 @@ class NooBadge extends StatelessWidget {
   final NooBadgeTone tone;
   final Widget child;
 
-  const NooBadge({super.key, this.tone = NooBadgeTone.success, required this.child});
+  const NooBadge({
+    super.key,
+    this.tone = NooBadgeTone.success,
+    required this.child,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +36,10 @@ class NooBadge extends StatelessWidget {
       // while its default crossAxisAlignment.center still centers the
       // text within the Container's tight 24px height.
       padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(NooRadii.pill)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(NooRadii.pill),
+      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [

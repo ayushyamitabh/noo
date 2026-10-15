@@ -12,6 +12,7 @@ import '../widgets/noo/files/noo_file_table.dart';
 import '../widgets/noo/noo_layout.dart';
 import '../widgets/share_sheet.dart';
 import '../widgets/tabs/tab_state_slivers.dart';
+import '../widgets/noo/overlays/noo_messenger.dart';
 
 /// Which slice of [SharesController.shares] is on screen - `With you` maps
 /// straight onto the controller's own `sharedWithMe: true` fetch, but the
@@ -84,13 +85,29 @@ class SharesView extends StatefulWidget {
 
 class _SharesViewState extends State<SharesView> {
   bool _requested = false;
-  // Mirrors `SharesController.sharedWithMe`'s own default (false, "shared
-  // by me") so the first fetch this triggers matches what's shown.
   _ShareScope _scope = _ShareScope.byYou;
+
+  final _pageController = PageController(initialPage: 1);
+  // Scroll controllers for the pages that aren't active; the active page
+  // uses the shell's [SharesView.scrollController] (scroll-to-top, floating
+  // top bar), so a controller never has two positions attached.
+  final _spareControllers = [
+    ScrollController(),
+    ScrollController(),
+    ScrollController(),
+  ];
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    for (final c in _spareControllers) {
+      c.dispose();
+    }
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.nooColors;
     final sharesController = context.watch<SharesController>();
 
     if (!_requested) {
@@ -100,31 +117,67 @@ class _SharesViewState extends State<SharesView> {
       );
     }
 
-    final shares = _visibleShares(sharesController);
+    // The top bar and scope control stay put; only the lists below them
+    // are pages, so a swipe slides just the content (finger-following, with
+    // the framework's page physics).
+    return ColoredBox(
+      color: NooLayout.contentBackground(context),
+      child: SafeArea(
+        top: true,
+        bottom: false,
+        child: Column(
+          children: [
+            if (widget.topBar != null) widget.topBar!,
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                NooLayout.gutter(context),
+                NooSpace.md,
+                NooLayout.gutter(context),
+                NooSpace.md,
+              ),
+              child: NooSegmentedControl<_ShareScope>(
+                value: _scope,
+                options: const [
+                  NooSegmentOption(
+                    value: _ShareScope.withYou,
+                    label: 'With you',
+                  ),
+                  NooSegmentOption(value: _ShareScope.byYou, label: 'By you'),
+                  NooSegmentOption(value: _ShareScope.links, label: 'Links'),
+                ],
+                onChanged: _selectScope,
+              ),
+            ),
+            Expanded(
+              child: PageView.builder(
+                controller: _pageController,
+                itemCount: _ShareScope.values.length,
+                onPageChanged: (i) =>
+                    setState(() => _scope = _ShareScope.values[i]),
+                itemBuilder: (context, i) => _buildPage(
+                  context,
+                  sharesController,
+                  _ShareScope.values[i],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPage(
+    BuildContext context,
+    SharesController sharesController,
+    _ShareScope scope,
+  ) {
+    final colors = context.nooColors;
+    final active = scope == _scope;
+    final shares = _visibleShares(sharesController, scope);
     final isDesktop = NooLayout.isDesktop(context);
 
     final List<Widget> contentSlivers = [
-      if (widget.topBar != null) topBarSliver(widget.topBar!),
-      SliverPadding(
-        padding: EdgeInsets.fromLTRB(
-          NooLayout.gutter(context),
-          NooSpace.md,
-          NooLayout.gutter(context),
-          0,
-        ),
-        sliver: SliverToBoxAdapter(
-          child: NooSegmentedControl<_ShareScope>(
-            value: _scope,
-            options: const [
-              NooSegmentOption(value: _ShareScope.withYou, label: 'With you'),
-              NooSegmentOption(value: _ShareScope.byYou, label: 'By you'),
-              NooSegmentOption(value: _ShareScope.links, label: 'Links'),
-            ],
-            onChanged: (scope) => _selectScope(sharesController, scope),
-          ),
-        ),
-      ),
-      const SliverToBoxAdapter(child: SizedBox(height: NooSpace.md)),
       if (sharesController.isLoading && shares.isEmpty)
         tabLoadingSliver
       else if (sharesController.errorMessage != null)
@@ -138,43 +191,35 @@ class _SharesViewState extends State<SharesView> {
         tabEmptySliver(
           context,
           icon: LucideIcons.share2,
-          message: _emptyMessage(),
+          message: _emptyMessage(scope),
         )
       else if (isDesktop)
-        _buildDesktopTable(context, shares)
+        _buildDesktopTable(context, shares, scope)
       else
-        _buildMobileList(context, shares),
+        _buildMobileList(context, shares, scope),
       ...tabBottomInsetSlivers(context),
     ];
 
-    return ColoredBox(
-      color: NooLayout.contentBackground(context),
-      child: RefreshIndicator(
-        key: TabRefreshScope.keyOf(context),
-        color: colors.accent,
-        backgroundColor: colors.surface,
-        onRefresh: sharesController.fetchAll,
-        // See files_view.dart's identical fix - without this, the sticky
-        // controls row rides up under the status bar once the floating top
-        // bar above it fully collapses.
-        child: SafeArea(
-          top: true,
-          bottom: false,
-          child: CustomScrollView(
-            controller: widget.scrollController,
-            // See files_view.dart's identical fix - without this, pull-to-
-            // refresh can't be triggered on an empty or single-item list.
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: contentSlivers,
-          ),
-        ),
+    return RefreshIndicator(
+      key: active ? TabRefreshScope.keyOf(context) : null,
+      color: colors.accent,
+      backgroundColor: colors.surface,
+      onRefresh: sharesController.fetchAll,
+      child: CustomScrollView(
+        controller: active
+            ? widget.scrollController
+            : _spareControllers[scope.index],
+        // See files_view.dart's identical fix - without this, pull-to-
+        // refresh can't be triggered on an empty or single-item list.
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: contentSlivers,
       ),
     );
   }
 
   /// One entry per shared item for `By you` and `Links`; `With you` stays
   /// one per share (what someone else shared with you, as the server lists it).
-  List<_ShareEntry> _visibleShares(SharesController c) {
+  List<_ShareEntry> _visibleShares(SharesController c, _ShareScope scope) {
     List<_ShareEntry> grouped(Iterable<NextcloudShare> shares) {
       final byPath = <String, List<NextcloudShare>>{};
       for (final share in shares) {
@@ -185,18 +230,18 @@ class _SharesViewState extends State<SharesView> {
       ];
     }
 
-    switch (_scope) {
+    switch (scope) {
       case _ShareScope.withYou:
         return [
-          for (final s in c.shares) _ShareEntry(s, [s]),
+          for (final s in c.withMeShares) _ShareEntry(s, [s]),
         ];
       case _ShareScope.byYou:
         return grouped(
-          c.shares.where((s) => s.shareType != ShareType.publicLink),
+          c.byMeShares.where((s) => s.shareType != ShareType.publicLink),
         );
       case _ShareScope.links:
         return grouped(
-          c.shares.where((s) => s.shareType == ShareType.publicLink),
+          c.byMeShares.where((s) => s.shareType == ShareType.publicLink),
         );
     }
   }
@@ -205,9 +250,9 @@ class _SharesViewState extends State<SharesView> {
   /// beside it is yours); under `By you` and `Links` *you're* the owner, so
   /// it names the recipient instead - the permission beside it is what
   /// *they* can do, not what you can.
-  String _whoLabel(_ShareEntry entry) {
-    if (_scope == _ShareScope.withYou) return entry.share.ownerDisplayName;
-    if (_scope == _ShareScope.links) {
+  String _whoLabel(_ShareEntry entry, _ShareScope scope) {
+    if (scope == _ShareScope.withYou) return entry.share.ownerDisplayName;
+    if (scope == _ShareScope.links) {
       return entry.multiple ? '${entry.all.length} links' : 'Public link';
     }
     final names = {
@@ -218,13 +263,13 @@ class _SharesViewState extends State<SharesView> {
         : '${names.take(2).join(', ')} +${names.length - 2}';
   }
 
-  IconData _entryIcon(_ShareEntry entry) {
+  IconData _entryIcon(_ShareEntry entry, _ShareScope scope) {
     if (!entry.multiple) return _shareTypeIcon(entry.share.shareType);
-    return _scope == _ShareScope.links ? LucideIcons.link : LucideIcons.users;
+    return scope == _ShareScope.links ? LucideIcons.link : LucideIcons.users;
   }
 
-  String _emptyMessage() {
-    switch (_scope) {
+  String _emptyMessage(_ShareScope scope) {
+    switch (scope) {
       case _ShareScope.withYou:
         return 'Nothing has been shared with you';
       case _ShareScope.byYou:
@@ -234,11 +279,12 @@ class _SharesViewState extends State<SharesView> {
     }
   }
 
-  void _selectScope(SharesController c, _ShareScope scope) {
-    setState(() => _scope = scope);
-    // No-ops (see `SharesController.setSharedWithMe`) when moving between
-    // `byYou`/`links`, which share the same `sharedWithMe: false` fetch.
-    c.setSharedWithMe(scope == _ShareScope.withYou);
+  void _selectScope(_ShareScope scope) {
+    _pageController.animateToPage(
+      scope.index,
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   // A lazily-built `SliverList`, not `NooGroupedList` (its own `Column`
@@ -247,7 +293,11 @@ class _SharesViewState extends State<SharesView> {
   // account's full share list built eagerly up front). Each row still
   // reads as one continuous radius-20 card via per-row corner rounding +
   // a 1px `line` divider.
-  Widget _buildMobileList(BuildContext context, List<_ShareEntry> shares) {
+  Widget _buildMobileList(
+    BuildContext context,
+    List<_ShareEntry> shares,
+    _ShareScope scope,
+  ) {
     final colors = context.nooColors;
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: NooSpace.sm),
@@ -261,10 +311,10 @@ class _SharesViewState extends State<SharesView> {
               isDirectory: share.isFolder,
             ),
             name: share.name,
-            meta: '${_whoLabel(entry)} · ${_entryPermission(entry)}',
+            meta: '${_whoLabel(entry, scope)} · ${_entryPermission(entry)}',
             iosStyle: NooLayout.iosStyle(context),
             onTap: () => _openShareSheet(context, share),
-            trailing: Icon(_entryIcon(entry), size: 16),
+            trailing: Icon(_entryIcon(entry, scope), size: 16),
           );
           final isFirst = index == 0;
           final isLast = index == shares.length - 1;
@@ -289,7 +339,11 @@ class _SharesViewState extends State<SharesView> {
     );
   }
 
-  Widget _buildDesktopTable(BuildContext context, List<_ShareEntry> shares) {
+  Widget _buildDesktopTable(
+    BuildContext context,
+    List<_ShareEntry> shares,
+    _ShareScope scope,
+  ) {
     return SliverPadding(
       padding: const EdgeInsets.symmetric(
         horizontal: NooSpace.xl,
@@ -299,9 +353,7 @@ class _SharesViewState extends State<SharesView> {
         delegate: SliverChildBuilderDelegate((context, index) {
           if (index == 0) {
             return NooFileTableHeader(
-              col2Label: _scope == _ShareScope.withYou
-                  ? 'Owner'
-                  : 'Shared with',
+              col2Label: scope == _ShareScope.withYou ? 'Owner' : 'Shared with',
               col3Label: 'Permission',
             );
           }
@@ -313,7 +365,7 @@ class _SharesViewState extends State<SharesView> {
               isDirectory: share.isFolder,
             ),
             name: share.name,
-            col2: _whoLabel(entry),
+            col2: _whoLabel(entry, scope),
             col3: _entryPermission(entry),
             onTap: () => _openShareSheet(context, share),
           );
@@ -334,7 +386,7 @@ class _SharesViewState extends State<SharesView> {
     NextcloudShare share,
   ) async {
     final files = context.read<FilesController>();
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = NooMessenger.of(context);
     final item = await files.fetchItemAtPath(share.path);
     if (!context.mounted) return;
     if (item == null) {

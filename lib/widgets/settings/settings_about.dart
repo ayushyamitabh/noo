@@ -3,6 +3,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../noo/lists/noo_settings_row.dart';
 import 'settings_section.dart';
+import '../noo/overlays/noo_messenger.dart';
 
 class SettingsAboutSection extends StatefulWidget {
   const SettingsAboutSection({super.key});
@@ -24,7 +25,7 @@ class _SettingsAboutSectionState extends State<SettingsAboutSection> {
       }
     } catch (_) {}
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      NooMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not open link. Please try again.')),
       );
     }

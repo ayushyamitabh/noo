@@ -13,6 +13,7 @@ import '../noo/files/noo_file_kind.dart';
 import '../noo/files/noo_file_tile.dart';
 import '../noo/lists/noo_grouped_list.dart';
 import '../synced_header_scaffold.dart' show formatBytes;
+import '../noo/overlays/noo_messenger.dart';
 
 /// File version history - a synthetic "Current version" row (from the
 /// item's own metadata) followed by whatever the DAV versions endpoint
@@ -43,7 +44,7 @@ class _DetailsVersionsTabState extends State<DetailsVersionsTab> {
 
   Future<void> _restore(NextcloudFileVersion version) async {
     final ops = context.read<ItemOperations>();
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = NooMessenger.of(context);
     final success = await ops.restoreFileVersion(
       widget.item,
       version.versionLabel,
@@ -62,7 +63,7 @@ class _DetailsVersionsTabState extends State<DetailsVersionsTab> {
 
   Future<void> _download(NextcloudFileVersion version) async {
     final ops = context.read<ItemOperations>();
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = NooMessenger.of(context);
     try {
       final tempDir = await getTemporaryDirectory();
       final tempPath = p.join(
@@ -239,7 +240,10 @@ class _RowIconButton extends StatelessWidget {
           width: 32,
           height: 32,
           alignment: Alignment.center,
-          decoration: BoxDecoration(color: colors.surface2, shape: BoxShape.circle),
+          decoration: BoxDecoration(
+            color: colors.surface2,
+            shape: BoxShape.circle,
+          ),
           child: Icon(icon, size: 16, color: colors.fg2),
         ),
       ),

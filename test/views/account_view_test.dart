@@ -147,7 +147,6 @@ void main() {
     'Files cache',
     'Appearance',
     'Tabs',
-    'Action bar',
     'Swipe on a file',
     'About',
   ];

@@ -144,7 +144,9 @@ class AccountStore {
     bool signedOut,
   ) async {
     final current = loadSignedOut(prefs);
-    final changed = signedOut ? current.add(accountId) : current.remove(accountId);
+    final changed = signedOut
+        ? current.add(accountId)
+        : current.remove(accountId);
     if (!changed) return;
     await prefs.setStringList(_prefSignedOutAccounts, current.toList());
   }

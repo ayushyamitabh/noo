@@ -79,8 +79,8 @@ void main() {
 
   testWidgets('Links says "Public link"', (tester) async {
     final app = await pump(tester);
-    await tester.tap(find.text('Links'));
-    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.text('Links').hitTestable());
+    await tester.pumpAndSettle();
     expect(find.text('Public link · Can view'), findsOneWidget);
     await app.finish(tester);
   });
@@ -89,8 +89,8 @@ void main() {
     tester,
   ) async {
     final app = await pump(tester);
-    await tester.tap(find.text('With you'));
-    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.text('With you').hitTestable());
+    await tester.pumpAndSettle();
     expect(find.text('Jamie Rivera · Can edit'), findsOneWidget);
     await app.finish(tester);
   });
@@ -103,8 +103,8 @@ void main() {
     expect(find.text('Owner'), findsNothing);
     expect(find.text('Ana'), findsOneWidget);
 
-    await tester.tap(find.text('With you'));
-    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.text('With you').hitTestable());
+    await tester.pumpAndSettle();
     expect(find.text('Owner'), findsOneWidget);
     expect(find.text('Jamie Rivera'), findsOneWidget);
     await app.finish(tester);
@@ -174,8 +174,8 @@ void main() {
         share('/Flyers', ShareType.publicLink, permissions: 3),
         share('/Poster', ShareType.publicLink),
       ]);
-      await tester.tap(find.text('Links'));
-      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(find.text('Links').hitTestable());
+      await tester.pumpAndSettle();
       expect(find.text('Flyers'), findsOneWidget);
       expect(find.text('2 links · Mixed access'), findsOneWidget);
       expect(find.text('Public link · Can view'), findsOneWidget);

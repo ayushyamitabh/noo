@@ -46,7 +46,11 @@ class SettingsFilesCacheSection extends StatelessWidget {
             label: Text(_cachePolicyLabel(policy)),
             subtitle: Text(_cachePolicyDescription(policy)),
             trailing: policy == files.cachePolicy
-                ? Icon(LucideIcons.check, size: 18, color: context.nooColors.accentText)
+                ? Icon(
+                    LucideIcons.check,
+                    size: 18,
+                    color: context.nooColors.accentText,
+                  )
                 : null,
             onTap: () {
               files.setCachePolicy(policy);
@@ -63,7 +67,8 @@ class SettingsFilesCacheSection extends StatelessWidget {
 
     return SettingsSection(
       title: 'Files cache',
-      subtitle: 'How often folder listings and synced files refresh from the server',
+      subtitle:
+          'How often folder listings and synced files refresh from the server',
       children: [
         NooSettingsRow(
           icon: LucideIcons.database,
@@ -98,15 +103,24 @@ class _CacheIntervalRow extends StatelessWidget {
     return Material(
       color: colors.surface,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: NooSpace.md, vertical: 8),
+        padding: const EdgeInsets.symmetric(
+          horizontal: NooSpace.md,
+          vertical: 8,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Refresh interval', style: NooText.bodyL.copyWith(color: colors.fg1)),
-                Text('$minutes min', style: NooText.meta.copyWith(color: colors.fg3)),
+                Text(
+                  'Refresh interval',
+                  style: NooText.bodyL.copyWith(color: colors.fg1),
+                ),
+                Text(
+                  '$minutes min',
+                  style: NooText.meta.copyWith(color: colors.fg3),
+                ),
               ],
             ),
             SliderTheme(
@@ -126,15 +140,16 @@ class _CacheIntervalRow extends StatelessWidget {
               ),
             ),
             if (Theme.of(context).platform == TargetPlatform.iOS ||
-                (Theme.of(context).platform == TargetPlatform.android && minutes < 15))
+                (Theme.of(context).platform == TargetPlatform.android &&
+                    minutes < 15))
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
                   Theme.of(context).platform == TargetPlatform.iOS
                       ? 'iOS decides when background sync runs; the refresh '
-                          'interval is a request, not a guaranteed schedule.'
+                            'interval is a request, not a guaranteed schedule.'
                       : 'While the app is closed, synced files refresh at most every '
-                          '15 min (an Android limit).',
+                            '15 min (an Android limit).',
                   style: NooText.meta.copyWith(color: colors.fg3),
                 ),
               ),

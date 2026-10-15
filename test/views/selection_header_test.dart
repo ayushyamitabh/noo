@@ -29,7 +29,7 @@ void main() {
     }
   }
 
-  testWidgets('filters stay while the action bar slides in above them', (
+  testWidgets('filters stay while the action bar slides in below them', (
     tester,
   ) async {
     final app = await pumpFiles(tester);
@@ -41,12 +41,12 @@ void main() {
     await select(tester);
     expect(find.text('1 selected'), findsOneWidget);
     expect(find.text('Filters'), findsOneWidget);
-    // The bar is above the filter row; the filter row shifted down by the
-    // bar's height rather than disappearing.
+    // The filter row stays put at the top; the bar sits below it, at the
+    // top of the list.
     final bar = tester.getRect(find.text('1 selected'));
     final filters = tester.getRect(find.text('Filters'));
-    expect(bar.bottom, lessThan(filters.top));
-    expect(filters.top - filtersBefore.top, closeTo(56, 1));
+    expect(bar.top, greaterThan(filters.bottom));
+    expect(filters.top, filtersBefore.top);
 
     // Clearing the selection slides the bar away again and the filters
     // return to where they were.

@@ -34,6 +34,7 @@ import '../widgets/selection_bar_overlay.dart';
 import '../widgets/tabs/tab_state_slivers.dart';
 import 'file_viewer_screen.dart';
 import 'move_copy_destination_picker.dart';
+import '../widgets/noo/overlays/noo_messenger.dart';
 
 /// The type chips PhotosController actually has data for (DESIGN_SYSTEM.md
 /// section 4 also lists "Camera", but there's no camera-upload/EXIF source
@@ -104,7 +105,7 @@ class _PhotosViewState extends State<PhotosView> {
     NextcloudItem item,
   ) {
     if (!pick.itemMatchesPickFilter(item)) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      NooMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("This app can't accept this file type"),
           behavior: SnackBarBehavior.floating,
@@ -277,7 +278,13 @@ class _PhotosViewState extends State<PhotosView> {
             ),
             child: controlsRow,
           ),
-          selectionBar: _isSelecting && !selectionAtBottom
+          selectionBar: _isSelecting && !selectionAtBottom && !keepFilters
+              ? _buildSelectionBar(context, pick, selectedItems)
+              : null,
+        ),
+      if (keepFilters && !selectionAtBottom)
+        PinnedSelectionBar(
+          bar: _isSelecting
               ? _buildSelectionBar(context, pick, selectedItems)
               : null,
         ),
@@ -747,7 +754,7 @@ class _PhotosViewState extends State<PhotosView> {
     List<NextcloudItem> items,
   ) async {
     final ops = context.read<ItemOperations>();
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = NooMessenger.of(context);
     messenger.showSnackBar(
       const SnackBar(
         content: Text('Creating share link(s)…'),
@@ -797,7 +804,7 @@ class _PhotosViewState extends State<PhotosView> {
   ) async {
     final session = context.read<SessionController>();
     _clearSelection();
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = NooMessenger.of(context);
     try {
       await DownloadService.startDownload(session, items);
       messenger.showSnackBar(
@@ -852,7 +859,7 @@ class _PhotosViewState extends State<PhotosView> {
     if (confirmed != true || !context.mounted) return;
 
     final ops = context.read<ItemOperations>();
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = NooMessenger.of(context);
     var succeeded = 0;
     for (final item in items) {
       final success = await ops.deleteItem(item.path);
@@ -879,7 +886,7 @@ class _PhotosViewState extends State<PhotosView> {
     );
     if (!mounted || result == null) return;
     _clearSelection();
-    ScaffoldMessenger.of(context).showSnackBar(
+    NooMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           '${copy ? 'Copied' : 'Moved'} ${result.succeeded} of ${items.length} item(s)',

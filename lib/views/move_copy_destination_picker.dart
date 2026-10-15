@@ -19,6 +19,7 @@ import '../widgets/noo/nav/noo_top_bar.dart';
 import '../widgets/noo/nav/noo_toolbar.dart';
 import '../widgets/noo/noo_layout.dart';
 import '../widgets/tabs/tab_state_slivers.dart';
+import '../widgets/noo/overlays/noo_messenger.dart';
 
 /// Destination-folder browser for moving/copying [items] (a multi-select
 /// batch from Files or Photos). Visually mirrors `ShareUploadView`'s
@@ -137,7 +138,7 @@ class _MoveCopyDestinationPickerState extends State<MoveCopyDestinationPicker> {
 
     if (result.blockedReason != null) {
       setState(() => _isSubmitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
+      NooMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(result.blockedReason!),
           behavior: SnackBarBehavior.floating,

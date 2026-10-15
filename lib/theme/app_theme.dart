@@ -1,6 +1,8 @@
+import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'design_tokens.dart';
+import '../widgets/noo/overlays/sheet_zoom.dart';
 
 class AppTheme {
   static const Color defaultNextcloudBlue = Color(0xFF0082C9);
@@ -25,8 +27,18 @@ class AppTheme {
   // on top of the manifest's enableOnBackInvokedCallback flag — for the
   // system back gesture to animate/scale the current screen away instead of
   // popping instantly.
+  //
+  // Every page is also wrapped in [ZoomOutOnSheet], so the page shrinks behind
+  // an open bottom sheet.
   static const _pageTransitionsTheme = PageTransitionsTheme(
-    builders: {TargetPlatform.android: PredictiveBackPageTransitionsBuilder()},
+    builders: {
+      TargetPlatform.android: _ZoomAwareTransitions(
+        PredictiveBackPageTransitionsBuilder(),
+      ),
+      TargetPlatform.iOS: _ZoomAwareTransitions(
+        CupertinoPageTransitionsBuilder(),
+      ),
+    },
   );
 
   // Flutter's Slider defaults to the older "2023" Material 3 look even with
@@ -191,4 +203,31 @@ class AppTheme {
       ),
     );
   }
+}
+
+/// Delegates to [base] and wraps the page in [ZoomOutOnSheet].
+class _ZoomAwareTransitions extends PageTransitionsBuilder {
+  final PageTransitionsBuilder base;
+  const _ZoomAwareTransitions(this.base);
+
+  @override
+  DelegatedTransitionBuilder? get delegatedTransition =>
+      base.delegatedTransition;
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) => ZoomOutOnSheet(
+    child: base.buildTransitions<T>(
+      route,
+      context,
+      animation,
+      secondaryAnimation,
+      child,
+    ),
+  );
 }

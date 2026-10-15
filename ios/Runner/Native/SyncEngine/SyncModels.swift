@@ -13,6 +13,8 @@ struct SyncRemoteEntry: Equatable {
   let lastModified: Int64
   let size: Int64
   let isFolder: Bool
+  /// `nc:mount-type` is `external` - only a mount's root folder carries it.
+  var isExternal: Bool = false
 }
 
 /// What the last successful sync recorded for a file - the baseline a later
@@ -64,6 +66,10 @@ struct SyncAccountConfig: Codable, Equatable {
   var intervalMinutes: Int?
   /// Whether automatic runs may post a summary notification.
   var notify: Bool
+  /// The separate "Sync external storage" setting: whether syncing from the
+  /// account root also mirrors external storage. Optional so configs saved
+  /// before it existed still decode (nil = off).
+  var includeExternal: Bool?
 }
 
 struct SyncRunSummary: Equatable {
@@ -71,6 +77,8 @@ struct SyncRunSummary: Equatable {
   var uploaded = 0
   var deleted = 0
   var conflicts: [SyncConflict] = []
+  /// Set when the run stopped because the downloads wouldn't fit on the device.
+  var storageShortfall: SyncStatusBus.StorageShortfall?
 
   var changedAnything: Bool { downloaded > 0 || uploaded > 0 || deleted > 0 }
 }

@@ -25,7 +25,9 @@ class DetailsInfoTab extends StatelessWidget {
     ];
 
     return NooGroupedList(
-      children: [for (final row in rows) _InfoRow(label: row.$1, value: row.$2)],
+      children: [
+        for (final row in rows) _InfoRow(label: row.$1, value: row.$2),
+      ],
     );
   }
 }

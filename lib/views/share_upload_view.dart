@@ -21,6 +21,7 @@ import '../widgets/noo/nav/noo_toolbar.dart';
 import '../widgets/noo/noo_layout.dart';
 import '../widgets/shell/shell_common.dart';
 import '../widgets/tabs/tab_state_slivers.dart';
+import '../widgets/noo/overlays/noo_messenger.dart';
 
 /// Shown when another app shares one or more files to Noo (Android's
 /// "Share to..." sheet). Lets the user browse to a destination folder,
@@ -65,7 +66,7 @@ class _ShareUploadViewState extends State<ShareUploadView> {
   }
 
   Future<void> _uploadHere(SessionController session) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = NooMessenger.of(context);
     final navigator = Navigator.of(context);
     final files = context.read<FilesController>();
     final settings = context.read<SettingsController>();

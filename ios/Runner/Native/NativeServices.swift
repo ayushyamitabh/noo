@@ -138,6 +138,8 @@ enum NativeServices {
             let force = args["force"] as? Bool ?? true
             coordinator.syncNow(try syncConfig(args), force: force, wifiOnly: args["wifiOnly"] as? Bool)
           }
+        case "cancelSync":
+          handle(call, result) { _ in coordinator.cancelSync(accountId: try string(args, "accountId")) }
         case "getSyncStatus":
           let accountId = args["accountId"] as? String
           syncStatusQueue.async {
@@ -174,7 +176,8 @@ enum NativeServices {
             return result(FlutterError(code: "bad_args", message: "Missing required arguments", details: nil))
           }
           Task {
-            await coordinator.removeLocalSync(accountId: accountId, path: path)
+            await coordinator.removeLocalSync(
+              accountId: accountId, path: path, deleteFiles: args["deleteFiles"] as? Bool ?? true)
             await MainActor.run { result(nil) }
           }
         default:
@@ -204,7 +207,8 @@ enum NativeServices {
       accountId: try string(args, "accountId"), serverUrl: try string(args, "serverUrl"),
       username: try string(args, "username"), authHeader: try string(args, "authHeader"),
       folders: folders, wifiOnly: args["wifiOnly"] as? Bool ?? true,
-      intervalMinutes: args["intervalMinutes"] as? Int, notify: args["notify"] as? Bool ?? true)
+      intervalMinutes: args["intervalMinutes"] as? Int, notify: args["notify"] as? Bool ?? true,
+      includeExternal: args["includeExternal"] as? Bool)
   }
 
   // MARK: - Account for the Share Extension

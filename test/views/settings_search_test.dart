@@ -125,6 +125,10 @@ void main() {
       expect(find.text('Search results'), findsOneWidget);
       await tester.tap(resultRow('AMOLED black'));
       await tester.pumpAndSettle();
+      // The row is below the fold now; the reveal scrolls to it after the
+      // page settles.
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
 
       // Same screen: the search is cleared and Appearance is showing, with
       // the option on screen.

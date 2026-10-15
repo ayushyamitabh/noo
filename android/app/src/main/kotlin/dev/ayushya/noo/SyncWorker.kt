@@ -46,6 +46,16 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
         // user-initiated run (force) always shows progress.
         const val KEY_NOTIFY = "notify"
 
+        // The separate "Sync external storage" setting: whether "Sync
+        // everything" (a walk from the account root) also mirrors external
+        // storage mounts. Folders the user picked explicitly always sync.
+        const val KEY_INCLUDE_EXTERNAL = "includeExternal"
+
+        // Finished transfers are flushed to the on-disk state at most this
+        // often during a run, so the app's "synced" badges and the Offline
+        // list can follow a long sync instead of jumping at the very end.
+        private const val STATE_FLUSH_INTERVAL_MS = 3_000L
+
         // Even when a root's etag hasn't changed, walk it in full at least
         // this often: etag propagation isn't reliable everywhere (external
         // storage mounts in particular), so this bounds how stale a mirror
@@ -99,24 +109,40 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
     private var showProgressNotifications = true
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+        // Noted before waiting for the lock, so a cancel that arrives while
+        // this run is queued behind another one is seen below.
+        val generation = SyncEngine.cancelGeneration.get()
         // One sync at a time, app-wide - see SyncEngine.syncLock. A run that
         // has to wait just starts once the current one finishes.
-        SyncEngine.syncLock.withLock { performSync() }
+        SyncEngine.syncLock.withLock { performSync(generation) }
     }
 
-    private suspend fun performSync(): Result = withContext(Dispatchers.IO) {
+    private suspend fun performSync(generation: Int): Result = withContext(Dispatchers.IO) {
+        // Cancelled while it was waiting its turn: don't start.
+        if (SyncEngine.cancelGeneration.get() != generation) return@withContext Result.success()
         val accountId = inputData.getString(KEY_ACCOUNT_ID) ?: return@withContext Result.failure()
         val serverUrl = inputData.getString(KEY_SERVER_URL) ?: return@withContext Result.failure()
         val username = inputData.getString(KEY_USERNAME) ?: return@withContext Result.failure()
         val authHeader = inputData.getString(KEY_AUTH_HEADER) ?: return@withContext Result.failure()
         val foldersJson = inputData.getString(KEY_FOLDERS) ?: "[]"
         val force = inputData.getBoolean(KEY_FORCE, false)
+        val includeExternal = inputData.getBoolean(KEY_INCLUDE_EXTERNAL, false)
         notifyAccountId = accountId
         notifyUsername = username
         showProgressNotifications = force || inputData.getBoolean(KEY_NOTIFY, true)
         val folders = (0 until JSONArray(foldersJson).length()).map { JSONArray(foldersJson).getString(it) }
         Log.d(TAG, "doWork: account=$accountId server=$serverUrl user=$username folders=$folders")
         if (folders.isEmpty()) return@withContext Result.success()
+
+        val isCancelled = { SyncEngine.cancelGeneration.get() != generation || isStopped }
+        fun checkCancelled() {
+            if (isCancelled()) throw SyncEngine.SyncCancelledException()
+        }
+        var lastStateFlush = System.currentTimeMillis()
+        var cancelled = false
+        // Everything the account-root walk listed. A synced path inside it was
+        // just handled by that walk, so it isn't walked a second time.
+        val walkedPaths = mutableSetOf<String>()
 
         val syncRoot = SyncEngine.syncRoot(applicationContext, accountId)
         val state = SyncEngine.loadState(applicationContext, accountId).toMutableMap()
@@ -136,13 +162,18 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
         if (force) notifyProgress("Checking for changes…")
         try {
             for (path in folders) {
+                checkCancelled()
                 try {
                     // A configured path can be a file or a folder now - check
                     // which before deciding whether to walk it recursively or
                     // just diff the single item.
+                    if (path.trimEnd('/') in walkedPaths) {
+                        Log.d(TAG, "skip $path: already covered by the account-root walk")
+                        continue
+                    }
                     val self = SyncEngine.propfindSelf(serverUrl, username, authHeader, path)
                     val pathPrefix = path.trimEnd('/') + "/"
-                    val priorFileIdsForPath = state.filterValues {
+                    var priorFileIdsForPath = state.filterValues {
                         it.relPath == path.trimStart('/') || it.relPath.startsWith(pathPrefix.trimStart('/'))
                     }.keys
 
@@ -167,25 +198,52 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
                     // it from the synced list instead of leaving a dead entry.
                     SyncEngine.setRootMissing(applicationContext, accountId, path, self == null)
 
+                    // External mounts a walk from the account root leaves out:
+                    // what's on the device under them wasn't deleted on the
+                    // server, it just isn't part of this walk (it's either
+                    // synced by its own path, or left on the device untouched).
+                    val skippedExternal = mutableListOf<String>()
                     val entries = when {
                         self == null -> emptyList()
-                        self.isFolder -> SyncEngine.walkRemoteTree(serverUrl, username, authHeader, path)
+                        self.isFolder -> SyncEngine.walkRemoteTree(
+                            serverUrl, username, authHeader, path, includeExternal, isCancelled,
+                            skippedExternal::add,
+                        )
                         else -> listOf(self)
+                    }
+                    if (skippedExternal.isNotEmpty()) {
+                        val skippedPrefixes = skippedExternal.map { it.trim('/') + "/" }
+                        priorFileIdsForPath = priorFileIdsForPath.filter { id ->
+                            val rel = state[id]?.relPath ?: return@filter true
+                            skippedPrefixes.none { rel.startsWith(it) }
+                        }.toSet()
+                    }
+                    if (path.trim('/').isEmpty()) {
+                        walkedPaths.addAll(entries.map { it.path.trimEnd('/') })
                     }
                     var pathClean = true
 
                     val actions = SyncEngine.diffFolder(entries, state, priorFileIdsForPath, syncRoot)
+
+                    // Enough room for what's about to be downloaded? Checked before
+                    // this path's first transfer, so a "no" leaves nothing half-done.
+                    val needed = actions.sumOf { (it as? SyncEngine.SyncAction.Download)?.entry?.size ?: 0L }
+                    val available = syncRoot.usableSpace
+                    if (needed > 0 && needed + SyncEngine.STORAGE_RESERVE_BYTES > available) {
+                        throw SyncEngine.InsufficientStorageException(needed, available)
+                    }
                     totalTransfers += actions.count {
                         it is SyncEngine.SyncAction.Download || it is SyncEngine.SyncAction.Upload
                     }
                     for (action in actions) {
+                        checkCancelled()
                         when (action) {
                             is SyncEngine.SyncAction.Download -> {
                                 val relPath = action.entry.path.removePrefix("/")
                                 notifyProgress(relPath.substringAfterLast('/'))
                                 SyncStatusBus.markFileSyncing(accountId, action.entry.fileId, true)
                                 val dest = File(syncRoot, relPath)
-                                if (SyncEngine.downloadFile(serverUrl, username, authHeader, action.entry.path, dest)) {
+                                if (SyncEngine.downloadFile(serverUrl, username, authHeader, action.entry.path, dest, isCancelled)) {
                                     state[action.entry.fileId] = SyncEngine.FileState(
                                         relPath = relPath,
                                         etag = action.entry.etag,
@@ -196,6 +254,10 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
                                     downloaded++
                                 } else {
                                     pathClean = false
+                                }
+                                if (System.currentTimeMillis() - lastStateFlush >= STATE_FLUSH_INTERVAL_MS) {
+                                    SyncEngine.saveState(applicationContext, accountId, state)
+                                    lastStateFlush = System.currentTimeMillis()
                                 }
                                 SyncStatusBus.markFileSyncing(accountId, action.entry.fileId, false)
                                 completedTransfers++
@@ -219,6 +281,10 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
                                     uploaded++
                                 } else {
                                     pathClean = false
+                                }
+                                if (System.currentTimeMillis() - lastStateFlush >= STATE_FLUSH_INTERVAL_MS) {
+                                    SyncEngine.saveState(applicationContext, accountId, state)
+                                    lastStateFlush = System.currentTimeMillis()
                                 }
                                 SyncStatusBus.markFileSyncing(accountId, action.fileId, false)
                                 completedTransfers++
@@ -271,6 +337,16 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
                   Log.w(TAG, "skipping $path this run: ${e.message}")
                 }
             }
+        } catch (e: SyncEngine.InsufficientStorageException) {
+            // Announced before "syncing" is switched off below, so the app sees
+            // the reason together with the end of the run.
+            Log.w(TAG, "not enough storage: needs ${e.needed}, ${e.available} available")
+            SyncStatusBus.setStorageShortfall(accountId, e.needed, e.available)
+            notifyLowStorage(e.needed, e.available)
+        } catch (e: SyncEngine.SyncCancelledException) {
+            // Stopped on request: everything finished so far is kept (saved
+            // below); the root that was cut short is simply walked again next time.
+            cancelled = true
         } finally {
             markers.keys.retainAll(folders.toSet())
             SyncEngine.saveRootMarkers(applicationContext, accountId, markers)
@@ -289,7 +365,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
 
         Log.d(
             TAG,
-            "doWork done: downloaded=$downloaded uploaded=$uploaded deleted=$deleted conflicts=${conflicts.size}",
+            "doWork ${if (cancelled) "cancelled" else "done"}: downloaded=$downloaded uploaded=$uploaded deleted=$deleted conflicts=${conflicts.size}",
         )
 
         if ((downloaded > 0 || uploaded > 0 || deleted > 0) && showProgressNotifications) {
@@ -353,6 +429,26 @@ class SyncWorker(appContext: Context, params: WorkerParameters) :
             builder.setProgress(0, 0, true)
         }
         manager().notify(summaryNotificationId(notifyAccountId), builder.build())
+    }
+
+    /// Always posted, even for a quiet background run - the sync can't
+    /// continue until the user frees space or syncs less.
+    private fun notifyLowStorage(needed: Long, available: Long) {
+        createChannel()
+        val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_notify_error)
+            .setContentTitle("Not enough storage to sync · $notifyUsername")
+            .setContentText("Needs ${formatBytes(needed)}, only ${formatBytes(available)} free on this device.")
+            .setAutoCancel(true)
+            .setSilent(true)
+            .build()
+        manager().notify(summaryNotificationId(notifyAccountId), notification)
+    }
+
+    private fun formatBytes(bytes: Long): String = when {
+        bytes >= 1L shl 30 -> String.format(java.util.Locale.US, "%.1f GB", bytes / (1L shl 30).toDouble())
+        bytes >= 1L shl 20 -> String.format(java.util.Locale.US, "%.0f MB", bytes / (1L shl 20).toDouble())
+        else -> String.format(java.util.Locale.US, "%.0f KB", bytes / 1024.0)
     }
 
     private fun notifySummary(downloaded: Int, uploaded: Int, deleted: Int) {

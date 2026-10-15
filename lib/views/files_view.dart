@@ -50,6 +50,7 @@ import '../widgets/tabs/tab_state_slivers.dart';
 import '../widgets/synced_header_scaffold.dart' show formatBytes;
 import 'file_viewer_screen.dart';
 import 'move_copy_destination_picker.dart';
+import '../widgets/noo/overlays/noo_messenger.dart';
 
 /// The Files tab - and, with [offline] set, the Offline tab, which is the
 /// same view over the device-sync mirror instead of the server: the Files
@@ -80,8 +81,8 @@ class FilesView extends StatefulWidget {
   State<FilesView> createState() => _FilesViewState();
 }
 
-/// A collapsible section header in the Files list ("External storage",
-/// "Shared with me"): icon, label, item count and a chevron.
+/// A collapsible section header in the Files list ("Cloud files", "External
+/// storage", "Shared with me"): icon, label, item count and a chevron.
 class _SectionHeader extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -367,7 +368,12 @@ class _FilesViewState extends State<FilesView> {
   /// Whether the "Shared with me" section is open.
   bool _sharedExpanded = true;
 
+  /// Whether the "Cloud files" section (the regular items, once external /
+  /// shared sections exist beside them) is open.
+  bool _cloudExpanded = true;
+
   /// The section headers' keys, so the quick-jump chips can scroll to them.
+  final _cloudKey = GlobalKey();
   final _externalKey = GlobalKey();
   final _sharedKey = GlobalKey();
   int _lastPathDepth = 1;
@@ -495,7 +501,7 @@ class _FilesViewState extends State<FilesView> {
       return;
     }
     if (!pick.itemMatchesPickFilter(item)) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      NooMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("This app can't accept this file type"),
           behavior: SnackBarBehavior.floating,
@@ -584,12 +590,15 @@ class _FilesViewState extends State<FilesView> {
           label: 'Rename',
           onTap: () => _renameItem(selected.single),
         ),
-      SelectionAction(
-        kind: SelectionActionKind.sync,
-        icon: LucideIcons.hardDriveDownload,
-        label: allSynced ? 'Stop syncing to device' : 'Sync to device',
-        onTap: () => _toggleSyncSelected(context, sync, selected),
-      ),
+      if (_offline)
+        ..._offlineSyncActions(context, sync, selected)
+      else
+        SelectionAction(
+          kind: SelectionActionKind.sync,
+          icon: LucideIcons.hardDriveDownload,
+          label: allSynced ? 'Stop syncing to device' : 'Sync to device',
+          onTap: () => _toggleSyncSelected(context, sync, selected),
+        ),
       if (selected.length == 1)
         SelectionAction(
           kind: SelectionActionKind.details,
@@ -601,6 +610,62 @@ class _FilesViewState extends State<FilesView> {
     return orderSelectionActions(
       actions,
       context.read<SettingsController>().selectionActionOrder,
+    );
+  }
+
+  /// The Offline tab's sync action. Everything listed there is already on
+  /// the device, so "Sync to device" makes no sense: a path that was picked
+  /// by hand can be un-synced, something left on the device that nothing
+  /// syncs (e.g. after "Sync everything" was turned off) can be removed, and
+  /// something kept by a synced parent folder or "Sync everything" has no
+  /// per-item action (it would only be downloaded again).
+  List<SelectionAction> _offlineSyncActions(
+    BuildContext context,
+    SyncStatusController sync,
+    List<NextcloudItem> selected,
+  ) {
+    if (selected.every((i) => sync.isPathSynced(i.path))) {
+      return [
+        SelectionAction(
+          kind: SelectionActionKind.sync,
+          icon: LucideIcons.hardDriveDownload,
+          label: 'Stop syncing to device',
+          onTap: () => _toggleSyncSelected(context, sync, selected),
+        ),
+      ];
+    }
+    final leftOver = [
+      for (final item in selected)
+        if (!sync.isPathCoveredBySync(item.path)) item,
+    ];
+    if (leftOver.isEmpty) return const [];
+    return [
+      SelectionAction(
+        kind: SelectionActionKind.sync,
+        icon: LucideIcons.trash2,
+        label: 'Remove from device',
+        onTap: () => _removeFromDevice(context, sync, leftOver),
+      ),
+    ];
+  }
+
+  Future<void> _removeFromDevice(
+    BuildContext context,
+    SyncStatusController sync,
+    List<NextcloudItem> items,
+  ) async {
+    final messenger = NooMessenger.of(context);
+    final browser = _browserOf(context, listen: false);
+    _clearSelection();
+    for (final item in items) {
+      await sync.removeDeviceCopy(item.path);
+    }
+    await browser.reload();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Removed ${items.length} item(s) from this device'),
+        behavior: SnackBarBehavior.floating,
+      ),
     );
   }
 
@@ -641,7 +706,7 @@ class _FilesViewState extends State<FilesView> {
     if (newName == null || newName.isEmpty || newName == item.name) return;
     if (!mounted) return;
 
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = NooMessenger.of(context);
     final ops = context.read<ItemOperations>();
     final success = await ops.renameItem(item, newName);
     _clearSelection();
@@ -660,7 +725,7 @@ class _FilesViewState extends State<FilesView> {
     List<NextcloudItem> items,
   ) async {
     final ops = context.read<ItemOperations>();
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = NooMessenger.of(context);
     messenger.showSnackBar(
       const SnackBar(
         content: Text('Creating share link(s)…'),
@@ -813,10 +878,7 @@ class _FilesViewState extends State<FilesView> {
           Row(
             children: [
               Expanded(
-                child: FilesControlsRow(
-                  folderPath: browser.currentFolderPath,
-                  showStorageScope: !_offline,
-                ),
+                child: FilesControlsRow(folderPath: browser.currentFolderPath),
               ),
               if (_offline) ...[
                 const SizedBox(width: NooSpace.xs),
@@ -951,8 +1013,26 @@ class _FilesViewState extends State<FilesView> {
     final mainItems = browser.items
         .where((i) => !externalItems.contains(i) && !sharedItems.contains(i))
         .toList();
+    // The regular items only get a header once other sections sit beside
+    // them - a lone list needs no "Cloud files" label.
+    final showCloudHeader =
+        mainItems.isNotEmpty &&
+        (externalItems.isNotEmpty || sharedItems.isNotEmpty);
+    final mainShown =
+        mainItems.isNotEmpty && (!showCloudHeader || _cloudExpanded);
     final bodySlivers = <Widget>[
-      if (mainItems.isNotEmpty) ...itemSlivers(mainItems, section: 'main'),
+      if (showCloudHeader)
+        SliverToBoxAdapter(
+          child: _SectionHeader(
+            key: _cloudKey,
+            icon: LucideIcons.cloud,
+            label: 'Cloud files',
+            count: mainItems.length,
+            expanded: _cloudExpanded,
+            onTap: () => setState(() => _cloudExpanded = !_cloudExpanded),
+          ),
+        ),
+      if (mainShown) ...itemSlivers(mainItems, section: 'main'),
       if (externalItems.isNotEmpty) ...[
         SliverToBoxAdapter(
           child: _SectionHeader(
@@ -968,7 +1048,7 @@ class _FilesViewState extends State<FilesView> {
           ...itemSlivers(
             externalItems,
             section: 'external',
-            tableHeader: mainItems.isEmpty,
+            tableHeader: !mainShown,
           ),
       ],
       if (sharedItems.isNotEmpty) ...[
@@ -986,7 +1066,8 @@ class _FilesViewState extends State<FilesView> {
           ...itemSlivers(
             sharedItems,
             section: 'shared',
-            tableHeader: mainItems.isEmpty && externalItems.isEmpty,
+            tableHeader:
+                !mainShown && (externalItems.isEmpty || !_externalExpanded),
           ),
       ],
     ];
@@ -1002,6 +1083,20 @@ class _FilesViewState extends State<FilesView> {
     // Quick jump: one chip per section, so a long list needn't be scrolled
     // to reach them. Tapping opens a collapsed section and scrolls to it.
     final jumpChips = <Widget>[
+      if (showCloudHeader)
+        _JumpButton(
+          icon: LucideIcons.cloud,
+          compact: isDesktop,
+          iconOnly: !isDesktop,
+          name: 'Cloud files',
+          count: mainItems.length,
+          onTap: () => _jumpToSection(
+            _cloudKey,
+            stickyHeight,
+            open: !_cloudExpanded,
+            expand: () => _cloudExpanded = true,
+          ),
+        ),
       if (externalItems.isNotEmpty)
         _JumpButton(
           icon: LucideIcons.hardDrive,
@@ -1047,9 +1142,13 @@ class _FilesViewState extends State<FilesView> {
           controlsHeight: controlsHeight,
           controls: topRow,
           keepControls: keepFilters,
-          selectionBar: barInHeader
+          selectionBar: barInHeader && !keepFilters
               ? _buildSelectionBar(context, selectedItems)
               : null,
+        ),
+      if (keepFilters && !selectionAtBottom)
+        PinnedSelectionBar(
+          bar: barInHeader ? _buildSelectionBar(context, selectedItems) : null,
         ),
       if (_offline)
         SliverToBoxAdapter(child: _buildOfflineSummary(context, sync)),
@@ -1225,10 +1324,31 @@ class _FilesViewState extends State<FilesView> {
   /// aren't backed by real data - inventing them would mean fabricating
   /// numbers, so this shows the status/count summary that data actually
   /// supports instead. See the report for what a literal match would need.
+  Future<void> _cancelSync(
+    BuildContext context,
+    SyncStatusController sync,
+  ) async {
+    final messenger = NooMessenger.of(context);
+    final dropped = await sync.cancelSync();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          dropped > 0
+              ? 'Sync cancelled - removed from this device'
+              : 'Sync cancelled',
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   Widget _buildOfflineSummary(BuildContext context, SyncStatusController sync) {
     final gutter = NooLayout.gutter(context);
+    final shortfall = sync.storageShortfall;
     final hasConflicts = sync.syncConflicts.isNotEmpty;
-    final stat = hasConflicts
+    final stat = shortfall != null
+        ? 'Not enough storage'
+        : hasConflicts
         ? 'Sync issue'
         : sync.isSyncingNow
         ? 'Syncing…'
@@ -1253,7 +1373,9 @@ class _FilesViewState extends State<FilesView> {
       }
     }
 
-    final meta = hasConflicts
+    final meta = shortfall != null
+        ? 'Needs ${formatBytes(shortfall.neededBytes)}, ${formatBytes(shortfall.availableBytes)} free'
+        : hasConflicts
         ? '${sync.syncConflicts.length} item${sync.syncConflicts.length == 1 ? '' : 's'} couldn\'t sync · tap a row to retry'
         : null;
 
@@ -1263,15 +1385,23 @@ class _FilesViewState extends State<FilesView> {
         stat: stat,
         caption: caption,
         meta: meta,
-        tone: hasConflicts
+        tone: hasConflicts || shortfall != null
             ? NooSummaryCardTone.danger
             : NooSummaryCardTone.normal,
-        action: sync.syncEverything || sync.syncedPaths.isNotEmpty
+        action: sync.isSyncingNow
+            ? NooButton(
+                variant: NooButtonVariant.tonal,
+                size: NooButtonSize.compact,
+                icon: LucideIcons.x,
+                disabled: sync.isCancellingSync,
+                onTap: () => _cancelSync(context, sync),
+                child: Text(sync.isCancellingSync ? 'Cancelling…' : 'Cancel'),
+              )
+            : sync.syncEverything || sync.syncedPaths.isNotEmpty
             ? NooButton(
                 variant: NooButtonVariant.tonal,
                 size: NooButtonSize.compact,
                 icon: LucideIcons.refreshCw,
-                disabled: sync.isSyncingNow,
                 onTap: () => sync.syncOnPull(),
                 child: const Text('Sync now'),
               )
@@ -1372,7 +1502,7 @@ class _FilesViewState extends State<FilesView> {
       });
     }
     _clearSelection();
-    ScaffoldMessenger.of(context).showSnackBar(
+    NooMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           allSynced
@@ -1400,7 +1530,7 @@ class _FilesViewState extends State<FilesView> {
     _clearSelection();
     if (files.isEmpty) return;
 
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = NooMessenger.of(context);
 
     // Already mirrored locally by device sync (every selected file, not
     // just some)? Save straight from the local copy instead of a fresh
@@ -1492,7 +1622,7 @@ class _FilesViewState extends State<FilesView> {
     );
     if (confirmed != true || !context.mounted) return;
 
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = NooMessenger.of(context);
     final ops = context.read<ItemOperations>();
     var succeeded = 0;
     for (final item in items) {
@@ -1521,7 +1651,7 @@ class _FilesViewState extends State<FilesView> {
     );
     if (!context.mounted || result == null) return;
     _clearSelection();
-    ScaffoldMessenger.of(context).showSnackBar(
+    NooMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           '${copy ? 'Copied' : 'Moved'} ${result.succeeded} of ${items.length} item(s)',
@@ -1713,7 +1843,7 @@ class _FilesViewState extends State<FilesView> {
     final ops = context.read<ItemOperations>();
     final success = await ops.deleteItem(item.path);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    NooMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           success ? 'Deleted ${item.name}' : 'Failed to delete ${item.name}',

@@ -166,11 +166,7 @@ class ItemThumbnail extends StatelessWidget {
               ],
             )
           : Center(
-              child: Icon(
-                getItemIcon(item),
-                color: iconColor,
-                size: iconSize,
-              ),
+              child: Icon(getItemIcon(item), color: iconColor, size: iconSize),
             ),
     );
   }

@@ -26,8 +26,8 @@ String _typeFilterLabel(FilesTypeFilter filter) {
 /// Files screen: a sort chip, a filter chip, a spacer, then the list/grid
 /// segmented toggle) - shared with the Offline tab, which reads and writes
 /// the exact same [FilesController] prefs. [folderPath] picks which
-/// folder's sort applies. [showStorageScope] is off for Offline - a local
-/// mirror has no cloud/external distinction.
+/// folder's sort applies. [showStorageScope] hides the storage/ownership
+/// filters (nothing uses that today; Offline has them too).
 ///
 /// Hidden-files and storage-scope, which have no home in the mockup's
 /// simple two-chip row, live inside the filter chip's sheet instead of as

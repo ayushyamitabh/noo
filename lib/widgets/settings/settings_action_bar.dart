@@ -12,6 +12,7 @@ import '../noo/core/noo_segmented_control.dart';
 import '../noo/core/noo_toggle.dart';
 import '../noo/noo_layout.dart';
 import 'settings_section.dart';
+import '../noo/overlays/noo_messenger.dart';
 
 /// Settings section: the priority order bulk actions (favorite, share,
 /// download, ...) show in on the Files/Photos/Favorites multi-select
@@ -72,6 +73,7 @@ class SettingsActionBarSection extends StatelessWidget {
 
     if (!desktop) {
       return NooGroupedList(
+        label: 'Action bar',
         footer: const Text(_subtitle),
         children: [
           _ActionBarPreview(order: settings.selectionActionOrder),
@@ -152,7 +154,7 @@ class _ActionBarPreview extends StatelessWidget {
                       kind: kind,
                       icon: kind.icon,
                       label: kind.label,
-                      onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                      onTap: () => NooMessenger.of(context).showSnackBar(
                         SnackBar(content: Text('${kind.label} preview')),
                       ),
                     ),

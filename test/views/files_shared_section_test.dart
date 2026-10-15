@@ -66,6 +66,24 @@ void main() {
     await app.finish(tester);
   });
 
+  testWidgets('regular items get a collapsible "Cloud files" section', (
+    tester,
+  ) async {
+    final app = await pumpFiles(tester);
+    app.files.setStorageScope(StorageScope.all);
+    await tester.pump(const Duration(milliseconds: 600));
+
+    // With other sections beside them, the regular items are a section too.
+    expect(find.text('Cloud files'), findsOneWidget);
+    expect(find.byTooltip('Cloud files · 24'), findsOneWidget);
+    expect(find.text('mine-0.txt'), findsOneWidget);
+
+    await tester.tap(find.text('Cloud files'));
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text('mine-0.txt'), findsNothing);
+    await app.finish(tester);
+  });
+
   testWidgets('shared rows show the shared icon', (tester) async {
     final app = await pumpFiles(tester);
     app.files.setStorageScope(StorageScope.all);

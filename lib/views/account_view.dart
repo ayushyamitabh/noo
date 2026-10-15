@@ -11,7 +11,6 @@ import '../widgets/noo/noo_layout.dart';
 import '../widgets/settings/settings_account_card.dart';
 import '../widgets/settings/settings_accounts.dart';
 import '../widgets/settings/settings_about.dart';
-import '../widgets/settings/settings_action_bar.dart';
 import '../widgets/settings/settings_appearance.dart';
 import '../widgets/settings/settings_file_sync.dart';
 import '../widgets/settings/settings_files_cache.dart';
@@ -95,11 +94,6 @@ class _AccountViewState extends State<AccountView> {
       title: 'Tabs',
       icon: LucideIcons.layoutGrid,
       builder: (_) => const SettingsTabsSection(),
-    ),
-    _SettingsCategory(
-      title: 'Action bar',
-      icon: LucideIcons.slidersHorizontal,
-      builder: (_) => const SettingsActionBarSection(),
     ),
     _SettingsCategory(
       title: 'Swipe on a file',

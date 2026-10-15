@@ -84,29 +84,36 @@ class NooSettingsRow extends StatelessWidget {
                   const SizedBox(width: 14),
                 ],
                 Expanded(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      DefaultTextStyle(
-                        style: NooText.bodyL.copyWith(
-                          height: 1.1,
-                          fontWeight: danger || accent
-                              ? (accent ? FontWeight.w600 : FontWeight.w500)
-                              : FontWeight.w400,
-                          color: color,
-                        ),
-                        child: label,
-                      ),
-                      if (subtitle != null) ...[
-                        const SizedBox(height: 4),
+                  // Keeps a wrapping subtitle from running into the
+                  // trailing control (toggle, value, button).
+                  child: Padding(
+                    padding: EdgeInsetsDirectional.only(
+                      end: trail != null ? 14 : 0,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
                         DefaultTextStyle(
-                          style: NooText.meta.copyWith(color: colors.fg3),
-                          child: subtitle!,
+                          style: NooText.bodyL.copyWith(
+                            height: 1.1,
+                            fontWeight: danger || accent
+                                ? (accent ? FontWeight.w600 : FontWeight.w500)
+                                : FontWeight.w400,
+                            color: color,
+                          ),
+                          child: label,
                         ),
+                        if (subtitle != null) ...[
+                          const SizedBox(height: 4),
+                          DefaultTextStyle(
+                            style: NooText.meta.copyWith(color: colors.fg3),
+                            child: subtitle!,
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
                 ?trail,

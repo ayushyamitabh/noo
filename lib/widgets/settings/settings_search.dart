@@ -184,20 +184,20 @@ const settingsSearchIndex = <SettingsSearchEntry>[
   ),
   SettingsSearchEntry(
     'Action bar position',
-    'Action bar',
+    'Appearance',
     keywords: 'selection top bottom multi-select bulk',
     target: 'Position',
   ),
   SettingsSearchEntry(
     'Keep filters visible',
-    'Action bar',
+    'Appearance',
     keywords: 'selection filter bar breadcrumbs hide show multi-select',
   ),
   SettingsSearchEntry(
     'Action bar actions',
-    'Action bar',
+    'Appearance',
     keywords: 'reorder more selection share delete move copy favorite',
-    target: '',
+    target: 'Preview',
   ),
   SettingsSearchEntry(
     'Swipe right',

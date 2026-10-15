@@ -48,6 +48,7 @@ import 'widgets/noo/nav/noo_sidebar.dart';
 import 'widgets/noo/nav/noo_toolbar.dart';
 import 'widgets/noo/noo_layout.dart';
 import 'widgets/noo/overlays/noo_dialog.dart';
+import 'widgets/synced_header_scaffold.dart' show formatBytes;
 import 'widgets/shell/shell_common.dart';
 import 'widgets/shell/tablet_account_menu.dart';
 
@@ -145,7 +146,13 @@ class NextcloudApp extends StatelessWidget {
         return MaterialApp(
           builder: (context, child) => IosHingeLayout(
             child: DropPreparationOverlay(
-              child: NooPointerSelection(child: child!),
+              // Black behind the page so the zoom-out under a bottom sheet
+              // has something to shrink away from (pages are opaque, so
+              // this is never seen otherwise).
+              child: ColoredBox(
+                color: Colors.black,
+                child: NooPointerSelection(child: child!),
+              ),
             ),
           ),
           title: 'Noo',
@@ -225,6 +232,8 @@ class _MainShellViewState extends State<MainShellView>
     // session restore (which also has to hit the network) does, so by the
     // time this shell mounts `defaultTab` already reflects the saved value.
     _currentTab = context.read<SettingsController>().defaultTab;
+    _syncStatus = context.read<SyncStatusController>()
+      ..addListener(_onSyncStatusChanged);
 
     // Handles both a cold start via another app's "Share to..." sheet
     // (getInitialShare) and a share arriving while the app is already
@@ -256,6 +265,44 @@ class _MainShellViewState extends State<MainShellView>
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _maybeRequestNotificationPermission(),
     );
+  }
+
+  late final SyncStatusController _syncStatus;
+  int _alertedShortfall = 0;
+
+  /// A sync stopped because the downloads wouldn't fit: say so once per
+  /// occurrence (the Offline tab's summary card keeps showing it too).
+  void _onSyncStatusChanged() {
+    final shortfall = _syncStatus.storageShortfall;
+    if (shortfall == null || shortfall.serial <= _alertedShortfall) return;
+    _alertedShortfall = shortfall.serial;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final colors = context.nooColors;
+      showNooDialog<void>(
+        context,
+        title: 'Not enough storage to sync',
+        children: [
+          Text(
+            'Syncing needs ${formatBytes(shortfall.neededBytes)} but only '
+            '${formatBytes(shortfall.availableBytes)} is free on this device. '
+            '${shortfall.removedFromSync ? 'It was cancelled and removed from sync. ' : ''}'
+            'Free up some space, or sync fewer folders, then try again.',
+            style: NooText.body.copyWith(color: colors.fg2),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              NooButton(
+                variant: NooButtonVariant.primary,
+                onTap: () => Navigator.of(context, rootNavigator: true).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        ],
+      );
+    });
   }
 
   static const _prefNotificationPermissionAsked =
@@ -324,6 +371,7 @@ class _MainShellViewState extends State<MainShellView>
     for (final c in _scrollControllers.values) {
       c.dispose();
     }
+    _syncStatus.removeListener(_onSyncStatusChanged);
     _shareSub?.cancel();
     _pickSub?.cancel();
     _shareAccountSync?.dispose();
@@ -603,17 +651,30 @@ class _MainShellViewState extends State<MainShellView>
         // rather than the Scaffold popping it fully in/out on every tab
         // switch - see NooFab's [collapsed].
         floatingActionButton:
-            pickRequest == null &&
-                navStyle == NooNavStyle.android &&
-                !_selectionActiveTabs.contains(selectedTab)
-            ? NooFab(
-                collapsed: switch (settings.fabStyle) {
-                  FabStyle.auto => !canUpload,
-                  FabStyle.mini => true,
-                  FabStyle.expanded => false,
-                },
-                barStyle: bottomBarStyle,
-                onTap: () => showCreateMenu(context),
+            pickRequest == null && navStyle == NooNavStyle.android
+            // Slides out to the right while this tab is selecting (the
+            // selection bar slides in from the left), rather than the
+            // Scaffold shrinking it away.
+            ? AnimatedSlide(
+                offset: _selectionActiveTabs.contains(selectedTab)
+                    ? const Offset(1.6, 0)
+                    : Offset.zero,
+                duration: MediaQuery.disableAnimationsOf(context)
+                    ? Duration.zero
+                    : const Duration(milliseconds: 260),
+                curve: Curves.easeInOutCubic,
+                child: IgnorePointer(
+                  ignoring: _selectionActiveTabs.contains(selectedTab),
+                  child: NooFab(
+                    collapsed: switch (settings.fabStyle) {
+                      FabStyle.auto => !canUpload,
+                      FabStyle.mini => true,
+                      FabStyle.expanded => false,
+                    },
+                    barStyle: bottomBarStyle,
+                    onTap: () => showCreateMenu(context),
+                  ),
+                ),
               )
             : null,
         body: TweenAnimationBuilder<double>(

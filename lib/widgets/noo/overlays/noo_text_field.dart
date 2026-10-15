@@ -19,6 +19,7 @@ class NooTextField extends StatelessWidget {
   final bool readOnly;
   final bool autofocus;
   final TextInputType? keyboardType;
+
   /// True (default) on a `surface` background - uses surface-2 fill. Pass
   /// false when placed on `bg`, which uses surface instead.
   final bool onSurface;
@@ -48,7 +49,10 @@ class NooTextField extends StatelessWidget {
 
     return Container(
       constraints: const BoxConstraints(minHeight: 48),
-      padding: EdgeInsets.only(left: NooSpace.smd, right: trailing != null ? 4 : NooSpace.smd),
+      padding: EdgeInsets.only(
+        left: NooSpace.smd,
+        right: trailing != null ? 4 : NooSpace.smd,
+      ),
       decoration: BoxDecoration(
         color: onSurface ? colors.surface2 : colors.surface,
         borderRadius: BorderRadius.circular(NooRadii.input),
@@ -73,13 +77,18 @@ class NooTextField extends StatelessWidget {
               decoration: InputDecoration(
                 isDense: true,
                 border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: NooSpace.smd),
+                contentPadding: const EdgeInsets.symmetric(
+                  vertical: NooSpace.smd,
+                ),
                 hintText: placeholder,
                 hintStyle: base.copyWith(color: colors.fg3),
               ),
             ),
           ),
-          if (trailing != null) ...[const SizedBox(width: NooSpace.xs), trailing!],
+          if (trailing != null) ...[
+            const SizedBox(width: NooSpace.xs),
+            trailing!,
+          ],
         ],
       ),
     );

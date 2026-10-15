@@ -74,6 +74,14 @@ final class SyncStatusBus {
     var syncingFileIds: Set<String> = []
     /// Every account's unresolved conflicts - readers filter by account.
     var conflicts: [SyncConflict] = []
+    /// Set when the last run stopped because what it had to download didn't
+    /// fit on the device; cleared when the next run starts.
+    var storageShortfall: StorageShortfall?
+  }
+
+  struct StorageShortfall: Equatable {
+    let needed: Int64
+    let available: Int64
   }
 
   private let lock = NSLock()
@@ -93,6 +101,14 @@ final class SyncStatusBus {
       $0.accountId = accountId
       $0.syncing = syncing
       if !syncing { $0.syncingFileIds = [] }
+      if syncing { $0.storageShortfall = nil }
+    }
+  }
+
+  func setStorageShortfall(accountId: String, needed: Int64, available: Int64) {
+    update {
+      $0.accountId = accountId
+      $0.storageShortfall = StorageShortfall(needed: needed, available: available)
     }
   }
 
@@ -158,8 +174,26 @@ struct SyncRunner {
   /// mounts in particular), so this bounds how stale a mirror can get.
   static let fullWalkMaxAgeMs: Int64 = 6 * 60 * 60 * 1000
 
-  /// State is flushed to disk after this many transfers.
-  static let saveEvery = 20
+  /// Free space always left alone, so syncing can't fill the phone completely.
+  static let storageReserveBytes: Int64 = 100 * 1024 * 1024
+
+  /// Free space on the volume holding [url], counting what iOS can reclaim
+  /// (caches) - what the user would call "free". Nil if it can't be read.
+  static func availableBytes(at url: URL) -> Int64? {
+    let key = URLResourceKey.volumeAvailableCapacityForImportantUsageKey
+    guard let values = try? url.resourceValues(forKeys: [key]),
+      let bytes = values.volumeAvailableCapacityForImportantUsage
+    else { return nil }
+    return bytes
+  }
+
+  /// State is flushed to disk after this many transfers, so the app's synced
+  /// badges and Offline list can follow a long run.
+  static let saveEvery = 5
+
+  private static func trimSlashes(_ path: String) -> String {
+    path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+  }
 
   /// [force] is an explicit "Sync now" / newly added path: always a full
   /// walk, never trusting the root-etag shortcut.
@@ -200,13 +234,18 @@ struct SyncRunner {
       }
     }
 
+    // Everything the account-root walk listed: a synced path inside it was
+    // just handled by that walk, so it isn't walked a second time.
+    var walkedPaths = Set<String>()
+
     for path in config.folders {
       if Task.isCancelled { break }
+      if walkedPaths.contains(Self.trimSlashes(path)) { continue }
       do {
         // A configured path can be a file or a folder - check which before
         // deciding whether to walk it or just diff the single item.
         let selfEntry = try await client.propfindSelf(creds, path: path)
-        let priorIds = SyncDiff.priorFileIds(state: state, path: path)
+        var priorIds = SyncDiff.priorFileIds(state: state, path: path)
 
         // Cheap "did anything change?" check: an unchanged root etag means
         // nothing beneath it changed on the server, and if every local file
@@ -227,18 +266,47 @@ struct SyncRunner {
         store.setRootMissing(accountId: accountId, path: path, missing: selfEntry == nil)
 
         var entries: [SyncRemoteEntry] = []
+        var skippedExternal: [String] = []
         if let root = selfEntry {
           if root.isFolder {
-            entries = try await client.walk(creds, root: path)
+            entries = try await client.walk(
+              creds, root: path, includeExternal: config.includeExternal ?? false,
+              onSkippedExternal: { skippedExternal.append($0) })
           } else {
             entries = [root]
           }
+        }
+        // What's on the device under an external mount a root walk left out
+        // wasn't deleted on the server - it just isn't part of this walk.
+        if !skippedExternal.isEmpty {
+          let prefixes = skippedExternal.map { Self.trimSlashes($0) + "/" }
+          priorIds = priorIds.filter { id in
+            guard let rel = state[id]?.relPath else { return true }
+            return !prefixes.contains { rel.hasPrefix($0) }
+          }
+        }
+        if Self.trimSlashes(path).isEmpty {
+          walkedPaths.formUnion(entries.map { Self.trimSlashes($0.path) })
         }
         var pathClean = true
         let collisions = SyncDiff.collidingRelPaths(entries)
 
         let actions = SyncDiff.diffFolder(
           entries: entries, state: state, priorFolderFileIds: priorIds, syncRoot: syncRoot)
+
+        // Enough room for what's about to be downloaded? Checked before this
+        // path's first transfer, so a "no" leaves nothing half-done.
+        let needed = actions.reduce(Int64(0)) { total, action in
+          if case .download(let entry) = action { return total + entry.size }
+          return total
+        }
+        if needed > 0, let available = Self.availableBytes(at: syncRoot),
+          needed + Self.storageReserveBytes > available
+        {
+          bus.setStorageShortfall(accountId: accountId, needed: needed, available: available)
+          summary.storageShortfall = StorageShortfall(needed: needed, available: available)
+          break
+        }
         for action in actions {
           try Task.checkCancellation()
           switch action {

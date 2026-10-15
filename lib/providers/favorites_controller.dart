@@ -65,7 +65,9 @@ class FavoritesController extends ChangeNotifier {
       final favorites = await service.fetchFavorites();
       if (gen != session.sessionGeneration) return;
       _allFavorites = favorites;
-      debugPrint('[FavoritesController] Loaded ${_allFavorites.length} favorites');
+      debugPrint(
+        '[FavoritesController] Loaded ${_allFavorites.length} favorites',
+      );
     } catch (e) {
       if (gen != session.sessionGeneration) return;
       debugPrint('[FavoritesController] Error fetching favorites: $e');

@@ -87,6 +87,7 @@ class FilesController extends ChangeNotifier
   static const _prefShowHiddenFiles = 'ui_show_hidden';
   static const _prefHiddenFilter = 'ui_hidden_filter';
   static const _prefFolderSort = 'ui_folder_sort';
+  static const _prefMountRoots = 'ui_mount_roots';
   static const prefCachePolicy = 'ui_cache_policy';
   static const prefCacheIntervalMinutes = 'ui_cache_interval_minutes';
 
@@ -105,6 +106,13 @@ class FilesController extends ChangeNotifier
   CachePolicy _cachePolicy = defaultCachePolicy;
   int _cacheIntervalMinutes = defaultCacheIntervalMinutes;
   final Map<String, _CachedDirectory> _directoryCache = {};
+
+  // path -> `external`/`shared` for every mount root seen in a listing. Only
+  // a mount's root carries `mount-type`, and the server isn't there to ask
+  // when browsing offline, so this remembers (per account, persisted) which
+  // folders are which - it's what lets the Offline tab use the same
+  // cloud/external and mine/shared filters as Files.
+  final Map<String, String> _mountRoots = {};
   Timer? _cacheRefreshTimer;
 
   // Auto-retry of a failed (not in-place) load that looks like a network
@@ -175,6 +183,41 @@ class FilesController extends ChangeNotifier
 
   @override
   List<NextcloudItem> get items => applyFilesDisplayPrefs(_items);
+
+  /// `external` or `shared` if [path] is a mount root seen in an earlier
+  /// listing, else null.
+  String? mountTypeFor(String path) => _mountRoots[path];
+
+  /// The external-storage mount roots seen so far.
+  List<String> get externalMountRoots => [
+    for (final entry in _mountRoots.entries)
+      if (entry.value == 'external') entry.key,
+  ];
+
+  /// Remembers which items in a freshly fetched folder listing are mount
+  /// roots (and forgets ones that no longer are).
+  void _recordMounts(List<NextcloudItem> listing) {
+    var changed = false;
+    for (final item in listing) {
+      final type = item.mountType;
+      final known = _mountRoots[item.path];
+      if (type == 'external' || type == 'shared') {
+        if (known != type) {
+          _mountRoots[item.path] = type!;
+          changed = true;
+        }
+      } else if (known != null) {
+        _mountRoots.remove(item.path);
+        changed = true;
+      }
+    }
+    if (!changed) return;
+    final snapshot = jsonEncode(_mountRoots);
+    _persistAccountPref(
+      _prefMountRoots,
+      (p, key) => p.setString(key, snapshot),
+    );
+  }
 
   int _compareItems(NextcloudItem a, NextcloudItem b, FileSortField field) {
     switch (field) {
@@ -291,6 +334,7 @@ class FilesController extends ChangeNotifier
     _retryAttempt = 0;
     _cacheRefreshTimer?.cancel();
     _directoryCache.clear();
+    _mountRoots.clear();
     _folderSortField.clear();
     _folderSortAscending.clear();
     _items = [];
@@ -387,6 +431,17 @@ class FilesController extends ChangeNotifier
           }
         }
 
+        final mountsJson = prefs.getString(k(_prefMountRoots));
+        if (mountsJson != null) {
+          try {
+            _mountRoots
+              ..clear()
+              ..addAll((jsonDecode(mountsJson) as Map).cast<String, String>());
+          } catch (e) {
+            debugPrint('[FilesController] Mount roots restore failed: $e');
+          }
+        }
+
         final cachePolicyName = prefs.getString(k(prefCachePolicy));
         _cachePolicy = CachePolicy.values.firstWhere(
           (c) => c.name == cachePolicyName,
@@ -480,6 +535,7 @@ class FilesController extends ChangeNotifier
     try {
       final items = await service.fetchDirectory(_currentFolderPath);
       if (gen != session.sessionGeneration) return;
+      _recordMounts(items);
       _items = items;
       _directoryCache[_currentFolderPath] = _CachedDirectory(
         _items,
@@ -622,8 +678,12 @@ class FilesController extends ChangeNotifier
   /// to whichever tab is actively browsing (Files), so the Move/Copy
   /// destination picker deliberately doesn't touch any of it - it fetches
   /// listings for its own local navigation state through this instead.
-  Future<List<NextcloudItem>> fetchFolderListing(String path) {
-    return session.service?.fetchDirectory(path) ?? Future.value([]);
+  Future<List<NextcloudItem>> fetchFolderListing(String path) async {
+    final items =
+        await (session.service?.fetchDirectory(path) ??
+            Future.value(<NextcloudItem>[]));
+    _recordMounts(items);
+    return items;
   }
 
   /// Finds the single item at [path] by listing its parent folder and

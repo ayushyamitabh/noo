@@ -59,6 +59,9 @@ class MainActivity : FlutterFragmentActivity() {
     private val downloadServiceChannelName = "dev.ayushya.noo/download_service"
     private val pickIntentChannelName = "dev.ayushya.noo/pick_intent"
     private val newPickChannelName = "dev.ayushya.noo/pick_intent/new"
+    private val syncStatusExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+    @Volatile private var latestSyncStatus: SyncStatusBus.Status? = null
+    private val syncEmitPending = java.util.concurrent.atomic.AtomicBoolean(false)
     private val syncServiceChannelName = "dev.ayushya.noo/sync_service"
     private val syncStatusChannelName = "dev.ayushya.noo/sync_service/status"
     private val uploadStatusChannelName = "dev.ayushya.noo/upload_service/status"
@@ -210,6 +213,7 @@ class MainActivity : FlutterFragmentActivity() {
                     "reschedule" -> rescheduleSyncWork(call, result)
                     "cancel" -> cancelSyncWork(call, result)
                     "syncNow" -> syncNow(call, result)
+                    "cancelSync" -> cancelSync(call, result)
                     "getSyncStatus" -> result.success(
                         syncStatusMap(SyncStatusBus.snapshot(), call.argument<String>("accountId")),
                     )
@@ -224,7 +228,20 @@ class MainActivity : FlutterFragmentActivity() {
             .setStreamHandler(object : EventChannel.StreamHandler {
                 override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
                     val listener: (SyncStatusBus.Status) -> Unit = { status ->
-                        mainHandler.post { events.success(syncStatusMap(status)) }
+                        // Building a snapshot reads the whole synced-file state, and a
+                        // big sync publishes twice per file - so bursts are coalesced
+                        // (latest status wins) and built off the main thread.
+                        latestSyncStatus = status
+                        if (syncEmitPending.compareAndSet(false, true)) {
+                            syncStatusExecutor.execute {
+                                Thread.sleep(250)
+                                syncEmitPending.set(false)
+                                latestSyncStatus?.let { latest ->
+                                    val map = syncStatusMap(latest)
+                                    mainHandler.post { events.success(map) }
+                                }
+                            }
+                        }
                     }
                     syncStatusListener = listener
                     SyncStatusBus.subscribe(listener)
@@ -280,6 +297,8 @@ class MainActivity : FlutterFragmentActivity() {
             "syncing" to (busMatches && status.syncing),
             "syncingFileIds" to if (busMatches) status.syncingFileIds.toList() else emptyList(),
             "syncedFileIds" to syncedFileIds,
+            "storageNeededBytes" to (if (busMatches) status.storageShortfall?.needed else null),
+            "storageAvailableBytes" to (if (busMatches) status.storageShortfall?.available else null),
             "missingRoots" to (accountId?.let {
                 SyncEngine.loadMissingRoots(applicationContext, it).toList()
             } ?: emptyList()),
@@ -482,6 +501,7 @@ class MainActivity : FlutterFragmentActivity() {
             SyncWorker.KEY_FOLDERS to foldersJson,
             SyncWorker.KEY_FORCE to force,
             SyncWorker.KEY_NOTIFY to (call.argument<Boolean>("notify") ?: true),
+            SyncWorker.KEY_INCLUDE_EXTERNAL to (call.argument<Boolean>("includeExternal") ?: false),
         )
     }
 
@@ -582,14 +602,34 @@ class MainActivity : FlutterFragmentActivity() {
     private fun removeLocalSync(call: MethodCall, result: MethodChannel.Result) {
         val accountId = call.argument<String>("accountId")
         val path = call.argument<String>("path")
+        val deleteFiles = call.argument<Boolean>("deleteFiles") ?: true
         if (accountId == null || path == null) {
             result.error("bad_args", "Missing required arguments", null)
             return
         }
         Thread {
-            SyncEngine.removeLocalSync(applicationContext, accountId, path)
+            // Under the sync lock: a run that was just cancelled (this is how a
+            // cancelled sync's partial files get dropped) is still saving its
+            // state, and would otherwise write the removed entries straight back.
+            runBlocking {
+                SyncEngine.syncLock.withLock {
+                    SyncEngine.removeLocalSync(applicationContext, accountId, path, deleteFiles)
+                }
+            }
             mainHandler.post { result.success(null) }
         }.start()
+    }
+
+    /// Stops the sync run in progress (the "Cancel" button, or "Sync
+    /// everything" being turned off mid-run) and any one-off run still queued
+    /// behind it. The run notices at its next check, saves what it already
+    /// finished and ends; the periodic schedule is left alone.
+    private fun cancelSync(call: MethodCall, result: MethodChannel.Result) {
+        SyncEngine.cancelGeneration.incrementAndGet()
+        call.argument<String>("accountId")?.let {
+            WorkManager.getInstance(this).cancelUniqueWork(SyncWorker.oneOffNameFor(it))
+        }
+        result.success(null)
     }
 
     /// One-off immediate run (Settings' "Sync now"), independent of the

@@ -5,6 +5,7 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import '../../models/nextcloud_item.dart';
 import '../../providers/session_controller.dart';
 import '../../theme/design_tokens.dart';
+import '../noo/overlays/noo_messenger.dart';
 
 /// Space the viewer's floating top bar and bottom action bar cover, so the
 /// text sits clear of them (and the status bar) instead of scrolling
@@ -209,7 +210,7 @@ class _MediaTextPreviewState extends State<MediaTextPreview> {
   }
 
   Future<void> _save() async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = NooMessenger.of(context);
     final text = _controller.text;
     setState(() => _isSaving = true);
     _syncToolbar();

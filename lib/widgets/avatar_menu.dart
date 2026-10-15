@@ -375,40 +375,66 @@ class AvatarNavigationBody extends StatelessWidget {
   }
 }
 
+/// The bottom bar's avatar slot. It never moves or leaves the bar: while the
+/// popup is open the avatar cross-fades (with a quarter turn) into a close
+/// button in the same spot, so the rest of the bar stays exactly where it is.
 class AvatarNavigationSatellite extends StatelessWidget {
   final double size;
   const AvatarNavigationSatellite({super.key, required this.size});
   @override
   Widget build(BuildContext context) {
     final scope = AvatarNavigationScope.maybeOf(context);
-    if (context.watch<SettingsController>().bottomBarStyle ==
-        NooBottomBarStyle.attached) {
-      return Builder(
-        builder: (anchorContext) => ShellAvatarButton(
-          hitBox: size,
-          label: 'Menu',
-          onTap: () => showAvatarMenu(anchorContext),
-        ),
-      );
-    }
-    return IgnorePointer(
-      ignoring: scope != null && scope.progress > 0,
-      child: Opacity(
-        opacity: scope != null && scope.progress > 0 ? 0 : 1,
-        child: SizedBox(
-          width: size,
-          height: size,
-          child: _AvatarSurface(
-            radius: BorderRadius.circular(size / 2),
-            child: Builder(
-              builder: (anchorContext) => ShellAvatarButton(
-                hitBox: size,
-                label: 'Menu',
-                onTap: () => showAvatarMenu(anchorContext),
-              ),
+    final progress = scope?.progress ?? 0;
+    final attached =
+        context.watch<SettingsController>().bottomBarStyle ==
+        NooBottomBarStyle.attached;
+    final colors = context.nooColors;
+
+    Widget slot(BuildContext anchorContext) => SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Opacity(
+            opacity: 1 - progress,
+            child: ShellAvatarButton(
+              hitBox: size,
+              label: 'Menu',
+              onTap: () =>
+                  progress > 0 ? scope?.close() : showAvatarMenu(anchorContext),
             ),
           ),
-        ),
+          if (progress > 0)
+            Opacity(
+              opacity: progress,
+              child: Transform.rotate(
+                angle: (progress - 1) * 1.5708,
+                child: Semantics(
+                  label: 'Close menu',
+                  button: true,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: scope?.close,
+                    child: SizedBox.square(
+                      dimension: size,
+                      child: Icon(LucideIcons.x, size: 22, color: colors.fg1),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    if (attached) return Builder(builder: slot);
+    return SizedBox(
+      width: size,
+      height: size,
+      child: _AvatarSurface(
+        radius: BorderRadius.circular(size / 2),
+        child: Builder(builder: slot),
       ),
     );
   }
@@ -550,7 +576,7 @@ class _AvatarNavigationHostState extends State<AvatarNavigationHost>
                   child: AvatarMenuCard(
                     bottom: bottom,
                     surface: false,
-                    movingAvatar: measurement || progress < 1,
+                    movingAvatar: !bottom && (measurement || progress < 1),
                     headerAvatarKey: measurement ? measureAvatarKey : null,
                     showHeaderAvatar: !attached,
                     expanded: expanded,
@@ -564,9 +590,18 @@ class _AvatarNavigationHostState extends State<AvatarNavigationHost>
                   attached ? width : width - 24,
                   cardHeight,
                 );
+                // A bottom card grows upward from just above the avatar's slot
+                // (never over it - the slot turns into the close button).
                 final rect = Rect.lerp(
                   attached
                       ? Rect.fromLTWH(0, bottomEdge, width, 0)
+                      : bottom && origin != null
+                      ? Rect.fromLTWH(
+                          origin!.left,
+                          bottomEdge,
+                          origin!.width,
+                          0,
+                        )
                       : origin ?? target,
                   target,
                   progress,
@@ -667,7 +702,7 @@ class _AvatarNavigationHostState extends State<AvatarNavigationHost>
                           ),
                         ),
                       ),
-                      if (!attached && progress < 1)
+                      if (!attached && !bottom && progress < 1)
                         Positioned.fromRect(
                           rect: avatar,
                           child: Semantics(

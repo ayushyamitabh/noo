@@ -20,11 +20,15 @@ object SyncStatusBus {
         val name: String,
     )
 
+    /** A pass stopped because what it had to download didn't fit on the device. */
+    data class StorageShortfall(val needed: Long, val available: Long)
+
     data class Status(
         val accountId: String?,
         val syncing: Boolean,
         val syncingFileIds: Set<String>,
         val conflicts: List<Conflict>,
+        val storageShortfall: StorageShortfall? = null,
     )
 
     @Volatile
@@ -48,6 +52,17 @@ object SyncStatusBus {
     fun setSyncing(accountId: String, syncing: Boolean) {
         current = current.copy(accountId = accountId, syncing = syncing)
         if (!syncing) current = current.copy(syncingFileIds = emptySet())
+        // A new run starts with a clean slate.
+        if (syncing) current = current.copy(storageShortfall = null)
+        publish()
+    }
+
+    @Synchronized
+    fun setStorageShortfall(accountId: String, needed: Long, available: Long) {
+        current = current.copy(
+            accountId = accountId,
+            storageShortfall = StorageShortfall(needed, available),
+        )
         publish()
     }
 

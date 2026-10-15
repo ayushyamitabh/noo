@@ -6,6 +6,7 @@ import '../noo/noo_layout.dart';
 import '../noo/overlays/noo_dialog.dart';
 import '../noo/overlays/noo_overlay_header.dart';
 import '../noo/overlays/noo_sheet.dart';
+import '../noo/overlays/noo_messenger.dart';
 
 /// Shared by the account card's own quick "Remove account" action and each
 /// row in the saved-accounts list - same confirm/remove/pop-to-root gate
@@ -84,7 +85,7 @@ Future<void> confirmRemoveAccount(
     await session.removeAccount(accountId);
   } catch (error) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      NooMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
             'Could not remove local account data. Please try again.',

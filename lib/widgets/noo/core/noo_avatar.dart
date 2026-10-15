@@ -9,9 +9,11 @@ import '../../../theme/design_tokens.dart';
 class NooAvatar extends StatelessWidget {
   final String? initials;
   final double size;
+
   /// One of [NooColors.avatarPalette]; ignored when [current] or [icon] is set.
   final Color? color;
   final bool current;
+
   /// Show an icon instead of initials (e.g. a group share).
   final IconData? icon;
 

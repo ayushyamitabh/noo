@@ -37,8 +37,9 @@ final class DavSyncClient {
 
   private static let propfindBody = """
     <?xml version="1.0" encoding="utf-8" ?>
-    <d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">
+    <d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns" xmlns:nc="http://nextcloud.org/ns">
       <d:prop>
+        <nc:mount-type/>
         <d:getlastmodified/>
         <d:getcontentlength/>
         <d:resourcetype/>
@@ -97,8 +98,19 @@ final class DavSyncClient {
   /// Recursively walks [root] (Depth-1 PROPFINDs, breadth-first) into a flat
   /// manifest. Throws if *any* level fails - a partial manifest would look
   /// like the missing part had been deleted on the server.
-  func walk(_ creds: SyncCredentials, root: String) async throws -> [SyncRemoteEntry] {
+  ///
+  /// Walking from the account root ("Sync everything") leaves external-storage
+  /// mounts out unless [includeExternal] (the separate "Sync external storage"
+  /// setting) is on. A folder picked explicitly is always synced, as its own root.
+  /// [onSkippedExternal] gets the path of each external mount left out, so the
+  /// caller can tell "not walked" from "deleted on the server".
+  func walk(
+    _ creds: SyncCredentials, root: String, includeExternal: Bool = false,
+    onSkippedExternal: ((String) -> Void)? = nil
+  ) async throws -> [SyncRemoteEntry] {
     var result: [SyncRemoteEntry] = []
+    let skipExternal =
+      !includeExternal && root.trimmingCharacters(in: CharacterSet(charactersIn: "/ ")).isEmpty
     var queue = [root]
     var index = 0
     while index < queue.count {
@@ -106,6 +118,10 @@ final class DavSyncClient {
       let children = try await propfindChildren(creds, path: queue[index])
       index += 1
       for child in children {
+        if skipExternal && child.isExternal {
+          onSkippedExternal?(child.path)
+          continue
+        }
         result.append(child)
         if child.isFolder { queue.append(child.path) }
       }
@@ -185,6 +201,7 @@ enum DavSyncParser {
     var modified = ""
     var length = ""
     var fileId = ""
+    var mountType = ""
     var isCollection = false
   }
 
@@ -219,6 +236,7 @@ enum DavSyncParser {
       case "getlastmodified": current?.modified = value
       case "getcontentlength": current?.length = value
       case "fileid": current?.fileId = value
+      case "mount-type": current?.mountType = value
       case "response":
         if let current { responses.append(current) }
         current = nil
@@ -281,7 +299,8 @@ enum DavSyncParser {
           etag: raw.etag.trimmingCharacters(in: CharacterSet(charactersIn: "\"")),
           lastModified: httpDate.date(from: raw.modified).map { Int64($0.timeIntervalSince1970 * 1000) } ?? 0,
           size: Int64(raw.length) ?? 0,
-          isFolder: raw.isCollection))
+          isFolder: raw.isCollection,
+          isExternal: raw.mountType == "external"))
     }
     return entries
   }

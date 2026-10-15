@@ -12,6 +12,7 @@ import '../noo/noo_layout.dart';
 import '../shell/shell_common.dart';
 import '../shell/tablet_account_menu.dart';
 import 'settings_dialogs.dart';
+import '../noo/overlays/noo_messenger.dart';
 
 /// Settings section 1: the account card (DESIGN_SYSTEM.md 4 - "NooAvatar
 /// 52-56, name, server, storage NooProgressBar"). The quota/quick-actions
@@ -26,7 +27,7 @@ class SettingsAccountCard extends StatelessWidget {
   Future<void> _refresh(BuildContext context, FilesController files) async {
     await files.refreshData();
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      NooMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Refreshed WebDAV data'),
           behavior: SnackBarBehavior.floating,

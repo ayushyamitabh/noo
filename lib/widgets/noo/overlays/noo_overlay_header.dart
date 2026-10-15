@@ -36,11 +36,17 @@ class NooOverlayHeader extends StatelessWidget {
                 title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: NooText.sectionTitle.copyWith(fontSize: 19, color: colors.fg1),
+                style: NooText.sectionTitle.copyWith(
+                  fontSize: 19,
+                  color: colors.fg1,
+                ),
               ),
               if (subtitle != null) ...[
                 const SizedBox(height: 5),
-                Text(subtitle!, style: NooText.meta.copyWith(color: colors.fg3)),
+                Text(
+                  subtitle!,
+                  style: NooText.meta.copyWith(color: colors.fg3),
+                ),
               ],
             ],
           ),
@@ -55,7 +61,10 @@ class NooOverlayHeader extends StatelessWidget {
                 width: 36,
                 height: 36,
                 alignment: Alignment.center,
-                decoration: BoxDecoration(color: colors.surface2, shape: BoxShape.circle),
+                decoration: BoxDecoration(
+                  color: colors.surface2,
+                  shape: BoxShape.circle,
+                ),
                 child: Icon(LucideIcons.x, size: 18, color: colors.fg1),
               ),
             ),

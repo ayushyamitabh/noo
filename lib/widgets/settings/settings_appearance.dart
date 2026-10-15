@@ -15,8 +15,10 @@ import '../noo/noo_layout.dart';
 import '../noo/overlays/noo_dialog.dart';
 import '../noo/overlays/noo_sheet.dart';
 import '../seek_bar_painter.dart';
+import 'settings_action_bar.dart';
 import 'settings_dialogs.dart';
 import 'settings_section.dart';
+import '../noo/overlays/noo_messenger.dart';
 
 String _seekBarStyleLabel(MediaProgressBarStyle style) {
   switch (style) {
@@ -112,6 +114,8 @@ class SettingsAppearanceSection extends StatelessWidget {
             children: [_FabStyleRow(settings: settings)],
           ),
         const SizedBox(height: NooSpace.xl),
+        const SettingsActionBarSection(),
+        const SizedBox(height: NooSpace.xl),
         SettingsSection(
           title: 'Advanced appearance',
           children: [
@@ -184,7 +188,7 @@ Future<void> _resetUiDefaults(BuildContext context) async {
   final settings = context.read<SettingsController>();
   final files = context.read<FilesController>();
   final photos = context.read<PhotosController>();
-  final messenger = ScaffoldMessenger.of(context);
+  final messenger = NooMessenger.of(context);
   final confirmed = await confirmSettingsAction(
     context,
     title: 'Reset UI defaults',
