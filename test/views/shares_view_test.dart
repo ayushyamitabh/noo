@@ -109,4 +109,96 @@ void main() {
     expect(find.text('Jamie Rivera'), findsOneWidget);
     await app.finish(tester);
   });
+
+  group('one row per shared item', () {
+    NextcloudShare share(
+      String path,
+      ShareType type, {
+      String? with_,
+      int permissions = 1,
+    }) => NextcloudShare(
+      id: '$path-${with_ ?? type.name}-$permissions',
+      path: path,
+      name: path.substring(1),
+      itemType: NextcloudItemType.folder,
+      shareType: type,
+      ownerDisplayName: 'Alex Morgan',
+      sharedWithDisplayName: with_,
+      sharedAt: DateTime(2026, 10, 1),
+      sharedWithMe: false,
+      permissions: permissions,
+    );
+
+    Future<AppHarness> pumpShares(
+      WidgetTester tester,
+      List<NextcloudShare> byYou,
+    ) => pumpWithApp(
+      tester,
+      [],
+      (scroll) => SharesView(scrollController: scroll),
+      sharesBuilder: (session) => HarnessShares(session, byYou: byYou),
+    );
+
+    testWidgets('a folder shared with several people is a single row', (
+      tester,
+    ) async {
+      final app = await pumpShares(tester, [
+        share('/Trip', ShareType.user, with_: 'Ana'),
+        share('/Trip', ShareType.user, with_: 'Ben'),
+        share('/Trip', ShareType.group, with_: 'Family'),
+        share('/Taxes', ShareType.user, with_: 'Ana'),
+      ]);
+      // Two items, so two rows - not four.
+      expect(find.text('Trip'), findsOneWidget);
+      expect(find.text('Taxes'), findsOneWidget);
+      expect(find.text('Ana, Ben +1 · Can view'), findsOneWidget);
+      expect(find.text('Ana · Can view'), findsOneWidget);
+      await app.finish(tester);
+    });
+
+    testWidgets('different permissions on one item read as mixed access', (
+      tester,
+    ) async {
+      final app = await pumpShares(tester, [
+        share('/Trip', ShareType.user, with_: 'Ana'),
+        share('/Trip', ShareType.user, with_: 'Ben', permissions: 3),
+      ]);
+      expect(find.text('Trip'), findsOneWidget);
+      expect(find.text('Ana, Ben · Mixed access'), findsOneWidget);
+      await app.finish(tester);
+    });
+
+    testWidgets('several links on one item are one row too', (tester) async {
+      final app = await pumpShares(tester, [
+        share('/Flyers', ShareType.publicLink),
+        share('/Flyers', ShareType.publicLink, permissions: 3),
+        share('/Poster', ShareType.publicLink),
+      ]);
+      await tester.tap(find.text('Links'));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('Flyers'), findsOneWidget);
+      expect(find.text('2 links · Mixed access'), findsOneWidget);
+      expect(find.text('Public link · Can view'), findsOneWidget);
+      await app.finish(tester);
+    });
+
+    testWidgets('the tablet table folds them too', (tester) async {
+      final app = await pumpWithApp(
+        tester,
+        [],
+        (scroll) => SharesView(scrollController: scroll),
+        size: const Size(1100, 800),
+        sharesBuilder: (session) => HarnessShares(
+          session,
+          byYou: [
+            share('/Trip', ShareType.user, with_: 'Ana'),
+            share('/Trip', ShareType.user, with_: 'Ben'),
+          ],
+        ),
+      );
+      expect(find.text('Trip'), findsOneWidget);
+      expect(find.text('Ana, Ben'), findsOneWidget);
+      await app.finish(tester);
+    });
+  });
 }

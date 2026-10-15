@@ -93,6 +93,12 @@ rather than needing a rewrite for multi-account support.
 - **Everything else** (shares, activity, trash, favorites, quota, user info,
   file versions) goes through Nextcloud's OCS APIs (`/ocs/v2.php/...`), JSON
   in, with the `OCS-APIRequest: true` header required on every OCS call.
+  The shares list returns one share per recipient (and per link), and a
+  share's `permissions` is what *that recipient* can do - so the Shares tab
+  folds `By you`/`Links` into one row per item (`SharesView._ShareEntry`,
+  grouped by path; "Mixed access" when the shares differ) and names the
+  recipient rather than the owner (who is always you there). `With you` is
+  left one row per share.
   *Toggling* a favorite is OCS; *listing* every favorite (`fetchFavorites`,
   for the Favorites tab) is WebDAV instead - the same `SEARCH` mechanism
   `fetchAllMedia`/`fetchRecentFiles` use, filtered by `oc:favorite` instead
