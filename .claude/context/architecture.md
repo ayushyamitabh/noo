@@ -73,7 +73,8 @@ new provider instance):
   Files tab: `items`/`currentFolderPath`/`pathStack`, the in-memory
   `_directoryCache` (see `CachePolicy`), per-account display prefs
   (grid/list, hidden files, storage scope, sort field/order, per-folder
-  sort map), and the shared `applyCommonFilters`/`applyFilesDisplayPrefs`
+  sort map, ownership filter - all/mine/shared with me), and the shared
+  `applyCommonFilters`/`applyFilesDisplayPrefs`
   helpers Photos/Favorites reuse rather than duplicating the same
   filter/sort logic. `refreshData` refreshes **in place** when a listing is
   already on screen (pull-to-refresh, periodic refresh, post-mutation): no

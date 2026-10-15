@@ -87,6 +87,48 @@ class StorageScopeRow extends StatelessWidget {
   }
 }
 
+/// "Ownership" row of the Files/Photos filter sheets: everything (the
+/// default), only your own items, or only what other people shared with you.
+/// Files lists shared items in their own collapsible section for
+/// [OwnershipFilter.all].
+class OwnershipFilterRow extends StatelessWidget {
+  final OwnershipFilter value;
+  final ValueChanged<OwnershipFilter> onChanged;
+
+  const OwnershipFilterRow({
+    super.key,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _FilterModeRow<OwnershipFilter>(
+      icon: LucideIcons.users,
+      title: 'Shared items',
+      value: value,
+      onChanged: onChanged,
+      options: const [
+        NooSegmentOption(
+          value: OwnershipFilter.all,
+          icon: LucideIcons.layers,
+          label: 'All',
+        ),
+        NooSegmentOption(
+          value: OwnershipFilter.mine,
+          icon: LucideIcons.user,
+          label: 'Mine',
+        ),
+        NooSegmentOption(
+          value: OwnershipFilter.shared,
+          icon: LucideIcons.users,
+          label: 'Shared',
+        ),
+      ],
+    );
+  }
+}
+
 /// An icon + title line above [child] - the shape every row of the Files/
 /// Photos filter sheets shares, including their type (All/Files/Folders)
 /// control, which lives in its own file.

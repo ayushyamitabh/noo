@@ -454,6 +454,10 @@ class _ShareSheetState extends State<ShareSheet> {
     List<NextcloudShare> peopleShares,
     String? internalLink,
   ) {
+    final ownedByOther = widget.item.isOwnedByOther(session.username);
+    final ownerName = ownedByOther
+        ? (widget.item.ownerDisplayName ?? widget.item.ownerId ?? 'Owner')
+        : session.displayName;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -508,12 +512,17 @@ class _ShareSheetState extends State<ShareSheet> {
           )
         else
           const SizedBox(height: NooSpace.xs),
+        // Something shared *with* you is owned by whoever shared it, not by
+        // the signed-in account.
         NooPersonAccessRow(
           avatar: NooAvatar(
-            initials: _initial(session.displayName),
-            current: true,
+            initials: _initial(ownerName),
+            color: ownedByOther
+                ? NooPhotoTile.paletteColor(ownerName.hashCode)
+                : null,
+            current: !ownedByOther,
           ),
-          name: session.displayName,
+          name: ownerName,
           owner: true,
         ),
         for (final share in peopleShares)

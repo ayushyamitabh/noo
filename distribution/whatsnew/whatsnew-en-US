@@ -1,8 +1,3 @@
-- New Noo icon, default Noo Blue, and animated startup and sign-in logo.
-- PDFs stay centered and can fill the screen.
-- Partially open foldables split at the fold; fully open use tablet layout.
-- Right-click file menus, including a Mac fix.
-- Refresh button in tablet layouts.
-- Photos show newest first.
-- Fixed blur flickering when the account menu opens.
-- Drop files into Noo to choose an upload destination, with feedback while files are prepared.
+- Files shows items shared with you in their own "Shared with me" section, with a shared icon and quick-jump chips to External storage and Shared.
+- New Shared items filter: all, mine, or shared with me.
+- Share sheet shows the real owner of items shared with you.

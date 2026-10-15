@@ -55,7 +55,9 @@ class FilesControlsRow extends StatelessWidget {
     final filtersActive =
         files.filesTypeFilter != FilesTypeFilter.all ||
         files.hiddenFilter != HiddenFilesFilter.hide ||
-        (showStorageScope && files.storageScope != StorageScope.cloud);
+        (showStorageScope &&
+            (files.storageScope != StorageScope.cloud ||
+                files.ownershipFilter != OwnershipFilter.all));
 
     return SizedBox(
       height: 44,
@@ -209,6 +211,11 @@ class FilesControlsRow extends StatelessWidget {
                 StorageScopeRow(
                   value: files.storageScope,
                   onChanged: files.setStorageScope,
+                ),
+                const SizedBox(height: 22),
+                OwnershipFilterRow(
+                  value: files.ownershipFilter,
+                  onChanged: files.setOwnershipFilter,
                 ),
               ],
             ],

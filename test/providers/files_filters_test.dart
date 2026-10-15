@@ -102,6 +102,49 @@ void main() {
     );
   });
 
+  test('ownership filter: all / mine / shared with me', () {
+    final files = build();
+    final mixed = [
+      _item('/a.txt'),
+      _item('/Budget.xlsx', mountType: 'shared'),
+      _item('/nas', mountType: 'external'),
+    ];
+    List<String> run(OwnershipFilter o) {
+      files
+        ..setStorageScope(StorageScope.all)
+        ..setOwnershipFilter(o);
+      return paths(
+        files.applyCommonFilters(
+          mixed,
+          showFavoritesOnly: false,
+          hidden: HiddenFilesFilter.include,
+        ),
+      );
+    }
+
+    expect(files.ownershipFilter, OwnershipFilter.all);
+    expect(run(OwnershipFilter.all), paths(mixed));
+    // Mine is everything that isn't shared with me (external included).
+    expect(run(OwnershipFilter.mine), ['/a.txt', '/nas']);
+    expect(run(OwnershipFilter.shared), ['/Budget.xlsx']);
+  });
+
+  test('ownership filter is skipped where scope filtering is (Offline)', () {
+    final files = build()..setOwnershipFilter(OwnershipFilter.shared);
+    final mixed = [_item('/a.txt'), _item('/b', mountType: 'shared')];
+    expect(
+      paths(
+        files.applyCommonFilters(
+          mixed,
+          showFavoritesOnly: false,
+          hidden: HiddenFilesFilter.include,
+          applyStorageScope: false,
+        ),
+      ),
+      ['/a.txt', '/b'],
+    );
+  });
+
   group('loadHiddenFilter', () {
     Future<HiddenFilesFilter> load(Map<String, Object> values) async {
       SharedPreferences.setMockInitialValues(values);

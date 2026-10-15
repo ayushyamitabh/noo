@@ -18,6 +18,12 @@ class NextcloudItem {
   final int? imageHeight;
   final String? mountType;
 
+  /// The file's owner (`oc:owner-id` / `oc:owner-display-name`) - the other
+  /// person's account for something shared with you. Null where the server
+  /// didn't say (or for local/offline items).
+  final String? ownerId;
+  final String? ownerDisplayName;
+
   /// Trash-bin items only: the folder path the item was deleted from, and
   /// when it was deleted. Null for items fetched from a regular directory.
   final String? originalLocation;
@@ -38,6 +44,8 @@ class NextcloudItem {
     this.imageWidth,
     this.imageHeight,
     this.mountType,
+    this.ownerId,
+    this.ownerDisplayName,
     this.originalLocation,
     this.deletedAt,
   }) : dateCreated = dateCreated ?? lastModified;
@@ -46,6 +54,20 @@ class NextcloudItem {
   bool get isMedia =>
       type == NextcloudItemType.image || type == NextcloudItemType.video;
   bool get isExternalStorage => mountType == 'external';
+
+  /// A received share's mount root: shared *with* you by someone else, as
+  /// opposed to something you own or an external mount. Only the mount root
+  /// carries `mount-type`, so items inside a shared folder are false here
+  /// (see [isOwnedByOther] for them).
+  bool get isSharedWithMe => mountType == 'shared';
+
+  /// Whether someone other than [username] owns this item. Unlike
+  /// [isSharedWithMe] (only a share's mount root carries `mount-type`) this
+  /// also holds for everything inside a shared folder, because the server
+  /// reports the owner on every node.
+  bool isOwnedByOther(String username) =>
+      isSharedWithMe ||
+      (ownerId != null && ownerId!.toLowerCase() != username.toLowerCase());
 
   NextcloudItem copyWith({
     String? id,
@@ -62,6 +84,8 @@ class NextcloudItem {
     int? imageWidth,
     int? imageHeight,
     String? mountType,
+    String? ownerId,
+    String? ownerDisplayName,
     String? originalLocation,
     DateTime? deletedAt,
   }) {
@@ -80,6 +104,8 @@ class NextcloudItem {
       imageWidth: imageWidth ?? this.imageWidth,
       imageHeight: imageHeight ?? this.imageHeight,
       mountType: mountType ?? this.mountType,
+      ownerId: ownerId ?? this.ownerId,
+      ownerDisplayName: ownerDisplayName ?? this.ownerDisplayName,
       originalLocation: originalLocation ?? this.originalLocation,
       deletedAt: deletedAt ?? this.deletedAt,
     );

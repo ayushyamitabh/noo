@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -28,6 +29,7 @@ import '../widgets/files_controls_row.dart';
 import '../widgets/item_icon.dart';
 import '../widgets/manage_synced_folders_sheet.dart';
 import '../widgets/noo/core/noo_button.dart';
+import '../widgets/noo/core/noo_chip.dart';
 import '../widgets/noo/files/noo_file_kind.dart';
 import '../widgets/noo/files/noo_file_row.dart';
 import '../widgets/noo/files/noo_file_table.dart';
@@ -79,14 +81,19 @@ class FilesView extends StatefulWidget {
   State<FilesView> createState() => _FilesViewState();
 }
 
-/// The collapsible "External storage" header [StorageScope.all] puts above
-/// the external items.
-class _ExternalStorageHeader extends StatelessWidget {
+/// A collapsible section header in the Files list ("External storage",
+/// "Shared with me"): icon, label, item count and a chevron.
+class _SectionHeader extends StatelessWidget {
+  final IconData icon;
+  final String label;
   final int count;
   final bool expanded;
   final VoidCallback onTap;
 
-  const _ExternalStorageHeader({
+  const _SectionHeader({
+    super.key,
+    required this.icon,
+    required this.label,
     required this.count,
     required this.expanded,
     required this.onTap,
@@ -98,7 +105,7 @@ class _ExternalStorageHeader extends StatelessWidget {
     return Semantics(
       button: true,
       expanded: expanded,
-      label: 'External storage',
+      label: label,
       child: InkWell(
         onTap: onTap,
         child: Padding(
@@ -108,12 +115,9 @@ class _ExternalStorageHeader extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(LucideIcons.hardDrive, size: 18, color: colors.fg2),
+              Icon(icon, size: 18, color: colors.fg2),
               const SizedBox(width: 10),
-              Text(
-                'External storage',
-                style: NooText.bodyL.copyWith(color: colors.fg1),
-              ),
+              Text(label, style: NooText.bodyL.copyWith(color: colors.fg1)),
               const SizedBox(width: 8),
               Text('$count', style: NooText.body.copyWith(color: colors.fg3)),
               const Spacer(),
@@ -293,9 +297,54 @@ class _FilesViewState extends State<FilesView> {
 
   /// Whether [StorageScope.all]'s external-storage section is open.
   bool _externalExpanded = true;
+
+  /// Whether the "Shared with me" section is open.
+  bool _sharedExpanded = true;
+
+  /// The section headers' keys, so the quick-jump chips can scroll to them.
+  final _externalKey = GlobalKey();
+  final _sharedKey = GlobalKey();
   int _lastPathDepth = 1;
 
   bool get _isSelecting => _selectedIds.isNotEmpty;
+
+  /// Scrolls the list so the section header behind [key] sits just under the
+  /// pinned controls row ([clearance] tall), opening it first if [open].
+  ///
+  /// The sections come after the regular items, and a sliver list only
+  /// builds what's near the viewport - so when the header hasn't been built
+  /// yet this scrolls toward the end (which builds it) and tries again.
+  Future<void> _jumpToSection(
+    GlobalKey key,
+    double clearance, {
+    required bool open,
+    required VoidCallback expand,
+  }) async {
+    final controller = widget.scrollController;
+    if (open) setState(expand);
+    for (var attempt = 0; attempt < 8; attempt++) {
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted || !controller.hasClients) return;
+      final box = key.currentContext?.findRenderObject();
+      final viewport = box == null ? null : RenderAbstractViewport.maybeOf(box);
+      final position = controller.position;
+      if (box != null && viewport != null) {
+        final target = (viewport.getOffsetToReveal(box, 0).offset - clearance)
+            .clamp(position.minScrollExtent, position.maxScrollExtent);
+        await position.animateTo(
+          target,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+        );
+        return;
+      }
+      await position.animateTo(
+        position.maxScrollExtent,
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeIn,
+      );
+    }
+  }
 
   bool get _offline => widget.offline;
 
@@ -815,20 +864,34 @@ class _FilesViewState extends State<FilesView> {
       ];
     }
 
-    // "All + external": external items leave the main list for their own
-    // collapsible section below it. Offline has no such distinction.
+    // "All + external" / "All shared": external and shared-with-you items
+    // leave the main list for their own collapsible sections below it.
+    // Shared items only split out at the root - inside a shared folder
+    // everything is shared. Offline has no such distinction.
     final splitExternal = !_offline && files.storageScope == StorageScope.all;
-    final mainItems = splitExternal
-        ? browser.items.where((i) => !i.isExternalStorage).toList()
-        : browser.items;
+    final splitShared =
+        !_offline &&
+        browser.currentFolderPath == '/' &&
+        files.ownershipFilter == OwnershipFilter.all;
     final externalItems = splitExternal
         ? browser.items.where((i) => i.isExternalStorage).toList()
         : const <NextcloudItem>[];
+    final sharedItems = splitShared
+        ? browser.items
+              .where((i) => i.isSharedWithMe && !i.isExternalStorage)
+              .toList()
+        : const <NextcloudItem>[];
+    final mainItems = browser.items
+        .where((i) => !externalItems.contains(i) && !sharedItems.contains(i))
+        .toList();
     final bodySlivers = <Widget>[
       if (mainItems.isNotEmpty) ...itemSlivers(mainItems, section: 'main'),
       if (externalItems.isNotEmpty) ...[
         SliverToBoxAdapter(
-          child: _ExternalStorageHeader(
+          child: _SectionHeader(
+            key: _externalKey,
+            icon: LucideIcons.hardDrive,
+            label: 'External storage',
             count: externalItems.length,
             expanded: _externalExpanded,
             onTap: () => setState(() => _externalExpanded = !_externalExpanded),
@@ -841,6 +904,57 @@ class _FilesViewState extends State<FilesView> {
             tableHeader: mainItems.isEmpty,
           ),
       ],
+      if (sharedItems.isNotEmpty) ...[
+        SliverToBoxAdapter(
+          child: _SectionHeader(
+            key: _sharedKey,
+            icon: LucideIcons.users,
+            label: 'Shared with me',
+            count: sharedItems.length,
+            expanded: _sharedExpanded,
+            onTap: () => setState(() => _sharedExpanded = !_sharedExpanded),
+          ),
+        ),
+        if (_sharedExpanded)
+          ...itemSlivers(
+            sharedItems,
+            section: 'shared',
+            tableHeader: mainItems.isEmpty && externalItems.isEmpty,
+          ),
+      ],
+    ];
+
+    // Height of the pinned controls row (see its `StickyHeaderDelegate`
+    // below) - what a section header has to be scrolled clear of.
+    final stickyHeight = _isSelecting ? 56.0 : (hasBreadcrumbs ? 106.0 : 64.0);
+
+    // Quick jump: one chip per section, so a long list needn't be scrolled
+    // to reach them. Tapping opens a collapsed section and scrolls to it.
+    final jumpChips = <Widget>[
+      if (externalItems.isNotEmpty)
+        NooChip(
+          icon: LucideIcons.hardDrive,
+          outline: isDesktop,
+          onTap: () => _jumpToSection(
+            _externalKey,
+            stickyHeight,
+            open: !_externalExpanded,
+            expand: () => _externalExpanded = true,
+          ),
+          child: Text('External storage · ${externalItems.length}'),
+        ),
+      if (sharedItems.isNotEmpty)
+        NooChip(
+          icon: LucideIcons.users,
+          outline: isDesktop,
+          onTap: () => _jumpToSection(
+            _sharedKey,
+            stickyHeight,
+            open: !_sharedExpanded,
+            expand: () => _sharedExpanded = true,
+          ),
+          child: Text('Shared with me · ${sharedItems.length}'),
+        ),
     ];
 
     final List<Widget> contentSlivers = [
@@ -858,12 +972,23 @@ class _FilesViewState extends State<FilesView> {
             // fixed height) [+ 10 gap + 32 breadcrumbs height, if present].
             // Getting this wrong overflows the sliver header by exactly the
             // shortfall - a real bug this shipped with once already.
-            height: _isSelecting ? 56 : (hasBreadcrumbs ? 106 : 64),
+            height: stickyHeight,
             child: topRow,
           ),
         ),
       if (_offline)
         SliverToBoxAdapter(child: _buildOfflineSummary(context, sync)),
+      if (jumpChips.isNotEmpty && !browser.isLoading)
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(gutter, NooSpace.xs, gutter, 0),
+            child: Wrap(
+              spacing: NooSpace.xs,
+              runSpacing: NooSpace.xs,
+              children: jumpChips,
+            ),
+          ),
+        ),
       // Files List / Grid
       if (browser.isLoading)
         const SliverFillRemaining(
@@ -1356,6 +1481,7 @@ class _FilesViewState extends State<FilesView> {
           : (item.isFolder ? 'Folder' : null),
       statuses: _nooStatuses(status),
       favorite: item.isFavorite,
+      shared: !_offline && item.isSharedWithMe,
       iosStyle: NooLayout.iosStyle(context),
       selected: isSelected,
       onSelectionToggle:
@@ -1448,6 +1574,7 @@ class _FilesViewState extends State<FilesView> {
       col3: item.isFolder ? null : DateFormat.yMMMd().format(item.lastModified),
       statuses: _nooStatuses(status),
       favorite: item.isFavorite,
+      shared: !_offline && item.isSharedWithMe,
       selected: isSelected,
       onSelectionToggle:
           _offline || (picking && !pick.pickRequest!.allowMultiple)

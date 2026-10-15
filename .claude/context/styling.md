@@ -178,6 +178,24 @@ blocks are noted where they matter:
   regular items first, then a collapsible "External storage" section
   (`_ExternalStorageHeader`, local `_externalExpanded` state, default open)
   holding the external ones; Photos/Favorites just merge them into one list.
+- **Shared with me.** A third segmented row, `OwnershipFilterRow` (All /
+  Mine / Shared; title "Shared items"), sits under the storage row in both
+  filter sheets (and counts toward the Filters chip's active tint, hidden
+  with the storage row on Offline). `OwnershipFilter` (`FilesController`,
+  `ui_ownership_filter`, per account) is applied by `applyCommonFilters`
+  like the storage scope, so Files, Photos and Favorites all honor it. A
+  received share is `NextcloudItem.isSharedWithMe` (`nc:mount-type` =
+  `shared`, only on the share's mount root). With the filter on All, Files
+  at the root pulls those items into their own collapsible "Shared with me"
+  section after "External storage" (`_SectionHeader`, `_sharedExpanded`);
+  inside a folder (and with Mine / Shared) the list is flat. `NooFileRow`/
+  `NooFileTableRow` take `shared:` and draw a `users` icon in accent-text
+  beside the favorite star (the grid card has no slot for either). Under
+  the pinned controls row, one `NooChip` per non-empty section ("External
+  storage · N", "Shared with me · N") is the quick jump: it opens a
+  collapsed section and scrolls to its header (`_jumpToSection` - a sliver
+  list only builds near the viewport, so it scrolls toward the end until
+  the header exists, then reveals it under the pinned row).
 - `lib/widgets/files/file_breadcrumb_row.dart` — the noo-styled breadcrumb
   trail Files uses in place of the shared
   [`Breadcrumbs`](../../lib/widgets/breadcrumbs.dart) widget. `Breadcrumbs`

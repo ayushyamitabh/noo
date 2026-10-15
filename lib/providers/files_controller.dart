@@ -15,6 +15,12 @@ enum FileSortField { name, dateCreated, dateModified, size }
 /// Files/Photos/Favorites (see [applyCommonFilters]'s doc comment).
 enum StorageScope { cloud, external, all }
 
+/// Whose items a listing shows: [all] of them (the default), only [mine]
+/// (everything that isn't shared with you), or only what's [shared] with
+/// you by other people. Same reach as [StorageScope] - Files, Photos and
+/// Favorites share it (see [applyCommonFilters]'s doc comment).
+enum OwnershipFilter { all, mine, shared }
+
 /// Which dotfile/dotfolder items a listing shows: [hide] them (the
 /// default), show [only] them, or [include] them alongside everything else.
 /// Files and Photos each keep their own (see [applyCommonFilters]).
@@ -76,6 +82,7 @@ class FilesController extends ChangeNotifier
 
   static const _prefGridView = 'ui_grid_view';
   static const _prefStorageScope = 'ui_storage_scope';
+  static const _prefOwnershipFilter = 'ui_ownership_filter';
   static const _prefFilesTypeFilter = 'ui_files_type_filter';
   static const _prefShowHiddenFiles = 'ui_show_hidden';
   static const _prefHiddenFilter = 'ui_hidden_filter';
@@ -88,6 +95,7 @@ class FilesController extends ChangeNotifier
 
   bool _isGridView = false;
   StorageScope _storageScope = StorageScope.cloud;
+  OwnershipFilter _ownershipFilter = OwnershipFilter.all;
   FilesTypeFilter _filesTypeFilter = FilesTypeFilter.all;
   HiddenFilesFilter _hiddenFilter = HiddenFilesFilter.hide;
 
@@ -141,6 +149,7 @@ class FilesController extends ChangeNotifier
   List<String> get pathStack => _pathStack;
   bool get isGridView => _isGridView;
   StorageScope get storageScope => _storageScope;
+  OwnershipFilter get ownershipFilter => _ownershipFilter;
   FilesTypeFilter get filesTypeFilter => _filesTypeFilter;
   HiddenFilesFilter get hiddenFilter => _hiddenFilter;
   FileSortField get filesSortField => sortFieldFor(_currentFolderPath);
@@ -188,7 +197,8 @@ class FilesController extends ChangeNotifier
         .any((segment) => segment.startsWith('.'));
   }
 
-  /// Applies the shared favorites-only/hidden-files/storage-scope toggles -
+  /// Applies the shared favorites-only/hidden-files/storage-scope/ownership
+  /// toggles -
   /// shared by Files' own [items], Photos' `photoItems` (its own favorites-
   /// only/hidden toggles, but [storageScope] here), and Favorites'
   /// `favoriteItems` (via [applyFilesDisplayPrefs]).
@@ -217,6 +227,14 @@ class FilesController extends ChangeNotifier
         case StorageScope.external:
           filtered = filtered.where((i) => i.isExternalStorage).toList();
         case StorageScope.all:
+          break;
+      }
+      switch (_ownershipFilter) {
+        case OwnershipFilter.mine:
+          filtered = filtered.where((i) => !i.isSharedWithMe).toList();
+        case OwnershipFilter.shared:
+          filtered = filtered.where((i) => i.isSharedWithMe).toList();
+        case OwnershipFilter.all:
           break;
       }
     }
@@ -282,6 +300,7 @@ class FilesController extends ChangeNotifier
     _pathStack = ['/'];
     _isGridView = false;
     _storageScope = StorageScope.cloud;
+    _ownershipFilter = OwnershipFilter.all;
     _filesTypeFilter = FilesTypeFilter.all;
     _hiddenFilter = HiddenFilesFilter.hide;
     _cachePolicy = defaultCachePolicy;
@@ -328,6 +347,11 @@ class FilesController extends ChangeNotifier
         _storageScope = StorageScope.values.firstWhere(
           (s) => s.name == storageScopeName,
           orElse: () => StorageScope.cloud,
+        );
+        final ownershipName = prefs.getString(k(_prefOwnershipFilter));
+        _ownershipFilter = OwnershipFilter.values.firstWhere(
+          (o) => o.name == ownershipName,
+          orElse: () => OwnershipFilter.all,
         );
         final filesTypeFilterName = prefs.getString(k(_prefFilesTypeFilter));
         _filesTypeFilter = FilesTypeFilter.values.firstWhere(
@@ -646,6 +670,16 @@ class FilesController extends ChangeNotifier
     _persistAccountPref(
       _prefStorageScope,
       (p, key) => p.setString(key, scope.name),
+    );
+  }
+
+  void setOwnershipFilter(OwnershipFilter filter) {
+    if (_ownershipFilter == filter) return;
+    _ownershipFilter = filter;
+    notifyListeners();
+    _persistAccountPref(
+      _prefOwnershipFilter,
+      (p, key) => p.setString(key, filter.name),
     );
   }
 

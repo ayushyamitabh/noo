@@ -426,7 +426,8 @@ class _PhotosViewState extends State<PhotosView> {
         _typeFilter != _PhotoTypeFilter.all ||
         photos.showFavoritesOnly ||
         photos.hiddenFilter != HiddenFilesFilter.hide ||
-        files.storageScope != StorageScope.cloud;
+        files.storageScope != StorageScope.cloud ||
+        files.ownershipFilter != OwnershipFilter.all;
 
     // A plain Row, not a horizontally-scrolling one - see
     // `FilesControlsRow`'s identical fix/doc comment: a `SingleChildScrollView`
@@ -610,6 +611,11 @@ class _PhotosViewState extends State<PhotosView> {
                 StorageScopeRow(
                   value: files.storageScope,
                   onChanged: files.setStorageScope,
+                ),
+                const SizedBox(height: 22),
+                OwnershipFilterRow(
+                  value: files.ownershipFilter,
+                  onChanged: files.setOwnershipFilter,
                 ),
               ],
             ),

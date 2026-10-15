@@ -73,4 +73,39 @@ void main() {
       expect(find.text('All'), findsOneWidget);
     });
   });
+
+  group('OwnershipFilterRow', () {
+    testNooWidgets('offers all / mine / shared with me', (
+      tester,
+      theme,
+      c,
+    ) async {
+      var value = OwnershipFilter.all;
+      await pumpNoo(
+        tester,
+        StatefulBuilder(
+          builder: (context, setState) => SizedBox(
+            width: 360,
+            child: OwnershipFilterRow(
+              value: value,
+              onChanged: (v) => setState(() => value = v),
+            ),
+          ),
+        ),
+        theme: theme,
+      );
+      expect(find.text('Shared items'), findsOneWidget);
+      expect(find.text('All'), findsOneWidget);
+
+      await tester.tap(find.byIcon(LucideIcons.user));
+      await tester.pumpAndSettle();
+      expect(value, OwnershipFilter.mine);
+      expect(find.text('Mine'), findsOneWidget);
+
+      await tester.tap(find.byIcon(LucideIcons.users).last);
+      await tester.pumpAndSettle();
+      expect(value, OwnershipFilter.shared);
+      expect(find.text('Shared'), findsOneWidget);
+    });
+  });
 }

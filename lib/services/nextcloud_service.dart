@@ -255,6 +255,8 @@ class NextcloudService {
     <oc:fileid/>
     <oc:size/>
     <nc:mount-type/>
+    <oc:owner-id/>
+    <oc:owner-display-name/>
   </d:prop>
 </d:propfind>''';
 
@@ -338,6 +340,8 @@ class NextcloudService {
       bool isFav = false;
       String? fileId;
       String? mountType;
+      String? ownerId;
+      String? ownerDisplayName;
 
       for (var prop in props) {
         if (!isCollection) {
@@ -373,6 +377,11 @@ class NextcloudService {
             .findLocalChildren('mount-type')
             .firstOrNull
             ?.innerText;
+        ownerId ??= prop.findLocalChildren('owner-id').firstOrNull?.innerText;
+        ownerDisplayName ??= prop
+            .findLocalChildren('owner-display-name')
+            .firstOrNull
+            ?.innerText;
       }
 
       final name = Uri.decodeFull(
@@ -400,6 +409,8 @@ class NextcloudService {
           previewUrl:
               '$_cleanServerUrl/core/preview?fileId=$validId&x=500&y=500',
           mountType: mountType,
+          ownerId: ownerId,
+          ownerDisplayName: ownerDisplayName,
         ),
       );
     }
@@ -584,6 +595,8 @@ class NextcloudService {
         <oc:favorite/>
         <oc:fileid/>
         <nc:mount-type/>
+        <oc:owner-id/>
+        <oc:owner-display-name/>
       </d:prop>
     </d:select>
     <d:from>
@@ -651,6 +664,8 @@ class NextcloudService {
       bool isFav = false;
       String? fileId;
       String? mountType;
+      String? ownerId;
+      String? ownerDisplayName;
 
       for (var prop in props) {
         sizeStr ??= prop
@@ -676,6 +691,11 @@ class NextcloudService {
         fileId ??= prop.findLocalChildren('fileid').firstOrNull?.innerText;
         mountType ??= prop
             .findLocalChildren('mount-type')
+            .firstOrNull
+            ?.innerText;
+        ownerId ??= prop.findLocalChildren('owner-id').firstOrNull?.innerText;
+        ownerDisplayName ??= prop
+            .findLocalChildren('owner-display-name')
             .firstOrNull
             ?.innerText;
       }
@@ -715,6 +735,8 @@ class NextcloudService {
           previewUrl:
               '$_cleanServerUrl/core/preview?fileId=$validId&x=500&y=500',
           mountType: mountType,
+          ownerId: ownerId,
+          ownerDisplayName: ownerDisplayName,
         ),
       );
     }
@@ -752,6 +774,8 @@ class NextcloudService {
         <oc:favorite/>
         <oc:fileid/>
         <nc:mount-type/>
+        <oc:owner-id/>
+        <oc:owner-display-name/>
       </d:prop>
     </d:select>
     <d:from>
@@ -810,6 +834,8 @@ class NextcloudService {
       String? mimeType;
       String? fileId;
       String? mountType;
+      String? ownerId;
+      String? ownerDisplayName;
 
       for (var prop in props) {
         if (!isCollection) {
@@ -840,6 +866,11 @@ class NextcloudService {
         fileId ??= prop.findLocalChildren('fileid').firstOrNull?.innerText;
         mountType ??= prop
             .findLocalChildren('mount-type')
+            .firstOrNull
+            ?.innerText;
+        ownerId ??= prop.findLocalChildren('owner-id').firstOrNull?.innerText;
+        ownerDisplayName ??= prop
+            .findLocalChildren('owner-display-name')
             .firstOrNull
             ?.innerText;
       }
@@ -879,6 +910,8 @@ class NextcloudService {
           previewUrl:
               '$_cleanServerUrl/core/preview?fileId=$validId&x=500&y=500',
           mountType: mountType,
+          ownerId: ownerId,
+          ownerDisplayName: ownerDisplayName,
         ),
       );
     }
