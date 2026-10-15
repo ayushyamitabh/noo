@@ -35,6 +35,9 @@ class NooFileRow extends StatelessWidget {
   /// Shows the accent-text star before the overflow button.
   final bool favorite;
 
+  /// Shows an accent-text "shared with you" icon beside the star.
+  final bool shared;
+
   /// Screen-specific trailing icon (e.g. `rotate-ccw` in Trash), placed
   /// after the favorite star and before the overflow button.
   final Widget? trailing;
@@ -62,6 +65,7 @@ class NooFileRow extends StatelessWidget {
     this.meta,
     this.statuses = const [],
     this.favorite = false,
+    this.shared = false,
     this.trailing,
     this.iosStyle = false,
     this.selected = false,
@@ -142,6 +146,17 @@ class NooFileRow extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (shared) ...[
+                  const SizedBox(width: NooSpace.xs),
+                  Semantics(
+                    label: 'Shared with you',
+                    child: Icon(
+                      LucideIcons.users,
+                      size: 18,
+                      color: colors.accentText,
+                    ),
+                  ),
+                ],
                 if (favorite) ...[
                   const SizedBox(width: NooSpace.xs),
                   Icon(LucideIcons.star, size: 18, color: colors.accentText),

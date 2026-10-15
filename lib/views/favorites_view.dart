@@ -28,7 +28,7 @@ import '../widgets/noo/noo_layout.dart';
 import '../widgets/noo/overlays/noo_sheet.dart';
 import '../widgets/noo/core/noo_button.dart';
 import '../widgets/share_sheet.dart';
-import '../widgets/sticky_header_delegate.dart';
+import '../widgets/pinned_selection_header.dart';
 import '../widgets/selection_bar_overlay.dart';
 import '../widgets/tabs/tab_state_slivers.dart';
 import '../widgets/synced_header_scaffold.dart' show formatBytes;
@@ -497,6 +497,9 @@ class _FavoritesViewState extends State<FavoritesView> {
         _isSelecting &&
         context.watch<SettingsController>().selectionBarPosition ==
             SelectionBarPosition.bottom;
+    final keepFilters = context
+        .watch<SettingsController>()
+        .keepFiltersWhileSelecting;
     final colors = context.nooColors;
     final isDesktop = NooLayout.isDesktop(context);
     final favoritesController = context.watch<FavoritesController>();
@@ -527,16 +530,14 @@ class _FavoritesViewState extends State<FavoritesView> {
 
     final contentSlivers = <Widget>[
       if (widget.topBar != null) topBarSliver(widget.topBar!),
-      if (!selectionAtBottom)
-        SliverPersistentHeader(
-          pinned: true,
-          delegate: StickyHeaderDelegate(
-            floating: _isSelecting,
-            height: _isSelecting ? 56 : 64,
-            child: _isSelecting
-                ? _buildSelectionBar(context, selectedItems)
-                : controlsRow,
-          ),
+      if (keepFilters || !selectionAtBottom)
+        PinnedSelectionHeader(
+          controlsHeight: 64,
+          keepControls: keepFilters,
+          controls: controlsRow,
+          selectionBar: _isSelecting && !selectionAtBottom
+              ? _buildSelectionBar(context, selectedItems)
+              : null,
         ),
       if (favoritesController.isLoading && favorites.isEmpty)
         const SliverFillRemaining(
@@ -712,6 +713,11 @@ class _FavoritesViewState extends State<FavoritesView> {
       onClose: _clearSelection,
       isDesktop: NooLayout.isDesktop(context),
       iosStyle: NooLayout.iosStyle(context),
+      frosted: context.watch<SettingsController>().bottomBarFrosted,
+      frostedBlur: context.watch<SettingsController>().bottomBarFrostedBlur,
+      frostedOpacity: context
+          .watch<SettingsController>()
+          .bottomBarFrostedOpacity,
     );
   }
 }

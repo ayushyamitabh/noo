@@ -102,6 +102,77 @@ void main() {
     );
   });
 
+  test('ownership filter: all / mine / shared with me', () {
+    final files = build();
+    final mixed = [
+      _item('/a.txt'),
+      _item('/Budget.xlsx', mountType: 'shared'),
+      _item('/nas', mountType: 'external'),
+    ];
+    List<String> run(OwnershipFilter o) {
+      files
+        ..setStorageScope(StorageScope.all)
+        ..setOwnershipFilter(o);
+      return paths(
+        files.applyCommonFilters(
+          mixed,
+          showFavoritesOnly: false,
+          hidden: HiddenFilesFilter.include,
+        ),
+      );
+    }
+
+    expect(files.ownershipFilter, OwnershipFilter.all);
+    expect(run(OwnershipFilter.all), paths(mixed));
+    // Mine is everything that isn't shared with me (external included).
+    expect(run(OwnershipFilter.mine), ['/a.txt', '/nas']);
+    expect(run(OwnershipFilter.shared), ['/Budget.xlsx']);
+  });
+
+  test('ownership filter is skipped where scope filtering is (Offline)', () {
+    final files = build()..setOwnershipFilter(OwnershipFilter.shared);
+    final mixed = [_item('/a.txt'), _item('/b', mountType: 'shared')];
+    expect(
+      paths(
+        files.applyCommonFilters(
+          mixed,
+          showFavoritesOnly: false,
+          hidden: HiddenFilesFilter.include,
+          applyStorageScope: false,
+        ),
+      ),
+      ['/a.txt', '/b'],
+    );
+  });
+
+  group('storage scope default', () {
+    test('is All for a fresh account', () {
+      expect(build().storageScope, StorageScope.all);
+    });
+
+    Future<StorageScope> saved(Map<String, Object> values) async {
+      SharedPreferences.setMockInitialValues(values);
+      return FilesController.savedStorageScope(
+        await SharedPreferences.getInstance(),
+        (accountId, baseKey) => '${accountId}_$baseKey',
+        'a',
+      );
+    }
+
+    test('nothing saved or an unknown value falls back to All', () async {
+      expect(await saved({}), StorageScope.all);
+      expect(await saved({'a_ui_storage_scope': 'bogus'}), StorageScope.all);
+    });
+
+    test('a choice the user already made is kept', () async {
+      expect(await saved({'a_ui_storage_scope': 'cloud'}), StorageScope.cloud);
+      expect(
+        await saved({'a_ui_storage_scope': 'external'}),
+        StorageScope.external,
+      );
+    });
+  });
+
   group('loadHiddenFilter', () {
     Future<HiddenFilesFilter> load(Map<String, Object> values) async {
       SharedPreferences.setMockInitialValues(values);

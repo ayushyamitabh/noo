@@ -73,6 +73,14 @@ rather than needing a rewrite for multi-account support.
   there is no WebDAV client dependency. `_parseDavDate`/`_davPath` in this
   file exist because WebDAV responses use RFC 1123 dates and either bare
   paths or full URLs for `href`; reuse them rather than re-deriving.
+  Listing PROPFINDs (directory, all media, favorites) also request
+  `nc:mount-type` and `oc:owner-id`/`oc:owner-display-name`.
+  `NextcloudItem.mountType` is `external` for external storage and `shared`
+  for a received share - in both cases only on the mount *root*, not on what's
+  inside it. The owner props come back on every node, which is why the Share
+  sheet decides who the owner is from `isOwnedByOther(username)` (works for
+  files nested in a shared folder) while the Files list/filter/sections use
+  `isSharedWithMe` (the mount root).
   `creationdate` specifically needs `_parseDavCreationDate`, not
   `_parseDavDate` directly - Nextcloud has no real per-file creation-time
   tracking for most setups, so that property routinely comes back as a
@@ -85,6 +93,12 @@ rather than needing a rewrite for multi-account support.
 - **Everything else** (shares, activity, trash, favorites, quota, user info,
   file versions) goes through Nextcloud's OCS APIs (`/ocs/v2.php/...`), JSON
   in, with the `OCS-APIRequest: true` header required on every OCS call.
+  The shares list returns one share per recipient (and per link), and a
+  share's `permissions` is what *that recipient* can do - so the Shares tab
+  folds `By you`/`Links` into one row per item (`SharesView._ShareEntry`,
+  grouped by path; "Mixed access" when the shares differ) and names the
+  recipient rather than the owner (who is always you there). `With you` is
+  left one row per share.
   *Toggling* a favorite is OCS; *listing* every favorite (`fetchFavorites`,
   for the Favorites tab) is WebDAV instead - the same `SEARCH` mechanism
   `fetchAllMedia`/`fetchRecentFiles` use, filtered by `oc:favorite` instead

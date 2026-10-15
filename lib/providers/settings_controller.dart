@@ -78,6 +78,7 @@ class SettingsController extends ChangeNotifier {
   static const _prefSeedColor = 'ui_seed_color';
   static const _prefTabOrder = 'ui_tab_order';
   static const _prefSelectionBarPosition = 'ui_selection_bar_position';
+  static const _prefKeepFiltersSelecting = 'ui_keep_filters_selecting';
   static const _prefSelectionActionOrder = 'ui_selection_action_order';
   static const _prefHiddenTabs = 'ui_hidden_tabs';
   static const _prefDefaultTab = 'ui_default_tab';
@@ -113,6 +114,7 @@ class SettingsController extends ChangeNotifier {
 
   bool _tapTabToScrollTop = true;
   SelectionBarPosition _selectionBarPosition = SelectionBarPosition.top;
+  bool _keepFiltersWhileSelecting = true;
 
   List<AppTab> _tabOrder = AppTab.values.toList();
   Set<AppTab> _hiddenTabs = {};
@@ -169,6 +171,10 @@ class SettingsController extends ChangeNotifier {
   bool get tapTabToScrollTop => _tapTabToScrollTop;
   SelectionBarPosition get selectionBarPosition => _selectionBarPosition;
 
+  /// Whether the filter row stays on screen while items are selected (the
+  /// action bar then appears beside it instead of replacing it).
+  bool get keepFiltersWhileSelecting => _keepFiltersWhileSelecting;
+
   /// The cap a screen should actually enforce for the *regular*, user-
   /// reorderable tabs - one below [defaultMaxVisibleTabs] while
   /// [searchInBottomBar] is on, since Search then takes that freed-up slot
@@ -213,6 +219,9 @@ class SettingsController extends ChangeNotifier {
             position.name == prefs.getString(_prefSelectionBarPosition),
         orElse: () => SelectionBarPosition.top,
       );
+      _keepFiltersWhileSelecting =
+          prefs.getBool(_prefKeepFiltersSelecting) ??
+          _keepFiltersWhileSelecting;
       final bottomBarStyleName = prefs.getString(_prefBottomBarStyle);
       if (bottomBarStyleName != null) {
         _bottomBarStyle = NooBottomBarStyle.values.firstWhere(
@@ -356,6 +365,69 @@ class SettingsController extends ChangeNotifier {
     }
   }
 
+  /// Every preference key this controller persists - what [resetToDefaults]
+  /// clears.
+  static const _allPrefKeys = [
+    _prefThemeMode,
+    _prefUseDynamicColor,
+    _prefSeedColor,
+    _prefTabOrder,
+    _prefSelectionBarPosition,
+    _prefKeepFiltersSelecting,
+    _prefSelectionActionOrder,
+    _prefHiddenTabs,
+    _prefDefaultTab,
+    _prefSwipeLeftAction,
+    _prefSwipeRightAction,
+    _prefFabStyle,
+    _prefBottomBarStyle,
+    _prefBottomBarFrosted,
+    _prefFrostedBlur,
+    _prefFrostedOpacity,
+    _prefAvatarPosition,
+    _prefNavMenuStyle,
+    _prefSearchInBottomBar,
+    _prefAmoledDark,
+    _prefMediaProgressBarStyle,
+    _prefTapTabToScrollTop,
+  ];
+
+  /// Puts every preference this controller owns - appearance, tabs, action
+  /// bar, swipe actions, navigation - back to its default and forgets the
+  /// saved values. (Per-account list prefs live on `FilesController`/
+  /// `PhotosController`; accounts, locks and device sync aren't UI prefs.)
+  Future<void> resetToDefaults() async {
+    _seedColor = AppTheme.defaultAccent;
+    _themeMode = ThemeMode.system;
+    _bottomBarStyle = NooBottomBarStyle.attached;
+    _navMenuStyle = NooNavMenuStyle.drawer;
+    _avatarPosition = AvatarPosition.top;
+    _bottomBarFrosted = false;
+    _frostedBlur = FrostedGlassPreset.standard.blur;
+    _frostedOpacity = FrostedGlassPreset.standard.opacity;
+    _searchInBottomBar = false;
+    _useDynamicColor = true;
+    _amoledDark = false;
+    _mediaProgressBarStyle = MediaProgressBarStyle.wavy;
+    _tapTabToScrollTop = true;
+    _selectionBarPosition = SelectionBarPosition.top;
+    _keepFiltersWhileSelecting = true;
+    _tabOrder = AppTab.values.toList();
+    _hiddenTabs = {};
+    _defaultTab = AppTab.files;
+    _selectionActionOrder = SelectionActionKind.values.toList();
+    _swipeLeftAction = SwipeAction.delete;
+    _swipeRightAction = SwipeAction.favorite;
+    _fabStyle = FabStyle.auto;
+    // A fresh install trims to the visible-tab cap on first load; do the same.
+    _enforceMaxVisibleTabs();
+    notifyListeners();
+    final prefs = await _prefsFuture;
+    for (final key in _allPrefKeys) {
+      await prefs.remove(key);
+    }
+  }
+
   void setSeedColor(Color color) {
     _seedColor = color;
     _useDynamicColor = false;
@@ -412,6 +484,13 @@ class SettingsController extends ChangeNotifier {
     _prefsFuture.then(
       (p) => p.setString(_prefSelectionBarPosition, position.name),
     );
+  }
+
+  void setKeepFiltersWhileSelecting(bool value) {
+    if (_keepFiltersWhileSelecting == value) return;
+    _keepFiltersWhileSelecting = value;
+    notifyListeners();
+    _prefsFuture.then((p) => p.setBool(_prefKeepFiltersSelecting, value));
   }
 
   void setBottomBarStyle(NooBottomBarStyle style) {

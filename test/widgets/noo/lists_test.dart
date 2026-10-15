@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -470,6 +472,74 @@ void main() {
         decorationOf(tester, find.byIcon(LucideIcons.pinOff)).color,
         c.surface2,
       );
+    });
+  });
+
+  group('NooSelectionBar frosted glass', () {
+    // The bar's own card: the bordered, decorated container (not the close
+    // button's circle, which `decorationOf` would find first).
+    BoxDecoration barCard(WidgetTester tester) =>
+        tester
+                .widget<Container>(
+                  find
+                      .descendant(
+                        of: find.byType(NooSelectionBar),
+                        matching: find.byWidgetPredicate(
+                          (w) =>
+                              w is Container &&
+                              w.decoration is BoxDecoration &&
+                              (w.decoration as BoxDecoration).border != null,
+                        ),
+                      )
+                      .first,
+                )
+                .decoration!
+            as BoxDecoration;
+
+    Future<void> pumpBar(
+      WidgetTester tester,
+      ThemeData theme, {
+      bool frosted = false,
+    }) => pumpNoo(
+      tester,
+      SizedBox(
+        width: 360,
+        child: NooSelectionBar(
+          count: 1,
+          actions: _actions(2, {}),
+          onClose: () {},
+          isDesktop: false,
+          frosted: frosted,
+          frostedBlur: 12,
+          frostedOpacity: 0.5,
+        ),
+      ),
+      theme: theme,
+    );
+
+    testNooWidgets('solid by default: opaque surface card, shadow, no blur', (
+      tester,
+      theme,
+      c,
+    ) async {
+      await pumpBar(tester, theme);
+      expect(find.byType(BackdropFilter), findsNothing);
+      final card = barCard(tester);
+      expect(card.color, c.surface);
+      expect(card.boxShadow, isNotEmpty);
+    });
+
+    testNooWidgets('frosted: blurred backdrop, translucent fill, no shadow', (
+      tester,
+      theme,
+      c,
+    ) async {
+      await pumpBar(tester, theme, frosted: true);
+      final filter = tester.widget<BackdropFilter>(find.byType(BackdropFilter));
+      expect(filter.filter, ImageFilter.blur(sigmaX: 12, sigmaY: 12));
+      final card = barCard(tester);
+      expect(card.color, c.surface.withValues(alpha: 0.5));
+      expect(card.boxShadow, isNull);
     });
   });
 }

@@ -103,3 +103,59 @@ Future<void> confirmRemoveAccount(
     navigator.popUntil((route) => route.isFirst);
   }
 }
+
+/// A plain confirm step for a Settings action, in the same sheet (phone) /
+/// dialog (tablet) the account removal uses. Resolves true only on confirm.
+Future<bool> confirmSettingsAction(
+  BuildContext context, {
+  required String title,
+  required String message,
+  required String confirmLabel,
+  bool danger = false,
+}) async {
+  var confirmed = false;
+  void cancel() => Navigator.pop(context);
+  void confirm() {
+    confirmed = true;
+    Navigator.pop(context);
+  }
+
+  final colors = context.nooColors;
+  final buttons = Row(
+    children: [
+      Expanded(
+        child: NooButton(
+          variant: NooButtonVariant.secondary,
+          size: NooButtonSize.card,
+          fullWidth: true,
+          onTap: cancel,
+          child: const Text('Cancel'),
+        ),
+      ),
+      const SizedBox(width: NooSpace.sm),
+      Expanded(
+        child: NooButton(
+          variant: danger ? NooButtonVariant.danger : NooButtonVariant.primary,
+          size: NooButtonSize.card,
+          fullWidth: true,
+          onTap: confirm,
+          child: Text(confirmLabel),
+        ),
+      ),
+    ],
+  );
+  final body = Text(message, style: NooText.body.copyWith(color: colors.fg2));
+  if (NooLayout.isDesktop(context)) {
+    await showNooDialog(context, title: title, children: [body, buttons]);
+  } else {
+    await showNooSheet(
+      context,
+      children: [
+        NooOverlayHeader(title: title, onClose: cancel),
+        body,
+        buttons,
+      ],
+    );
+  }
+  return confirmed;
+}

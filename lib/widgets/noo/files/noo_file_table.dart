@@ -169,6 +169,9 @@ class NooFileTableRow extends StatelessWidget {
   /// Status icons in the last column, drawn before the favorite star.
   final List<NooSyncStatus> statuses;
   final bool favorite;
+
+  /// Shows the "shared with you" icon before the favorite star.
+  final bool shared;
   final bool selected;
   final VoidCallback? onSelectionToggle;
   final Widget? thumbnail;
@@ -194,6 +197,7 @@ class NooFileTableRow extends StatelessWidget {
     this.col3,
     this.statuses = const [],
     this.favorite = false,
+    this.shared = false,
     this.selected = false,
     this.onSelectionToggle,
     this.thumbnail,
@@ -264,6 +268,17 @@ class NooFileTableRow extends StatelessWidget {
                   children: [
                     for (final s in statuses) ...[
                       NooStatusIcon(s),
+                      const SizedBox(width: 6),
+                    ],
+                    if (shared) ...[
+                      Semantics(
+                        label: 'Shared with you',
+                        child: Icon(
+                          LucideIcons.users,
+                          size: 14,
+                          color: colors.accentText,
+                        ),
+                      ),
                       const SizedBox(width: 6),
                     ],
                     if (favorite) ...[

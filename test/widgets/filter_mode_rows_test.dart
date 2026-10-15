@@ -73,4 +73,68 @@ void main() {
       expect(find.text('All'), findsOneWidget);
     });
   });
+
+  group('StorageScopeRow order', () {
+    testNooWidgets('All comes first, then cloud only, then only external', (
+      tester,
+      theme,
+      c,
+    ) async {
+      await pumpNoo(
+        tester,
+        SizedBox(
+          width: 360,
+          child: StorageScopeRow(value: StorageScope.all, onChanged: (_) {}),
+        ),
+        theme: theme,
+      );
+      final all = tester.getCenter(find.byIcon(LucideIcons.layers).first).dx;
+      final cloud = tester.getCenter(find.byIcon(LucideIcons.cloud)).dx;
+      // (The title row has a hard-drive icon too; the segment's is the
+      // right-most.)
+      final externalSegment = tester
+          .getCenter(find.byIcon(LucideIcons.hardDrive).last)
+          .dx;
+      expect(all, lessThan(cloud));
+      expect(cloud, lessThan(externalSegment));
+      // And All is the selected one, so its label is the one showing.
+      expect(find.text('All'), findsOneWidget);
+      expect(find.text('Cloud only'), findsNothing);
+    });
+  });
+
+  group('OwnershipFilterRow', () {
+    testNooWidgets('offers all / mine / shared with me', (
+      tester,
+      theme,
+      c,
+    ) async {
+      var value = OwnershipFilter.all;
+      await pumpNoo(
+        tester,
+        StatefulBuilder(
+          builder: (context, setState) => SizedBox(
+            width: 360,
+            child: OwnershipFilterRow(
+              value: value,
+              onChanged: (v) => setState(() => value = v),
+            ),
+          ),
+        ),
+        theme: theme,
+      );
+      expect(find.text('Shared items'), findsOneWidget);
+      expect(find.text('All'), findsOneWidget);
+
+      await tester.tap(find.byIcon(LucideIcons.user));
+      await tester.pumpAndSettle();
+      expect(value, OwnershipFilter.mine);
+      expect(find.text('Mine'), findsOneWidget);
+
+      await tester.tap(find.byIcon(LucideIcons.users).last);
+      await tester.pumpAndSettle();
+      expect(value, OwnershipFilter.shared);
+      expect(find.text('Shared'), findsOneWidget);
+    });
+  });
 }

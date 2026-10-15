@@ -50,6 +50,25 @@ String _permissionLabel(int permissions) {
   return canWrite ? 'Can edit' : 'Can view';
 }
 
+/// One row of the list: a shared item and every share on it. OCS returns one
+/// share per recipient (and per link), so an item shared with three people
+/// comes back three times - the `By you` / `Links` tabs fold those into one
+/// row, and the Share sheet is where the individual shares are managed.
+class _ShareEntry {
+  /// The first share on the item - enough for the row's name, path and icon.
+  final NextcloudShare share;
+  final List<NextcloudShare> all;
+  const _ShareEntry(this.share, this.all);
+
+  bool get multiple => all.length > 1;
+}
+
+/// The permission on [entry], or "Mixed access" when its shares differ.
+String _entryPermission(_ShareEntry entry) {
+  final labels = {for (final s in entry.all) _permissionLabel(s.permissions)};
+  return labels.length == 1 ? labels.first : 'Mixed access';
+}
+
 class SharesView extends StatefulWidget {
   final ScrollController scrollController;
 
@@ -153,19 +172,55 @@ class _SharesViewState extends State<SharesView> {
     );
   }
 
-  List<NextcloudShare> _visibleShares(SharesController c) {
+  /// One entry per shared item for `By you` and `Links`; `With you` stays
+  /// one per share (what someone else shared with you, as the server lists it).
+  List<_ShareEntry> _visibleShares(SharesController c) {
+    List<_ShareEntry> grouped(Iterable<NextcloudShare> shares) {
+      final byPath = <String, List<NextcloudShare>>{};
+      for (final share in shares) {
+        byPath.putIfAbsent(share.path, () => []).add(share);
+      }
+      return [
+        for (final group in byPath.values) _ShareEntry(group.first, group),
+      ];
+    }
+
     switch (_scope) {
       case _ShareScope.withYou:
-        return c.shares;
+        return [
+          for (final s in c.shares) _ShareEntry(s, [s]),
+        ];
       case _ShareScope.byYou:
-        return c.shares
-            .where((s) => s.shareType != ShareType.publicLink)
-            .toList();
+        return grouped(
+          c.shares.where((s) => s.shareType != ShareType.publicLink),
+        );
       case _ShareScope.links:
-        return c.shares
-            .where((s) => s.shareType == ShareType.publicLink)
-            .toList();
+        return grouped(
+          c.shares.where((s) => s.shareType == ShareType.publicLink),
+        );
     }
+  }
+
+  /// Who a row is about. Under `With you` that's the owner (the permission
+  /// beside it is yours); under `By you` and `Links` *you're* the owner, so
+  /// it names the recipient instead - the permission beside it is what
+  /// *they* can do, not what you can.
+  String _whoLabel(_ShareEntry entry) {
+    if (_scope == _ShareScope.withYou) return entry.share.ownerDisplayName;
+    if (_scope == _ShareScope.links) {
+      return entry.multiple ? '${entry.all.length} links' : 'Public link';
+    }
+    final names = {
+      for (final s in entry.all) s.sharedWithDisplayName ?? 'Someone',
+    }.toList();
+    return names.length <= 2
+        ? names.join(', ')
+        : '${names.take(2).join(', ')} +${names.length - 2}';
+  }
+
+  IconData _entryIcon(_ShareEntry entry) {
+    if (!entry.multiple) return _shareTypeIcon(entry.share.shareType);
+    return _scope == _ShareScope.links ? LucideIcons.link : LucideIcons.users;
   }
 
   String _emptyMessage() {
@@ -192,24 +247,24 @@ class _SharesViewState extends State<SharesView> {
   // account's full share list built eagerly up front). Each row still
   // reads as one continuous radius-20 card via per-row corner rounding +
   // a 1px `line` divider.
-  Widget _buildMobileList(BuildContext context, List<NextcloudShare> shares) {
+  Widget _buildMobileList(BuildContext context, List<_ShareEntry> shares) {
     final colors = context.nooColors;
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: NooSpace.sm),
       sliver: SliverList(
         delegate: SliverChildBuilderDelegate((context, index) {
-          final share = shares[index];
+          final entry = shares[index];
+          final share = entry.share;
           final row = NooFileRow(
             kind: NooFileKind.from(
               name: share.name,
               isDirectory: share.isFolder,
             ),
             name: share.name,
-            meta:
-                '${share.ownerDisplayName} · ${_permissionLabel(share.permissions)}',
+            meta: '${_whoLabel(entry)} · ${_entryPermission(entry)}',
             iosStyle: NooLayout.iosStyle(context),
             onTap: () => _openShareSheet(context, share),
-            trailing: Icon(_shareTypeIcon(share.shareType), size: 16),
+            trailing: Icon(_entryIcon(entry), size: 16),
           );
           final isFirst = index == 0;
           final isLast = index == shares.length - 1;
@@ -234,7 +289,7 @@ class _SharesViewState extends State<SharesView> {
     );
   }
 
-  Widget _buildDesktopTable(BuildContext context, List<NextcloudShare> shares) {
+  Widget _buildDesktopTable(BuildContext context, List<_ShareEntry> shares) {
     return SliverPadding(
       padding: const EdgeInsets.symmetric(
         horizontal: NooSpace.xl,
@@ -243,20 +298,23 @@ class _SharesViewState extends State<SharesView> {
       sliver: SliverList(
         delegate: SliverChildBuilderDelegate((context, index) {
           if (index == 0) {
-            return const NooFileTableHeader(
-              col2Label: 'Owner',
+            return NooFileTableHeader(
+              col2Label: _scope == _ShareScope.withYou
+                  ? 'Owner'
+                  : 'Shared with',
               col3Label: 'Permission',
             );
           }
-          final share = shares[index - 1];
+          final entry = shares[index - 1];
+          final share = entry.share;
           return NooFileTableRow(
             kind: NooFileKind.from(
               name: share.name,
               isDirectory: share.isFolder,
             ),
             name: share.name,
-            col2: share.ownerDisplayName,
-            col3: _permissionLabel(share.permissions),
+            col2: _whoLabel(entry),
+            col3: _entryPermission(entry),
             onTap: () => _openShareSheet(context, share),
           );
         }, childCount: shares.length + 1),

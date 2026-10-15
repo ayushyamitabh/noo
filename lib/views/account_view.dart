@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../theme/design_tokens.dart';
+import '../widgets/noo/core/noo_search_field.dart';
 import '../widgets/noo/lists/noo_grouped_list.dart';
 import '../widgets/noo/lists/noo_settings_row.dart';
 import '../widgets/noo/nav/noo_top_bar.dart';
@@ -17,6 +18,7 @@ import '../widgets/settings/settings_files_cache.dart';
 import '../widgets/settings/settings_security.dart';
 import '../widgets/settings/settings_swipe.dart';
 import '../widgets/settings/settings_tabs.dart';
+import '../widgets/settings/settings_search.dart';
 import '../widgets/settings/settings_section.dart';
 
 /// Settings uses pushed category screens on phones and an inline category
@@ -30,6 +32,38 @@ class AccountView extends StatefulWidget {
 
 class _AccountViewState extends State<AccountView> {
   int selected = 0;
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  /// Row text to scroll to and flash once the selected category shows (set
+  /// by opening a search result, cleared by picking a category by hand).
+  String? _reveal;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  bool get _searching => _query.trim().isNotEmpty;
+
+  void _setQuery(String value) => setState(() => _query = value);
+
+  void _clearSearch() {
+    _searchController.clear();
+    setState(() => _query = '');
+  }
+
+  void _openResult(SettingsSearchEntry entry) {
+    final index = _categories.indexWhere((c) => c.title == entry.category);
+    if (index < 0) return;
+    _searchController.clear();
+    setState(() {
+      selected = index;
+      _query = '';
+      _reveal = entry.scrollTarget;
+    });
+  }
 
   static final _categories = <_SettingsCategory>[
     _SettingsCategory(
@@ -79,6 +113,10 @@ class _AccountViewState extends State<AccountView> {
     ),
   ];
 
+  static IconData _iconFor(String category) => _categories
+      .firstWhere((c) => c.title == category, orElse: () => _categories.first)
+      .icon;
+
   @override
   Widget build(BuildContext context) {
     final colors = context.nooColors;
@@ -117,14 +155,35 @@ class _AccountViewState extends State<AccountView> {
                   onManage: () => setState(() => selected = 0),
                 ),
                 groupItems: true,
+                search: NooSearchField(
+                  placeholder: 'Search settings',
+                  onSurface: true,
+                  controller: _searchController,
+                  onChanged: _setQuery,
+                  trailing: _searching
+                      ? GestureDetector(
+                          onTap: _clearSearch,
+                          child: Icon(
+                            LucideIcons.x,
+                            size: 16,
+                            color: colors.fg3,
+                          ),
+                        )
+                      : null,
+                ),
                 items: [
                   for (var index = 0; index < _categories.length; index++)
                     if (_categories[index].title != 'Swipe on a file')
                       NooSidebarItem(
                         icon: _categories[index].icon,
                         label: _categories[index].title,
-                        selected: selected == index,
-                        onTap: () => setState(() => selected = index),
+                        selected: !_searching && selected == index,
+                        onTap: () => setState(() {
+                          selected = index;
+                          _reveal = null;
+                          _searchController.clear();
+                          _query = '';
+                        }),
                       ),
                 ],
               ),
@@ -132,7 +191,7 @@ class _AccountViewState extends State<AccountView> {
                 child: Column(
                   children: [
                     NooToolbar(
-                      title: category.title,
+                      title: _searching ? 'Search results' : category.title,
                       backgroundColor: colors.bg,
                       framed: false,
                     ),
@@ -158,16 +217,38 @@ class _AccountViewState extends State<AccountView> {
                                     child: child,
                                   ),
                                 ),
-                            child: ListView(
-                              key: ValueKey(category.title),
-                              padding: const EdgeInsets.all(12),
-                              children: [
-                                SettingsCategoryHeading(
-                                  title: category.title,
-                                  child: category.builder(context),
-                                ),
-                              ],
-                            ),
+                            child: _searching
+                                ? ListView(
+                                    key: const ValueKey('settings-search'),
+                                    padding: const EdgeInsets.all(12),
+                                    children: [
+                                      SettingsSearchResults(
+                                        results: searchSettings(
+                                          _query,
+                                          phone: false,
+                                          ios:
+                                              Theme.of(context).platform ==
+                                              TargetPlatform.iOS,
+                                        ),
+                                        iconFor: _iconFor,
+                                        onOpen: _openResult,
+                                      ),
+                                    ],
+                                  )
+                                : SettingsReveal(
+                                    key: ValueKey('${category.title}|$_reveal'),
+                                    label: _reveal,
+                                    child: ListView(
+                                      key: ValueKey(category.title),
+                                      padding: const EdgeInsets.all(12),
+                                      children: [
+                                        SettingsCategoryHeading(
+                                          title: category.title,
+                                          child: category.builder(context),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                           ),
                         ),
                       ),
@@ -221,19 +302,40 @@ class _SettingsCategory {
   });
 }
 
-/// The mobile top-level Settings list: [SettingsAccountCard] pinned above a
-/// single [NooGroupedList] of category rows, one per [AccountView._categories]
-/// entry - the menu half of the menu-then-pushed-screen pattern described on
-/// [AccountView]'s own doc comment.
-class _MobileMenu extends StatelessWidget {
+/// The mobile top-level Settings list: a search field, [SettingsAccountCard]
+/// pinned above a single [NooGroupedList] of category rows, one per
+/// [AccountView._categories] entry - the menu half of the menu-then-pushed-
+/// screen pattern described on [AccountView]'s own doc comment. A query
+/// swaps the category list for matching options; opening one pushes its
+/// category screen scrolled to that row.
+class _MobileMenu extends StatefulWidget {
   final List<_SettingsCategory> categories;
   const _MobileMenu({required this.categories});
 
-  void _open(BuildContext context, _SettingsCategory category) {
+  @override
+  State<_MobileMenu> createState() => _MobileMenuState();
+}
+
+class _MobileMenuState extends State<_MobileMenu> {
+  final _controller = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _open(
+    BuildContext context,
+    _SettingsCategory category, {
+    String? reveal,
+  }) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => _SettingsCategoryScreen(category: category),
+        builder: (_) =>
+            _SettingsCategoryScreen(category: category, reveal: reveal),
       ),
     );
   }
@@ -241,6 +343,7 @@ class _MobileMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.nooColors;
+    final searching = _query.trim().isNotEmpty;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(
@@ -250,24 +353,65 @@ class _MobileMenu extends StatelessWidget {
         NooSpace.xxl,
       ),
       physics: const BouncingScrollPhysics(),
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       children: [
-        const SettingsAccountCard(),
-        const SizedBox(height: NooSpace.xl),
-        NooGroupedList(
-          children: [
-            for (final category in categories)
-              NooSettingsRow(
-                icon: category.icon,
-                label: Text(category.title),
-                trailing: Icon(
-                  LucideIcons.chevronRight,
-                  size: 18,
-                  color: colors.fg3,
-                ),
-                onTap: () => _open(context, category),
-              ),
-          ],
+        NooSearchField(
+          placeholder: 'Search settings',
+          ios: NooLayout.iosStyle(context),
+          controller: _controller,
+          onChanged: (value) => setState(() => _query = value),
+          trailing: searching
+              ? GestureDetector(
+                  onTap: () {
+                    _controller.clear();
+                    setState(() => _query = '');
+                  },
+                  child: Icon(LucideIcons.x, size: 16, color: colors.fg3),
+                )
+              : null,
         ),
+        const SizedBox(height: NooSpace.md),
+        if (searching)
+          SettingsSearchResults(
+            results: searchSettings(
+              _query,
+              phone: true,
+              ios: Theme.of(context).platform == TargetPlatform.iOS,
+            ),
+            iconFor: (title) => widget.categories
+                .firstWhere(
+                  (c) => c.title == title,
+                  orElse: () => widget.categories.first,
+                )
+                .icon,
+            onOpen: (entry) {
+              final category = widget.categories.where(
+                (c) => c.title == entry.category,
+              );
+              if (category.isNotEmpty) {
+                _open(context, category.first, reveal: entry.scrollTarget);
+              }
+            },
+          )
+        else ...[
+          const SettingsAccountCard(),
+          const SizedBox(height: NooSpace.xl),
+          NooGroupedList(
+            children: [
+              for (final category in widget.categories)
+                NooSettingsRow(
+                  icon: category.icon,
+                  label: Text(category.title),
+                  trailing: Icon(
+                    LucideIcons.chevronRight,
+                    size: 18,
+                    color: colors.fg3,
+                  ),
+                  onTap: () => _open(context, category),
+                ),
+            ],
+          ),
+        ],
       ],
     );
   }
@@ -276,7 +420,10 @@ class _MobileMenu extends StatelessWidget {
 /// A pushed category screen used by phone navigation.
 class _SettingsCategoryScreen extends StatelessWidget {
   final _SettingsCategory category;
-  const _SettingsCategoryScreen({required this.category});
+
+  /// Row text to scroll to and flash on arrival (from a search result).
+  final String? reveal;
+  const _SettingsCategoryScreen({required this.category, this.reveal});
 
   @override
   Widget build(BuildContext context) {
@@ -299,20 +446,23 @@ class _SettingsCategoryScreen extends StatelessWidget {
             constraints: BoxConstraints(
               maxWidth: desktop ? 640 : double.infinity,
             ),
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(
-                NooSpace.sm,
-                NooSpace.sm,
-                NooSpace.sm,
-                NooSpace.xxl,
-              ),
-              physics: const BouncingScrollPhysics(),
-              children: [
-                SettingsCategoryHeading(
-                  title: category.title,
-                  child: category.builder(context),
+            child: SettingsReveal(
+              label: reveal,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(
+                  NooSpace.sm,
+                  NooSpace.sm,
+                  NooSpace.sm,
+                  NooSpace.xxl,
                 ),
-              ],
+                physics: const BouncingScrollPhysics(),
+                children: [
+                  SettingsCategoryHeading(
+                    title: category.title,
+                    child: category.builder(context),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

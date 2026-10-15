@@ -29,7 +29,7 @@ import '../widgets/noo/noo_layout.dart';
 import '../widgets/noo/overlays/noo_sheet.dart';
 import '../widgets/share_sheet.dart';
 import '../widgets/sort_menu_button.dart' show sortFieldLabel;
-import '../widgets/sticky_header_delegate.dart';
+import '../widgets/pinned_selection_header.dart';
 import '../widgets/selection_bar_overlay.dart';
 import '../widgets/tabs/tab_state_slivers.dart';
 import 'file_viewer_screen.dart';
@@ -227,6 +227,9 @@ class _PhotosViewState extends State<PhotosView> {
         _isSelecting &&
         context.watch<SettingsController>().selectionBarPosition ==
             SelectionBarPosition.bottom;
+    final keepFilters = context
+        .watch<SettingsController>()
+        .keepFiltersWhileSelecting;
     final colors = context.nooColors;
     final isDesktop = NooLayout.isDesktop(context);
     final photosController = context.watch<PhotosController>();
@@ -258,26 +261,25 @@ class _PhotosViewState extends State<PhotosView> {
 
     final List<Widget> contentSlivers = [
       if (widget.topBar != null) topBarSliver(widget.topBar!),
-      // Sticky while browsing; once selecting, the selection bar takes over
-      // the same slot instead.
-      if (!selectionAtBottom)
-        SliverPersistentHeader(
-          pinned: true,
-          delegate: StickyHeaderDelegate(
-            floating: _isSelecting,
-            height: _isSelecting ? 56 : 64,
-            child: _isSelecting
-                ? _buildSelectionBar(context, pick, selectedItems)
-                : Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      NooSpace.sm,
-                      NooSpace.sm,
-                      NooSpace.sm,
-                      NooSpace.xs,
-                    ),
-                    child: controlsRow,
-                  ),
+      // Sticky while browsing. Selecting either keeps the filters and adds
+      // the action bar above them, or (with "Keep filters visible" off) the
+      // bar takes over the same slot.
+      if (keepFilters || !selectionAtBottom)
+        PinnedSelectionHeader(
+          controlsHeight: 64,
+          keepControls: keepFilters,
+          controls: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              NooSpace.sm,
+              NooSpace.sm,
+              NooSpace.sm,
+              NooSpace.xs,
+            ),
+            child: controlsRow,
           ),
+          selectionBar: _isSelecting && !selectionAtBottom
+              ? _buildSelectionBar(context, pick, selectedItems)
+              : null,
         ),
 
       if (photosController.isLoading && allPhotos.isEmpty)
@@ -426,7 +428,8 @@ class _PhotosViewState extends State<PhotosView> {
         _typeFilter != _PhotoTypeFilter.all ||
         photos.showFavoritesOnly ||
         photos.hiddenFilter != HiddenFilesFilter.hide ||
-        files.storageScope != StorageScope.cloud;
+        files.storageScope != StorageScope.all ||
+        files.ownershipFilter != OwnershipFilter.all;
 
     // A plain Row, not a horizontally-scrolling one - see
     // `FilesControlsRow`'s identical fix/doc comment: a `SingleChildScrollView`
@@ -611,6 +614,11 @@ class _PhotosViewState extends State<PhotosView> {
                   value: files.storageScope,
                   onChanged: files.setStorageScope,
                 ),
+                const SizedBox(height: 22),
+                OwnershipFilterRow(
+                  value: files.ownershipFilter,
+                  onChanged: files.setOwnershipFilter,
+                ),
               ],
             ),
           ),
@@ -633,6 +641,11 @@ class _PhotosViewState extends State<PhotosView> {
       onClose: _clearSelection,
       isDesktop: NooLayout.isDesktop(context),
       iosStyle: NooLayout.iosStyle(context),
+      frosted: context.watch<SettingsController>().bottomBarFrosted,
+      frostedBlur: context.watch<SettingsController>().bottomBarFrostedBlur,
+      frostedOpacity: context
+          .watch<SettingsController>()
+          .bottomBarFrostedOpacity,
     );
   }
 

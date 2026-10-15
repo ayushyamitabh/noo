@@ -46,9 +46,9 @@ class HiddenFilesFilterRow extends StatelessWidget {
   }
 }
 
-/// "External storage" row of the Files/Photos filter sheets: cloud only
-/// (the default), only external storage, or both. Files shows the external
-/// items in a collapsible section for [StorageScope.all].
+/// "External storage" row of the Files/Photos filter sheets: both (the
+/// default, listed first), cloud only, or only external storage. Files shows
+/// the external items in a collapsible section for [StorageScope.all].
 class StorageScopeRow extends StatelessWidget {
   final StorageScope value;
   final ValueChanged<StorageScope> onChanged;
@@ -68,6 +68,11 @@ class StorageScopeRow extends StatelessWidget {
       onChanged: onChanged,
       options: const [
         NooSegmentOption(
+          value: StorageScope.all,
+          icon: LucideIcons.layers,
+          label: 'All',
+        ),
+        NooSegmentOption(
           value: StorageScope.cloud,
           icon: LucideIcons.cloud,
           label: 'Cloud only',
@@ -77,10 +82,47 @@ class StorageScopeRow extends StatelessWidget {
           icon: LucideIcons.hardDrive,
           label: 'Only external',
         ),
+      ],
+    );
+  }
+}
+
+/// "Ownership" row of the Files/Photos filter sheets: everything (the
+/// default), only your own items, or only what other people shared with you.
+/// Files lists shared items in their own collapsible section for
+/// [OwnershipFilter.all].
+class OwnershipFilterRow extends StatelessWidget {
+  final OwnershipFilter value;
+  final ValueChanged<OwnershipFilter> onChanged;
+
+  const OwnershipFilterRow({
+    super.key,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _FilterModeRow<OwnershipFilter>(
+      icon: LucideIcons.users,
+      title: 'Shared items',
+      value: value,
+      onChanged: onChanged,
+      options: const [
         NooSegmentOption(
-          value: StorageScope.all,
+          value: OwnershipFilter.all,
           icon: LucideIcons.layers,
           label: 'All',
+        ),
+        NooSegmentOption(
+          value: OwnershipFilter.mine,
+          icon: LucideIcons.user,
+          label: 'Mine',
+        ),
+        NooSegmentOption(
+          value: OwnershipFilter.shared,
+          icon: LucideIcons.users,
+          label: 'Shared',
         ),
       ],
     );

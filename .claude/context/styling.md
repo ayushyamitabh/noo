@@ -160,16 +160,39 @@ blocks are noted where they matter:
   Scaffold's MediaQuery bottom padding so attached/floating/frosted navigation
   and safe areas are accounted for without counting their height twice.
   The shell hides Android's Upload FAB during selection via view callbacks.
+  The header itself is `PinnedSelectionHeader`
+  (`lib/widgets/pinned_selection_header.dart`, shared by the three tabs):
+  with "Keep filters visible" (`SettingsController.keepFiltersWhileSelecting`,
+  `ui_keep_filters_selecting`, **on by default**) the filter row (+ Files'
+  breadcrumbs) never leaves - Top slides the action bar in above it by
+  animating the pinned header's height (the bar is remembered for the
+  slide-out, since its selection is already gone), Bottom doesn't touch the
+  header. The header is opaque over its whole height (bar included) -
+  the list scrolls under a pinned header, and a transparent bar region once let
+  rows show through (`selection_header_test.dart` samples the pixels). Off
+  restores the old behavior: the bar replaces the filters in the
+  same slot (and Bottom removes the header). `controlsHeight` must match the
+  filter row exactly (64, or 106 with Files' breadcrumbs).
   The mobile Action bar settings use one grouped card for Position and
   the reorder list, with no nested rounded corners or repeated page title.
   Their header backdrop is transparent, so content scrolls behind the inset
   `surface` card. A `line` border and `nooDialogShadow` match the floating
   bottom bar's solid treatment.
+- Settings → Appearance ends with a **Reset UI defaults** row (confirmed by
+  `confirmSettingsAction`). It calls `SettingsController.resetToDefaults()`
+  (every key in its `_allPrefKeys`) plus `FilesController`/
+  `PhotosController.resetDisplayPrefs()` (the *active account's* list prefs:
+  grid/list, storage, ownership, type, hidden, folder sorts, Photos filters).
+  It leaves accounts, the three locks, device sync and the Files cache policy
+  alone - several of those use `ui_`-prefixed keys but aren't display prefs,
+  so the reset lists keys explicitly rather than clearing by prefix. A new
+  preference key must be added to the matching reset list (the reset tests
+  compare against a fresh controller to catch a forgotten field).
 - Hidden files and external storage are each a three-way segmented row
   (`HiddenFilesFilterRow`/`StorageScopeRow`, `lib/widgets/filter_mode_rows.dart`,
   in both the Files and Photos filter sheets), not toggles:
   `HiddenFilesFilter` hide (default) / only / include, and `StorageScope`
-  cloud (default) / external / all. Files and Photos each persist their own
+  all (default, listed first) / cloud / external. Files and Photos each persist their own
   hidden filter (`ui_hidden_filter`, `ui_hidden_filter_photos`; the old
   `ui_show_hidden*` bools are still read as a fallback, `true` → include);
   `StorageScope` stays shared. Photos uses the same segmented pill for
@@ -178,6 +201,27 @@ blocks are noted where they matter:
   regular items first, then a collapsible "External storage" section
   (`_ExternalStorageHeader`, local `_externalExpanded` state, default open)
   holding the external ones; Photos/Favorites just merge them into one list.
+- **Shared with me.** A third segmented row, `OwnershipFilterRow` (All /
+  Mine / Shared; title "Shared items"), sits under the storage row in both
+  filter sheets (and counts toward the Filters chip's active tint, hidden
+  with the storage row on Offline). `OwnershipFilter` (`FilesController`,
+  `ui_ownership_filter`, per account) is applied by `applyCommonFilters`
+  like the storage scope, so Files, Photos and Favorites all honor it. A
+  received share is `NextcloudItem.isSharedWithMe` (`nc:mount-type` =
+  `shared`, only on the share's mount root). With the filter on All, Files
+  at the root pulls those items into their own collapsible "Shared with me"
+  section after "External storage" (`_SectionHeader`, `_sharedExpanded`);
+  inside a folder (and with Mine / Shared) the list is flat. `NooFileRow`/
+  `NooFileTableRow` take `shared:` and draw a `users` icon in accent-text
+  beside the favorite star (the grid card has no slot for either). Under
+  the pinned controls row, a "Jump to" label and one `_JumpButton` per
+  non-empty section ("External storage · N", "Shared with me · N" - a tonal
+  accent pill, so it reads as a button, not a tag; on phones "icon · N" with
+  the full "Name · N" as tooltip/semantics, and no "Jump to" prefix) is the
+  quick jump: it opens a
+  collapsed section and scrolls to its header (`_jumpToSection` - a sliver
+  list only builds near the viewport, so it scrolls toward the end until
+  the header exists, then reveals it under the pinned row).
 - `lib/widgets/files/file_breadcrumb_row.dart` — the noo-styled breadcrumb
   trail Files uses in place of the shared
   [`Breadcrumbs`](../../lib/widgets/breadcrumbs.dart) widget. `Breadcrumbs`
@@ -197,6 +241,19 @@ blocks are noted where they matter:
   `lib/widgets/settings/` — Settings' 8 section widgets plus
   `settings_section.dart`'s `SettingsSection`/`showSettingsPicker` and
   `settings_dialogs.dart`'s `confirmRemoveAccount`.
+  `settings_search.dart` is Settings' search: a hand-maintained
+  `settingsSearchIndex` (label, category, keywords, optional scroll
+  `target`, `phoneOnly`/`hiddenOnIos` for options a layout doesn't have),
+  `searchSettings` (every word must match; label hits outrank keyword
+  hits), `SettingsSearchResults`, and `SettingsReveal`, which finds the
+  target row's `Text` by its exact string, scrolls it into view and flashes
+  an accent highlight. Phones put a `NooSearchField` above the category
+  list (a query swaps the list for results; a result pushes its category
+  screen); tablets put it in the sidebar's `search` slot and show results
+  in the content pane (a result selects its category in place). **Adding or
+  renaming a settings row means updating the index** -
+  `settings_search_test.dart` opens every entry and fails if its target
+  text isn't on the category screen.
   `lib/widgets/shell/shell_common.dart` — account/storage formatting,
   `openSettings`/`openSearch`, `showAccountSwitcher`, `ShellAvatarButton`,
   `ShellSearchLauncher`, shared by the mobile and wide tablet shell chrome.
@@ -338,6 +395,13 @@ blocks are noted where they matter:
   The setting is labelled "Frosted glass" and also controls both media
   viewer panels through `FrostedGlassContainer`. Off uses an opaque surface
   without a backdrop filter; On uses the shared blur and tint opacity.
+  The multi-select action bar (`NooSelectionBar`) follows it too: the
+  screens (Files, Photos, Favorites, and Settings' preview) pass
+  `frosted`/`frostedBlur`/`frostedOpacity` from `SettingsController`
+  (the `noo/` kit never reads providers), and a frosted bar swaps the solid
+  card for a translucent `surface` fill over a `BackdropFilter` blur with no
+  drop shadow - the bottom bar's recipe. It's only visible because the
+  header slot is transparent while selecting, so rows scroll under it.
   Search starts inside the rail when a bottom avatar occupies the satellite;
   its row slot smoothly collapses as Search fades into that satellite while
   the avatar moves into the popup. Closing reverses the same path. The card

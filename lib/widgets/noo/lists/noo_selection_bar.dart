@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../models/selection_action.dart';
@@ -29,9 +31,9 @@ const int _kDesktopInlineActions = 4;
 /// count, and the bulk actions. This sits in the *content* pane's own
 /// pinned header slot on every platform (the shell's desktop toolbar,
 /// built separately in `main.dart`, never changes for selection), so
-/// mobile and desktop share the same fixed 56px height; only the gutter
-/// ([isDesktop] ? 24 : 12, matching `NooLayout.gutter`) and the actions'
-/// presentation differ:
+/// mobile and desktop share the same fixed 56px height and the same 12px
+/// side inset as the filter row below it (so it spans the container's full
+/// width); only the actions' presentation differs:
 /// - Mobile: the first [_kMobileInlineActions] actions as plain 20px
 ///   accent-text icons, no fill.
 /// - Wide panes: up to [_kDesktopInlineActions] as labelled tonal pills -
@@ -52,6 +54,14 @@ class NooSelectionBar extends StatelessWidget {
   final bool isDesktop;
   final bool iosStyle;
 
+  /// The Settings -> Appearance frosted-glass preference, handed in by the
+  /// screen like `NooBottomBar` gets it: a translucent `surface` fill at
+  /// [frostedOpacity] over a [frostedBlur]-sigma backdrop blur, without the
+  /// solid card's shadow (the same recipe as the frosted bottom bar).
+  final bool frosted;
+  final double frostedBlur;
+  final double frostedOpacity;
+
   const NooSelectionBar({
     super.key,
     required this.count,
@@ -59,6 +69,9 @@ class NooSelectionBar extends StatelessWidget {
     required this.onClose,
     required this.isDesktop,
     this.iosStyle = false,
+    this.frosted = false,
+    this.frostedBlur = 20,
+    this.frostedOpacity = 0.72,
   });
 
   @override
@@ -68,7 +81,9 @@ class NooSelectionBar extends StatelessWidget {
 
   Widget _buildBar(BuildContext context, double width) {
     final colors = context.nooColors;
-    final gutter = isDesktop ? NooSpace.xl : NooSpace.sm;
+    // The filter row it sits above is inset NooSpace.sm on every layout, so
+    // the bar spans the same width instead of floating in from the edges.
+    const gutter = NooSpace.sm;
     final labelled =
         isDesktop &&
         width >= 700 &&
@@ -111,68 +126,83 @@ class NooSelectionBar extends StatelessWidget {
     // margin plus the card's own 48px must add up to exactly that, or the
     // header overflows (see files_view.dart's `topRow` height comment for
     // the same warning about this exact number).
+    final radius = BorderRadius.circular(NooRadii.card);
+    final card = Container(
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      decoration: BoxDecoration(
+        color: frosted
+            ? colors.surface.withValues(alpha: frostedOpacity)
+            : colors.surface,
+        borderRadius: radius,
+        border: Border.all(color: colors.line),
+        boxShadow: frosted ? null : const [nooDialogShadow],
+      ),
+      child: Row(
+        children: [
+          Semantics(
+            button: true,
+            label: 'Cancel selection',
+            child: GestureDetector(
+              onTap: onClose,
+              child: Container(
+                width: 36,
+                height: 36,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: colors.surface2,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(LucideIcons.x, size: 18, color: colors.fg1),
+              ),
+            ),
+          ),
+          const SizedBox(width: NooSpace.xs),
+          Expanded(
+            child: Text(
+              '$count selected',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: NooText.cardTitle.copyWith(
+                fontSize: 17,
+                color: colors.fg1,
+              ),
+            ),
+          ),
+          const SizedBox(width: NooSpace.xs),
+          Align(
+            alignment: Alignment.centerRight,
+            child: labelled
+                ? _desktopActions(
+                    context,
+                    colors,
+                    inlineActions,
+                    overflowActions,
+                  )
+                : _mobileActions(
+                    context,
+                    colors,
+                    inlineActions,
+                    overflowActions,
+                  ),
+          ),
+        ],
+      ),
+    );
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: gutter, vertical: NooSpace.xxs),
-      child: Container(
-        height: 48,
-        padding: const EdgeInsets.symmetric(horizontal: 6),
-        decoration: BoxDecoration(
-          color: colors.surface,
-          borderRadius: BorderRadius.circular(NooRadii.card),
-          border: Border.all(color: colors.line),
-          boxShadow: const [nooDialogShadow],
-        ),
-        child: Row(
-          children: [
-            Semantics(
-              button: true,
-              label: 'Cancel selection',
-              child: GestureDetector(
-                onTap: onClose,
-                child: Container(
-                  width: 36,
-                  height: 36,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: colors.surface2,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(LucideIcons.x, size: 18, color: colors.fg1),
+      child: frosted
+          ? ClipRRect(
+              borderRadius: radius,
+              child: BackdropFilter(
+                filter: ImageFilter.blur(
+                  sigmaX: frostedBlur,
+                  sigmaY: frostedBlur,
                 ),
+                child: card,
               ),
-            ),
-            const SizedBox(width: NooSpace.xs),
-            Expanded(
-              child: Text(
-                '$count selected',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: NooText.cardTitle.copyWith(
-                  fontSize: 17,
-                  color: colors.fg1,
-                ),
-              ),
-            ),
-            const SizedBox(width: NooSpace.xs),
-            Align(
-              alignment: Alignment.centerRight,
-              child: labelled
-                  ? _desktopActions(
-                      context,
-                      colors,
-                      inlineActions,
-                      overflowActions,
-                    )
-                  : _mobileActions(
-                      context,
-                      colors,
-                      inlineActions,
-                      overflowActions,
-                    ),
-            ),
-          ],
-        ),
-      ),
+            )
+          : card,
     );
   }
 

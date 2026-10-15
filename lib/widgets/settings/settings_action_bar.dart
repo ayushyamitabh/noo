@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../../models/selection_action.dart';
 import '../../providers/settings_controller.dart';
@@ -8,6 +9,7 @@ import '../noo/lists/noo_selection_bar.dart';
 import '../noo/lists/noo_settings_row.dart';
 import '../noo/lists/noo_grouped_list.dart';
 import '../noo/core/noo_segmented_control.dart';
+import '../noo/core/noo_toggle.dart';
 import '../noo/noo_layout.dart';
 import 'settings_section.dart';
 
@@ -55,6 +57,17 @@ class SettingsActionBarSection extends StatelessWidget {
         ],
       ),
     );
+    final keepFiltersRow = NooSettingsRow(
+      icon: LucideIcons.listFilter,
+      label: const Text('Keep filters visible'),
+      subtitle: const Text(
+        'Filters and breadcrumbs stay in place while items are selected',
+      ),
+      trailing: NooToggle(
+        checked: settings.keepFiltersWhileSelecting,
+        onChanged: settings.setKeepFiltersWhileSelecting,
+      ),
+    );
     final colors = context.nooColors;
 
     if (!desktop) {
@@ -63,6 +76,7 @@ class SettingsActionBarSection extends StatelessWidget {
         children: [
           _ActionBarPreview(order: settings.selectionActionOrder),
           positionRow,
+          keepFiltersRow,
           orderList,
         ],
       );
@@ -90,6 +104,8 @@ class SettingsActionBarSection extends StatelessWidget {
           const SizedBox(height: NooSpace.md),
           positionRow,
           const SizedBox(height: NooSpace.md),
+          keepFiltersRow,
+          const SizedBox(height: NooSpace.md),
           orderList,
         ],
       ),
@@ -106,6 +122,7 @@ class _ActionBarPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.nooColors;
     final desktop = NooLayout.isDesktop(context);
+    final settings = context.watch<SettingsController>();
     return Container(
       padding: const EdgeInsets.all(NooSpace.sm),
       color: colors.surface2,
@@ -125,6 +142,9 @@ class _ActionBarPreview extends StatelessWidget {
                 count: 1,
                 isDesktop: desktop,
                 iosStyle: NooLayout.iosStyle(context),
+                frosted: settings.bottomBarFrosted,
+                frostedBlur: settings.bottomBarFrostedBlur,
+                frostedOpacity: settings.bottomBarFrostedOpacity,
                 onClose: () {},
                 actions: [
                   for (final kind in order)
