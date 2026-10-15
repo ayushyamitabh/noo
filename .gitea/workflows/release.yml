@@ -79,19 +79,16 @@ jobs:
           echo "AAB_PATH=release/Noo-${VERSION}.aab" >> "$GITHUB_ENV"
           echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
 
-      - name: Publish Gitea release with App Bundle attached
+      - name: Publish Gitea release (notes only, no bundle attached)
         # Gitea-native release action (not GitHub's) - authenticates and
-        # talks to this same Gitea instance automatically via the
-        # `github.token`/`github.server_url` context Gitea Actions
-        # provides for compatibility. Release is named/tagged after
-        # whatever tag triggered this run (e.g. "Release-1.0.0").
+        # talks to this same Gitea instance automatically. Release is
+        # named/tagged after the triggering tag (e.g. "Release-1.0.0").
+        # The .aab goes to Play only; it is deliberately not attached here.
         uses: akkuman/gitea-release-action@v1
-        with:
-          files: ${{ env.AAB_PATH }}
 
-      - name: Upload to Google Play (internal track, auto-publish)
-        # Rolls the build out to internal testers automatically
-        # (`status: completed`); promote it to other tracks in Play Console.
+      - name: Upload to Google Play (closed testing - alpha, auto-publish)
+        # Rolls the build out to the closed-testing alpha track automatically
+        # (`status: completed`); promote it to other tracks in Play Console. "alpha" is the API name for the default closed testing track.
         # Needs the PLAY_SERVICE_ACCOUNT_JSON repo secret, and the app's
         # first release must already have been uploaded by hand.
         uses: r0adkll/upload-google-play@v1
@@ -100,6 +97,6 @@ jobs:
           packageName: dev.ayushya.noo
           releaseFiles: ${{ env.AAB_PATH }}
           releaseName: ${{ env.VERSION }}
-          track: internal
+          track: alpha
           status: completed
           whatsNewDirectory: distribution/whatsnew
