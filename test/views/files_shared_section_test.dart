@@ -120,13 +120,17 @@ void main() {
     app.files.setStorageScope(StorageScope.all);
     await tester.pump(const Duration(milliseconds: 600));
 
-    // No "Jump to" prefix and no text in the buttons themselves...
+    // No "Jump to" prefix and no names in the buttons themselves - just the
+    // icon and the count...
     expect(find.text('Jump to'), findsNothing);
     expect(find.text('External storage · 1'), findsNothing);
     expect(find.text('Shared with me · 2'), findsNothing);
-    for (final label in ['External storage · 1', 'Shared with me · 2']) {
-      // ...but each is a real button (ripple, pointer cursor) with its icon,
-      // an arrow, and the label as tooltip.
+    for (final (label, count) in [
+      ('External storage · 1', '· 1'),
+      ('Shared with me · 2', '· 2'),
+    ]) {
+      // ...but each is a real button (ripple, pointer cursor) showing its
+      // count (no arrow), with the full label as tooltip.
       final button = find.descendant(
         of: find.byTooltip(label),
         matching: find.byType(InkWell),
@@ -138,11 +142,15 @@ void main() {
         SystemMouseCursors.click,
       );
       expect(
+        find.descendant(of: find.byTooltip(label), matching: find.text(count)),
+        findsOneWidget,
+      );
+      expect(
         find.descendant(
           of: find.byTooltip(label),
           matching: find.byIcon(LucideIcons.arrowDown),
         ),
-        findsOneWidget,
+        findsNothing,
       );
     }
     await app.finish(tester);
@@ -168,6 +176,13 @@ void main() {
       );
       expect(button, findsOneWidget);
       expect(tester.widget<InkWell>(button).onTap, isNotNull);
+      expect(
+        find.descendant(
+          of: button,
+          matching: find.byIcon(LucideIcons.arrowDown),
+        ),
+        findsNothing,
+      );
     }
     await app.finish(tester);
   });

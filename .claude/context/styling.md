@@ -216,9 +216,9 @@ blocks are noted where they matter:
   beside the favorite star (the grid card has no slot for either). Under
   the pinned controls row, a "Jump to" label and one `_JumpButton` per
   non-empty section ("External storage · N", "Shared with me · N" - a tonal
-  accent pill with an arrow, so it reads as a button, not a tag; on phones
-  just the section icon + arrow, with the label as tooltip/semantics, and no
-  "Jump to" prefix) is the quick jump: it opens a
+  accent pill, so it reads as a button, not a tag; on phones "icon · N" with
+  the full "Name · N" as tooltip/semantics, and no "Jump to" prefix) is the
+  quick jump: it opens a
   collapsed section and scrolls to its header (`_jumpToSection` - a sliver
   list only builds near the viewport, so it scrolls toward the end until
   the header exists, then reveals it under the pinned row).

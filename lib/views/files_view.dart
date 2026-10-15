@@ -133,25 +133,29 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-/// A "jump to this section" button: a tonal accent pill with an arrow, so it
-/// reads as something to press rather than a tag. Hover/press feedback and a
-/// pointer cursor come from the [InkWell]. On phones ([iconOnly]) it's just
-/// the section icon and the arrow - the [label] stays as its tooltip and
-/// accessibility label.
+/// A "jump to this section" button: a tonal accent pill, so it reads as
+/// something to press rather than a tag. Hover/press feedback and a pointer
+/// cursor come from the [InkWell]. Wide layouts show "[icon] Name · N"; phones
+/// ([iconOnly]) show "[icon] · N" - the full "Name · N" stays as the tooltip
+/// and accessibility label.
 class _JumpButton extends StatelessWidget {
   final IconData icon;
-  final String label;
+  final String name;
+  final int count;
   final bool compact;
   final bool iconOnly;
   final VoidCallback onTap;
 
   const _JumpButton({
     required this.icon,
-    required this.label,
+    required this.name,
+    required this.count,
     required this.compact,
     required this.iconOnly,
     required this.onTap,
   });
+
+  String get label => '$name · $count';
 
   @override
   Widget build(BuildContext context) {
@@ -170,28 +174,20 @@ class _JumpButton extends StatelessWidget {
           child: SizedBox(
             height: compact ? 32 : 34,
             child: Padding(
-              padding: EdgeInsets.only(left: 12, right: iconOnly ? 12 : 10),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(icon, size: 16, color: colors.accentText),
-                  if (!iconOnly) ...[
-                    const SizedBox(width: 6),
-                    Text(
-                      label,
-                      style: NooText.body.copyWith(
-                        fontSize: compact ? 13 : 14,
-                        height: 1,
-                        fontWeight: FontWeight.w600,
-                        color: colors.accentText,
-                      ),
+                  const SizedBox(width: 6),
+                  Text(
+                    iconOnly ? '· $count' : label,
+                    style: NooText.body.copyWith(
+                      fontSize: compact ? 13 : 14,
+                      height: 1,
+                      fontWeight: FontWeight.w600,
+                      color: colors.accentText,
                     ),
-                  ],
-                  SizedBox(width: iconOnly ? 4 : 6),
-                  Icon(
-                    LucideIcons.arrowDown,
-                    size: 14,
-                    color: colors.accentText,
                   ),
                 ],
               ),
@@ -1011,7 +1007,8 @@ class _FilesViewState extends State<FilesView> {
           icon: LucideIcons.hardDrive,
           compact: isDesktop,
           iconOnly: !isDesktop,
-          label: 'External storage · ${externalItems.length}',
+          name: 'External storage',
+          count: externalItems.length,
           onTap: () => _jumpToSection(
             _externalKey,
             stickyHeight,
@@ -1024,7 +1021,8 @@ class _FilesViewState extends State<FilesView> {
           icon: LucideIcons.users,
           compact: isDesktop,
           iconOnly: !isDesktop,
-          label: 'Shared with me · ${sharedItems.length}',
+          name: 'Shared with me',
+          count: sharedItems.length,
           onTap: () => _jumpToSection(
             _sharedKey,
             stickyHeight,
