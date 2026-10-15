@@ -9,11 +9,11 @@ import 'session_controller.dart';
 
 enum FileSortField { name, dateCreated, dateModified, size }
 
-/// Which storage a listing shows: [cloud] (the default - external mounts
-/// hidden), only [external] ones, or [all] of both (Files shows the
-/// external items in their own collapsible section then). Shared across
-/// Files/Photos/Favorites (see [applyCommonFilters]'s doc comment).
-enum StorageScope { cloud, external, all }
+/// Which storage a listing shows: [all] (the default - Files shows the
+/// external items in their own collapsible section), only [cloud] (external
+/// mounts hidden), or only [external] ones. Shared across Files/Photos/
+/// Favorites (see [applyCommonFilters]'s doc comment).
+enum StorageScope { all, cloud, external }
 
 /// Whose items a listing shows: [all] of them (the default), only [mine]
 /// (everything that isn't shared with you), or only what's [shared] with
@@ -94,7 +94,7 @@ class FilesController extends ChangeNotifier
   List<String> _pathStack = ['/'];
 
   bool _isGridView = false;
-  StorageScope _storageScope = StorageScope.cloud;
+  StorageScope _storageScope = StorageScope.all;
   OwnershipFilter _ownershipFilter = OwnershipFilter.all;
   FilesTypeFilter _filesTypeFilter = FilesTypeFilter.all;
   HiddenFilesFilter _hiddenFilter = HiddenFilesFilter.hide;
@@ -299,7 +299,7 @@ class FilesController extends ChangeNotifier
     _currentFolderPath = '/';
     _pathStack = ['/'];
     _isGridView = false;
-    _storageScope = StorageScope.cloud;
+    _storageScope = StorageScope.all;
     _ownershipFilter = OwnershipFilter.all;
     _filesTypeFilter = FilesTypeFilter.all;
     _hiddenFilter = HiddenFilesFilter.hide;
@@ -346,7 +346,7 @@ class FilesController extends ChangeNotifier
         final storageScopeName = prefs.getString(k(_prefStorageScope));
         _storageScope = StorageScope.values.firstWhere(
           (s) => s.name == storageScopeName,
-          orElse: () => StorageScope.cloud,
+          orElse: () => StorageScope.all,
         );
         final ownershipName = prefs.getString(k(_prefOwnershipFilter));
         _ownershipFilter = OwnershipFilter.values.firstWhere(
@@ -723,7 +723,7 @@ class FilesController extends ChangeNotifier
     final name = prefs.getString(accountPrefKey(accountId, _prefStorageScope));
     return StorageScope.values.firstWhere(
       (s) => s.name == name,
-      orElse: () => StorageScope.cloud,
+      orElse: () => StorageScope.all,
     );
   }
 

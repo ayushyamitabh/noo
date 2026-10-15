@@ -428,7 +428,7 @@ class _PhotosViewState extends State<PhotosView> {
         _typeFilter != _PhotoTypeFilter.all ||
         photos.showFavoritesOnly ||
         photos.hiddenFilter != HiddenFilesFilter.hide ||
-        files.storageScope != StorageScope.cloud ||
+        files.storageScope != StorageScope.all ||
         files.ownershipFilter != OwnershipFilter.all;
 
     // A plain Row, not a horizontally-scrolling one - see

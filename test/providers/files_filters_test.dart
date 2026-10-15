@@ -145,6 +145,34 @@ void main() {
     );
   });
 
+  group('storage scope default', () {
+    test('is All for a fresh account', () {
+      expect(build().storageScope, StorageScope.all);
+    });
+
+    Future<StorageScope> saved(Map<String, Object> values) async {
+      SharedPreferences.setMockInitialValues(values);
+      return FilesController.savedStorageScope(
+        await SharedPreferences.getInstance(),
+        (accountId, baseKey) => '${accountId}_$baseKey',
+        'a',
+      );
+    }
+
+    test('nothing saved or an unknown value falls back to All', () async {
+      expect(await saved({}), StorageScope.all);
+      expect(await saved({'a_ui_storage_scope': 'bogus'}), StorageScope.all);
+    });
+
+    test('a choice the user already made is kept', () async {
+      expect(await saved({'a_ui_storage_scope': 'cloud'}), StorageScope.cloud);
+      expect(
+        await saved({'a_ui_storage_scope': 'external'}),
+        StorageScope.external,
+      );
+    });
+  });
+
   group('loadHiddenFilter', () {
     Future<HiddenFilesFilter> load(Map<String, Object> values) async {
       SharedPreferences.setMockInitialValues(values);

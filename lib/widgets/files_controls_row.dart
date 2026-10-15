@@ -56,7 +56,7 @@ class FilesControlsRow extends StatelessWidget {
         files.filesTypeFilter != FilesTypeFilter.all ||
         files.hiddenFilter != HiddenFilesFilter.hide ||
         (showStorageScope &&
-            (files.storageScope != StorageScope.cloud ||
+            (files.storageScope != StorageScope.all ||
                 files.ownershipFilter != OwnershipFilter.all));
 
     return SizedBox(

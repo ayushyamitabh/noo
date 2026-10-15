@@ -182,7 +182,7 @@ blocks are noted where they matter:
   (`HiddenFilesFilterRow`/`StorageScopeRow`, `lib/widgets/filter_mode_rows.dart`,
   in both the Files and Photos filter sheets), not toggles:
   `HiddenFilesFilter` hide (default) / only / include, and `StorageScope`
-  cloud (default) / external / all. Files and Photos each persist their own
+  all (default, listed first) / cloud / external. Files and Photos each persist their own
   hidden filter (`ui_hidden_filter`, `ui_hidden_filter_photos`; the old
   `ui_show_hidden*` bools are still read as a fallback, `true` → include);
   `StorageScope` stays shared. Photos uses the same segmented pill for

@@ -46,9 +46,9 @@ class HiddenFilesFilterRow extends StatelessWidget {
   }
 }
 
-/// "External storage" row of the Files/Photos filter sheets: cloud only
-/// (the default), only external storage, or both. Files shows the external
-/// items in a collapsible section for [StorageScope.all].
+/// "External storage" row of the Files/Photos filter sheets: both (the
+/// default, listed first), cloud only, or only external storage. Files shows
+/// the external items in a collapsible section for [StorageScope.all].
 class StorageScopeRow extends StatelessWidget {
   final StorageScope value;
   final ValueChanged<StorageScope> onChanged;
@@ -68,6 +68,11 @@ class StorageScopeRow extends StatelessWidget {
       onChanged: onChanged,
       options: const [
         NooSegmentOption(
+          value: StorageScope.all,
+          icon: LucideIcons.layers,
+          label: 'All',
+        ),
+        NooSegmentOption(
           value: StorageScope.cloud,
           icon: LucideIcons.cloud,
           label: 'Cloud only',
@@ -76,11 +81,6 @@ class StorageScopeRow extends StatelessWidget {
           value: StorageScope.external,
           icon: LucideIcons.hardDrive,
           label: 'Only external',
-        ),
-        NooSegmentOption(
-          value: StorageScope.all,
-          icon: LucideIcons.layers,
-          label: 'All',
         ),
       ],
     );
