@@ -14,6 +14,7 @@ import '../noo/nav/noo_nav_style.dart';
 import '../noo/noo_layout.dart';
 import '../noo/overlays/noo_dialog.dart';
 import '../noo/overlays/noo_sheet.dart';
+import '../glass_backdrop.dart' show GlassShader;
 import '../seek_bar_painter.dart';
 import 'settings_action_bar.dart';
 import 'settings_dialogs.dart';
@@ -71,7 +72,10 @@ class SettingsAppearanceSection extends StatelessWidget {
                 onChanged: settings.setBottomBarFrosted,
               ),
             ),
-            if (settings.bottomBarFrosted) _FrostedGlassRow(settings: settings),
+            if (settings.bottomBarFrosted) _GlassStyleRow(settings: settings),
+            if (settings.bottomBarFrosted &&
+                settings.glassStyle == GlassStyle.blur)
+              _FrostedGlassRow(settings: settings),
             if (!tablet) _NavMenuStyleRow(settings: settings),
             if (!tablet && settings.navMenuStyle == NooNavMenuStyle.avatarMenu)
               NooSettingsRow(
@@ -337,6 +341,66 @@ class _BottomBarStyleRow extends StatelessWidget {
 /// How strong the frosted-glass bottom bar looks: three presets for a quick
 /// pick, and the blur / opacity sliders they set, for anything in between.
 /// Only shown while frosted glass is on.
+/// Blur + opacity (Gaussian blur under a translucent fill) vs. true glass
+/// (GPU shader with a refractive edge). True glass quietly falls back to blur
+/// where the engine can't run shader backdrop filters, so the row says so.
+class _GlassStyleRow extends StatelessWidget {
+  final SettingsController settings;
+
+  const _GlassStyleRow({required this.settings});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.nooColors;
+    return Material(
+      color: colors.surface,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: NooSpace.md,
+          vertical: 12,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(LucideIcons.gem, size: 20, color: colors.fg2),
+                const SizedBox(width: 14),
+                Text(
+                  'Glass style',
+                  style: NooText.bodyL.copyWith(color: colors.fg1),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            NooSegmentedControl<GlassStyle>(
+              fill: true,
+              onSurface: true,
+              value: settings.glassStyle,
+              onChanged: settings.setGlassStyle,
+              options: [
+                for (final style in GlassStyle.values)
+                  NooSegmentOption(value: style, label: style.label),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              settings.glassStyle == GlassStyle.glass
+                  ? (GlassShader.available
+                        ? 'Rendered on the GPU with a refractive edge, '
+                              'light dispersion and a specular rim'
+                        : 'Not supported by this device\'s renderer - '
+                              'using blur + opacity instead')
+                  : 'A blurred backdrop under a translucent fill',
+              style: NooText.meta.copyWith(color: colors.fg3),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _FrostedGlassRow extends StatelessWidget {
   final SettingsController settings;
 

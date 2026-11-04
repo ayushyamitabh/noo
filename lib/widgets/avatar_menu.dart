@@ -1,4 +1,4 @@
-import 'dart:ui' show ImageFilter, lerpDouble;
+import 'dart:ui' show lerpDouble;
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
@@ -13,6 +13,7 @@ import 'noo/core/noo_badge.dart';
 import 'noo/nav/noo_bottom_bar.dart';
 import 'noo/noo_layout.dart';
 import 'noo/lists/noo_settings_row.dart';
+import 'glass_backdrop.dart';
 import 'shell/shell_common.dart';
 
 /// The shell supplies the expanding-card presentation. Standalone top bars
@@ -288,7 +289,11 @@ class _AvatarSurface extends StatelessWidget {
     final surface = DecoratedBox(
       decoration: BoxDecoration(
         color: frosted
-            ? colors.surface.withValues(alpha: settings.bottomBarFrostedOpacity)
+            ? GlassBackdrop.fillColor(
+                context,
+                colors.surface,
+                settings.bottomBarFrostedOpacity,
+              )
             : colors.surface,
         border: connected ? null : Border.all(color: colors.line),
         borderRadius: radius,
@@ -300,18 +305,13 @@ class _AvatarSurface extends StatelessWidget {
         borderRadius: radius,
         boxShadow: frosted || connected ? null : const [nooDialogShadow],
       ),
-      child: ClipRRect(
-        borderRadius: radius,
-        child: frosted
-            ? BackdropFilter(
-                filter: ImageFilter.blur(
-                  sigmaX: settings.bottomBarFrostedBlur,
-                  sigmaY: settings.bottomBarFrostedBlur,
-                ),
-                child: surface,
-              )
-            : surface,
-      ),
+      child: frosted
+          ? GlassBackdrop(
+              radius: radius,
+              sigma: settings.bottomBarFrostedBlur,
+              child: surface,
+            )
+          : ClipRRect(borderRadius: radius, child: surface),
     );
   }
 }

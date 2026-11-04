@@ -1,9 +1,8 @@
-import 'dart:ui' show ImageFilter;
-
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../models/selection_action.dart';
 import '../../../theme/design_tokens.dart';
+import '../../glass_backdrop.dart';
 import '../files/noo_file_row.dart' show NooOverflowButton;
 import '../overlays/noo_sheet.dart';
 import 'noo_grouped_list.dart';
@@ -132,7 +131,7 @@ class NooSelectionBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6),
       decoration: BoxDecoration(
         color: frosted
-            ? colors.surface.withValues(alpha: frostedOpacity)
+            ? GlassBackdrop.fillColor(context, colors.surface, frostedOpacity)
             : colors.surface,
         borderRadius: radius,
         border: Border.all(color: colors.line),
@@ -191,16 +190,7 @@ class NooSelectionBar extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: gutter, vertical: NooSpace.xxs),
       child: frosted
-          ? ClipRRect(
-              borderRadius: radius,
-              child: BackdropFilter(
-                filter: ImageFilter.blur(
-                  sigmaX: frostedBlur,
-                  sigmaY: frostedBlur,
-                ),
-                child: card,
-              ),
-            )
+          ? GlassBackdrop(radius: radius, sigma: frostedBlur, child: card)
           : card,
     );
   }

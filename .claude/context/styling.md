@@ -298,6 +298,22 @@ blocks are noted where they matter:
   bars and video transport controls (its other former user, the floating
   bottom nav bar, is gone - see below). Reuse this for any new floating
   overlay instead of building a new blur/shadow combo.
+- [`GlassBackdrop`](../../lib/widgets/glass_backdrop.dart) — the one place a
+  frosted surface clips + filters its backdrop (bottom bar, search/avatar
+  satellites, avatar menu, selection bar, `FrostedGlassContainer`). Don't
+  put a raw `BackdropFilter` on a frosted element; use this, plus
+  `GlassBackdrop.fillColor(context, surface, opacity)` for the tint. It
+  follows `SettingsController.glassStyle` (`GlassStyle.blur` = Gaussian blur
+  + the opacity slider; `GlassStyle.glass` = "true glass", pref
+  `ui_glass_style`, picked in Settings → Appearance → Glass style, which
+  hides the Blur/Opacity sliders). True glass runs
+  [`shaders/glass.frag`](../../shaders/glass.frag) through
+  `ImageFilter.shader` (refractive bevel, dispersion, specular rim, light
+  fixed tint). It needs Impeller, so `GlassShader.available` is false (and
+  everything silently uses blur) on Skia/web or if the asset failed to load;
+  `main()` awaits `GlassShader.load()`. The shader's corner radius comes
+  from the `BorderRadius.topLeft`, so circles pass `size / 2`. The toast in
+  `noo_messenger.dart` has its own fixed blur and ignores the setting.
 - Upload FAB size: `SettingsController.fabStyle` (`FabStyle.auto/mini/expanded`,
   Settings > Appearance > "Upload button") drives `NooFab.collapsed` in
   `main.dart` - auto collapses off Files/Photos, mini always icon-only,

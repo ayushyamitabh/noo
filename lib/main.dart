@@ -33,6 +33,7 @@ import 'views/login_view.dart';
 import 'views/share_upload_view.dart';
 import 'widgets/app_drawer.dart';
 import 'widgets/drop_preparation_overlay.dart';
+import 'widgets/glass_backdrop.dart';
 import 'widgets/app_tab_view_builder.dart';
 import 'widgets/tabs/tab_state_slivers.dart';
 import 'widgets/app_top_bar.dart';
@@ -58,6 +59,7 @@ Future<void> main() async {
   await IosHinge.initialize();
   // Fonts ship in assets/google_fonts; never fetch them from Google at runtime.
   GoogleFonts.config.allowRuntimeFetching = false;
+  await GlassShader.load();
   runApp(
     MultiProvider(
       // Split out of the former single `ServerProvider` god object - see

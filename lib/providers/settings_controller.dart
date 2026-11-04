@@ -62,6 +62,18 @@ enum FrostedGlassPreset {
   });
 }
 
+/// How "Frosted glass" surfaces are rendered: a Gaussian blur under a
+/// translucent fill, or the GPU glass shader (`shaders/glass.frag`) with a
+/// refractive edge. True glass falls back to blur where the engine can't run
+/// shader backdrop filters (see `GlassShader`).
+enum GlassStyle {
+  blur('Blur + opacity'),
+  glass('True glass');
+
+  final String label;
+  const GlassStyle(this.label);
+}
+
 const double minFrostedBlur = 0;
 const double maxFrostedBlur = 40;
 const double minFrostedOpacity = 0.3;
@@ -87,6 +99,7 @@ class SettingsController extends ChangeNotifier {
   static const _prefFabStyle = 'ui_fab_style';
   static const _prefBottomBarStyle = 'ui_bottom_bar_style';
   static const _prefBottomBarFrosted = 'ui_bottom_bar_frosted';
+  static const _prefGlassStyle = 'ui_glass_style';
   static const _prefFrostedBlur = 'ui_bottom_bar_frosted_blur';
   static const _prefFrostedOpacity = 'ui_bottom_bar_frosted_opacity';
   static const _prefAvatarPosition = 'ui_avatar_position';
@@ -105,6 +118,7 @@ class SettingsController extends ChangeNotifier {
   NooNavMenuStyle _navMenuStyle = NooNavMenuStyle.drawer;
   AvatarPosition _avatarPosition = AvatarPosition.top;
   bool _bottomBarFrosted = false;
+  GlassStyle _glassStyle = GlassStyle.blur;
   double _frostedBlur = FrostedGlassPreset.standard.blur;
   double _frostedOpacity = FrostedGlassPreset.standard.opacity;
   bool _searchInBottomBar = false;
@@ -154,6 +168,7 @@ class SettingsController extends ChangeNotifier {
   ThemeMode get themeMode => _themeMode;
   NooBottomBarStyle get bottomBarStyle => _bottomBarStyle;
   bool get bottomBarFrosted => _bottomBarFrosted;
+  GlassStyle get glassStyle => _glassStyle;
   double get bottomBarFrostedBlur => _frostedBlur;
   double get bottomBarFrostedOpacity => _frostedOpacity;
 
@@ -242,6 +257,11 @@ class SettingsController extends ChangeNotifier {
       }
       _bottomBarFrosted =
           prefs.getBool(_prefBottomBarFrosted) ?? _bottomBarFrosted;
+      final glassStyleName = prefs.getString(_prefGlassStyle);
+      _glassStyle = GlassStyle.values.firstWhere(
+        (s) => s.name == glassStyleName,
+        orElse: () => _glassStyle,
+      );
       _frostedBlur = (prefs.getDouble(_prefFrostedBlur) ?? _frostedBlur).clamp(
         minFrostedBlur,
         maxFrostedBlur,
@@ -382,6 +402,7 @@ class SettingsController extends ChangeNotifier {
     _prefFabStyle,
     _prefBottomBarStyle,
     _prefBottomBarFrosted,
+    _prefGlassStyle,
     _prefFrostedBlur,
     _prefFrostedOpacity,
     _prefAvatarPosition,
@@ -403,6 +424,7 @@ class SettingsController extends ChangeNotifier {
     _navMenuStyle = NooNavMenuStyle.drawer;
     _avatarPosition = AvatarPosition.top;
     _bottomBarFrosted = false;
+    _glassStyle = GlassStyle.blur;
     _frostedBlur = FrostedGlassPreset.standard.blur;
     _frostedOpacity = FrostedGlassPreset.standard.opacity;
     _searchInBottomBar = false;
@@ -519,6 +541,13 @@ class SettingsController extends ChangeNotifier {
   void setFrostedPreset(FrostedGlassPreset preset) {
     setFrostedBlur(preset.blur);
     setFrostedOpacity(preset.opacity);
+  }
+
+  void setGlassStyle(GlassStyle style) {
+    if (_glassStyle == style) return;
+    _glassStyle = style;
+    notifyListeners();
+    _prefsFuture.then((p) => p.setString(_prefGlassStyle, style.name));
   }
 
   void setBottomBarFrosted(bool value) {

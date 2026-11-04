@@ -1,8 +1,8 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/settings_controller.dart';
 import '../theme/design_tokens.dart';
+import 'glass_backdrop.dart';
 
 /// Media viewer chrome that shares the navigation frost preference.
 /// Turning frosting off produces an opaque themed surface without blur.
@@ -46,22 +46,18 @@ class FrostedGlassContainer extends StatelessWidget {
     final fill = Container(
       decoration: BoxDecoration(
         color: enabled
-            ? tint.withValues(
-                alpha: opacity ?? settings?.bottomBarFrostedOpacity ?? 0.72,
+            ? GlassBackdrop.fillColor(
+                context,
+                tint,
+                opacity ?? settings?.bottomBarFrostedOpacity ?? 0.72,
               )
             : tint,
         borderRadius: shape,
       ),
       child: child,
     );
-    return ClipRRect(
-      borderRadius: shape,
-      child: enabled
-          ? BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
-              child: fill,
-            )
-          : fill,
-    );
+    return enabled
+        ? GlassBackdrop(radius: shape, sigma: sigma, child: fill)
+        : ClipRRect(borderRadius: shape, child: fill);
   }
 }

@@ -43,9 +43,10 @@ enum _PhotoTypeFilter { all, image, video }
 
 /// A contiguous run of [PhotosController.items] that shares a calendar
 /// month, in whatever order the controller already sorted them - see
-/// [_PhotosViewState._groupByMonth].
+/// [_PhotosViewState._groupByMonth]. [month] is null for the single
+/// header-less group used when the sort isn't date-based.
 class _MonthGroup {
-  final DateTime month;
+  final DateTime? month;
   final List<NextcloudItem> items;
   _MonthGroup(this.month, this.items);
 }
@@ -193,14 +194,21 @@ class _PhotosViewState extends State<PhotosView> {
     );
   }
 
-  /// Splits an already-filtered/sorted list into contiguous month runs
-  /// (`dateCreated`) in list order - deliberately not a global re-sort by
-  /// date, so a "Name"/"Size" sort chip still governs the order shown
-  /// (see the group header row it feeds).
-  List<_MonthGroup> _groupByMonth(List<NextcloudItem> items) {
+  /// Splits an already-filtered/sorted list into contiguous month runs in
+  /// list order, keyed on the date the active sort uses (created or
+  /// modified). Month headers only make sense when the list is ordered by
+  /// date, so for Name/Size sorts everything lands in one header-less group.
+  List<_MonthGroup> _groupByMonth(
+    List<NextcloudItem> items,
+    FileSortField sortField,
+  ) {
+    final byModified = sortField == FileSortField.dateModified;
+    if (!byModified && sortField != FileSortField.dateCreated) {
+      return items.isEmpty ? [] : [_MonthGroup(null, items)];
+    }
     final groups = <_MonthGroup>[];
     for (final item in items) {
-      final d = item.dateCreated;
+      final d = byModified ? item.lastModified : item.dateCreated;
       final month = DateTime(d.year, d.month);
       if (groups.isNotEmpty && groups.last.month == month) {
         groups.last.items.add(item);
@@ -252,7 +260,7 @@ class _PhotosViewState extends State<PhotosView> {
     final selectedItems = allPhotos
         .where((i) => _selectedIds.contains(i.id))
         .toList();
-    final groups = _groupByMonth(visiblePhotos);
+    final groups = _groupByMonth(visiblePhotos, photosController.sortField);
 
     final controlsRow = _buildControlsRow(
       context,
@@ -349,19 +357,20 @@ class _PhotosViewState extends State<PhotosView> {
         )
       else
         for (final group in groups) ...[
-          SliverToBoxAdapter(
-            child: NooPhotoGroupHeader(
-              title: DateFormat('MMMM yyyy').format(group.month),
-              count:
-                  '${group.items.length} ${group.items.length == 1 ? 'item' : 'items'}',
-              padding: EdgeInsets.fromLTRB(
-                NooLayout.gutter(context),
-                NooSpace.lg,
-                NooLayout.gutter(context),
-                NooSpace.sm,
+          if (group.month != null)
+            SliverToBoxAdapter(
+              child: NooPhotoGroupHeader(
+                title: DateFormat('MMMM yyyy').format(group.month!),
+                count:
+                    '${group.items.length} ${group.items.length == 1 ? 'item' : 'items'}',
+                padding: EdgeInsets.fromLTRB(
+                  NooLayout.gutter(context),
+                  NooSpace.lg,
+                  NooLayout.gutter(context),
+                  NooSpace.sm,
+                ),
               ),
             ),
-          ),
           NooPhotoGrid(
             itemCount: group.items.length,
             minTileWidth: 150,

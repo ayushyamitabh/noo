@@ -1,6 +1,6 @@
-import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import '../../../theme/design_tokens.dart';
+import '../../glass_backdrop.dart';
 import 'noo_nav_style.dart';
 
 export 'noo_nav_style.dart';
@@ -155,7 +155,7 @@ class NooBottomBar extends StatelessWidget {
         height: barHeight,
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          color: _fill(colors),
+          color: _fill(context, colors),
           border: Border.all(color: colors.line),
           borderRadius: pillRadius,
           boxShadow: frosted ? null : const [nooDialogShadow],
@@ -211,7 +211,7 @@ class NooBottomBar extends StatelessWidget {
 
     final bar = Container(
       decoration: BoxDecoration(
-        color: _fill(colors),
+        color: _fill(context, colors),
         border: ios ? Border(top: BorderSide(color: colors.line)) : null,
       ),
       child: SafeArea(
@@ -280,8 +280,8 @@ class NooBottomBar extends StatelessWidget {
     );
   }
 
-  Color _fill(NooColors colors) => frosted
-      ? colors.surface.withValues(alpha: frostedOpacity)
+  Color _fill(BuildContext context, NooColors colors) => frosted
+      ? GlassBackdrop.fillColor(context, colors.surface, frostedOpacity)
       : colors.surface;
 
   double get _rowSearchFraction =>
@@ -402,13 +402,8 @@ class NooBottomBar extends StatelessWidget {
 
 /// Clips [child] to [radius] and blurs whatever is drawn behind it - the
 /// frosted bar's backdrop. [child] supplies the translucent fill on top.
-Widget _blurred(Widget child, BorderRadius radius, double sigma) => ClipRRect(
-  borderRadius: radius,
-  child: BackdropFilter(
-    filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
-    child: child,
-  ),
-);
+Widget _blurred(Widget child, BorderRadius radius, double sigma) =>
+    GlassBackdrop(radius: radius, sigma: sigma, child: child);
 
 /// The floating bar's own Search entry point, next to the pill rather than
 /// inside it - always fully round (see [NooBottomBar]'s doc comment),
@@ -439,19 +434,19 @@ class _SearchSatellite extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: _satelliteBody(colors),
+        child: _satelliteBody(context, colors),
       ),
     );
   }
 
-  Widget _satelliteBody(NooColors colors) {
+  Widget _satelliteBody(BuildContext context, NooColors colors) {
     final disc = Container(
       width: size,
       height: size,
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: frosted
-            ? colors.surface.withValues(alpha: frostedOpacity)
+            ? GlassBackdrop.fillColor(context, colors.surface, frostedOpacity)
             : colors.surface,
         border: Border.all(color: colors.line),
         shape: BoxShape.circle,

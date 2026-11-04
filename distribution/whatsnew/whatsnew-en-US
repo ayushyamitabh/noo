@@ -4,4 +4,6 @@
 - New setting to delete files when removed from sync.
 - Offline tab and search get Files' sort/filter controls.
 - Shares: swipe between With you, By you and Links.
-- iOS-style banners; pages zoom out behind bottom sheets.
+- iOS-style banners; sheets zoom out the page.
+- Photos group by month only when sorted by date.
+- New True glass option for frosted surfaces.

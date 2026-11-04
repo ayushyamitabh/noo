@@ -82,6 +82,10 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # GPU fragment shaders (compiled by Impeller at build time).
+  shaders:
+    - shaders/glass.frag
+
   assets:
     - assets/icon/app_icon.png
     - assets/icon/app_icon_monochrome.png
