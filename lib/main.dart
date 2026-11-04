@@ -700,6 +700,7 @@ class _MainShellViewState extends State<MainShellView>
           barStyle: bottomBarStyle,
           frosted: settings.bottomBarFrosted,
           iconOnly: settings.bottomBarIconOnly,
+          iconOnlyFullWidth: settings.bottomBarIconOnlyFullWidth,
           frostedBlur: settings.bottomBarFrostedBlur,
           frostedOpacity: settings.bottomBarFrostedOpacity,
           tabs: pinnedTabs,

@@ -17,6 +17,7 @@ import '../noo/overlays/noo_sheet.dart';
 import '../glass_backdrop.dart' show GlassShader;
 import '../seek_bar_painter.dart';
 import 'settings_action_bar.dart';
+import 'settings_bar_preview.dart';
 import 'settings_dialogs.dart';
 import 'settings_section.dart';
 import '../noo/overlays/noo_messenger.dart';
@@ -54,6 +55,10 @@ class SettingsAppearanceSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (!tablet) ...[
+          const SettingsBottomBarPreview(),
+          const SizedBox(height: NooSpace.xl),
+        ],
         SettingsSection(
           title: 'Appearance',
           children: [
@@ -64,11 +69,24 @@ class SettingsAppearanceSection extends StatelessWidget {
                 icon: LucideIcons.layoutGrid,
                 label: const Text('Icon-only bottom bar'),
                 subtitle: const Text(
-                  'Hide tab labels, even on the selected tab',
+                  'Hide tab labels and shrink the bar to fit its icons',
                 ),
                 trailing: NooToggle(
                   checked: settings.bottomBarIconOnly,
                   onChanged: settings.setBottomBarIconOnly,
+                ),
+              ),
+            if (!tablet && settings.bottomBarIconOnly)
+              NooSettingsRow(
+                icon: LucideIcons.arrowLeftRight,
+                label: const Text('Full-width icon-only bar'),
+                subtitle: const Text(
+                  'Stretch the bar across the screen instead of fitting '
+                  'its icons',
+                ),
+                trailing: NooToggle(
+                  checked: settings.bottomBarIconOnlyFullWidth,
+                  onChanged: settings.setBottomBarIconOnlyFullWidth,
                 ),
               ),
             NooSettingsRow(
@@ -331,7 +349,7 @@ class _BottomBarStyleRow extends StatelessWidget {
             NooSegmentedControl<NooBottomBarStyle>(
               fill: true,
               onSurface: true,
-              value: settings.bottomBarStyle,
+              value: settings.bottomBarStyleSetting,
               onChanged: settings.setBottomBarStyle,
               options: const [
                 NooSegmentOption(

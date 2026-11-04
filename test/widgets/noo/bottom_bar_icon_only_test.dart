@@ -58,7 +58,7 @@ void main() {
         NooBottomBarStyle.attached,
         iconOnly: true,
       ),
-      64,
+      NooBottomBar.iconOnlyHeight,
     );
   });
 }

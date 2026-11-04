@@ -19,6 +19,7 @@ class BottomNavBar extends StatelessWidget {
   final NooBottomBarStyle barStyle;
   final bool frosted;
   final bool iconOnly;
+  final bool iconOnlyFullWidth;
   final double frostedBlur;
   final double frostedOpacity;
   final List<AppTab> tabs;
@@ -33,6 +34,7 @@ class BottomNavBar extends StatelessWidget {
     this.barStyle = NooBottomBarStyle.attached,
     this.frosted = false,
     this.iconOnly = false,
+    this.iconOnlyFullWidth = false,
     this.frostedBlur = NooBottomBar.defaultFrostedBlur,
     this.frostedOpacity = NooBottomBar.defaultFrostedOpacity,
     required this.tabs,
@@ -49,6 +51,7 @@ class BottomNavBar extends StatelessWidget {
       barStyle: barStyle,
       frosted: frosted,
       iconOnly: iconOnly,
+      fullWidth: !iconOnly || iconOnlyFullWidth,
       frostedBlur: frostedBlur,
       frostedOpacity: frostedOpacity,
       destinations: [
@@ -70,9 +73,20 @@ class BottomNavBar extends StatelessWidget {
               onSearchTap!();
             },
       avatarSatellite: avatarInBottomBar
-          ? AvatarNavigationSatellite(
-              size: NooBottomBar.rowHeight(style, barStyle, iconOnly: iconOnly),
-            )
+          ? iconOnly && !iconOnlyFullWidth
+                // Compact pill: the avatar is one of its slots, no circle of
+                // its own.
+                ? const AvatarNavigationSatellite(
+                    size: NooBottomBar.iconOnlyItemWidth,
+                    merged: true,
+                  )
+                : AvatarNavigationSatellite(
+                    size: NooBottomBar.rowHeight(
+                      style,
+                      barStyle,
+                      iconOnly: iconOnly,
+                    ),
+                  )
           : null,
       // The avatar slot turns into a close button in place, so Search and
       // the rail never rearrange while the popup opens.

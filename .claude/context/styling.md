@@ -362,9 +362,22 @@ blocks are noted where they matter:
   only the attached bar still has a distinct iOS row. A separate, orthogonal
   `SettingsController.bottomBarIconOnly` toggle (Settings → Appearance →
   "Icon-only bottom bar", phones only, pref `ui_bottom_bar_icon_only`) drops
-  every tab label - even the selected one's - via `NooBottomBar.iconOnly` and
-  shortens the Android attached row to 64; anything sizing off the bar must
-  pass `iconOnly:` to `NooBottomBar.rowHeight`. A separate, orthogonal
+  every tab label - even the selected one's - via `NooBottomBar.iconOnly`
+  and makes the row 56px (`NooBottomBar.iconOnlyHeight`); anything sizing
+  off the bar must pass `iconOnly:` to `NooBottomBar.rowHeight`. By default
+  the icon-only bar is *compact* (`bottomBarCompact` = icon-only and not
+  `bottomBarIconOnlyFullWidth`, pref `ui_bottom_bar_icon_only_full_width`):
+  a centred floating pill exactly wide enough for its icons
+  (`iconOnlyItemWidth` each), which pulls Search and a bottom avatar
+  *inside* the pill (`AvatarNavigationSatellite(merged: true)` draws no
+  surface of its own) instead of beside it. `SettingsController.bottomBarStyle`
+  is the *effective* style (floating while compact);
+  `bottomBarStyleSetting` is the stored Attached/Floating choice the picker
+  edits. The compact pill is wrapped in a fixed-height `SizedBox` - a bare
+  `Center` would fill the whole loose `bottomNavigationBar` slot.
+  `SettingsBottomBarPreview` (top of Settings → Appearance, phones) renders
+  the real `NooBottomBar` from the current settings over sample tiles so
+  every bar/glass control can be judged live. A separate, orthogonal
   `SettingsController.bottomBarFrosted` toggle (Settings → Appearance →
   "Frosted glass bottom bar", off by default, both platforms and both bar
   styles) swaps the bar's solid `surface` for a translucent one over a

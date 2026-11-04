@@ -112,6 +112,7 @@ class SettingsController extends ChangeNotifier {
   static const _prefFabStyle = 'ui_fab_style';
   static const _prefBottomBarStyle = 'ui_bottom_bar_style';
   static const _prefBottomBarIconOnly = 'ui_bottom_bar_icon_only';
+  static const _prefIconOnlyFullWidth = 'ui_bottom_bar_icon_only_full_width';
   static const _prefBottomBarFrosted = 'ui_bottom_bar_frosted';
   static const _prefGlassStyle = 'ui_glass_style';
   static const _prefGlassBlur = 'ui_glass_blur';
@@ -133,6 +134,7 @@ class SettingsController extends ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.system;
   NooBottomBarStyle _bottomBarStyle = NooBottomBarStyle.attached;
   bool _bottomBarIconOnly = false;
+  bool _iconOnlyFullWidth = false;
   NooNavMenuStyle _navMenuStyle = NooNavMenuStyle.drawer;
   AvatarPosition _avatarPosition = AvatarPosition.top;
   bool _bottomBarFrosted = false;
@@ -187,8 +189,22 @@ class SettingsController extends ChangeNotifier {
 
   Color get seedColor => _seedColor;
   ThemeMode get themeMode => _themeMode;
-  NooBottomBarStyle get bottomBarStyle => _bottomBarStyle;
+
+  /// The bar style actually drawn: the compact icon-only bar is a floating
+  /// pill whichever style is chosen (an edge-to-edge bar can't shrink to its
+  /// content). Settings' own picker uses [bottomBarStyleSetting].
+  NooBottomBarStyle get bottomBarStyle =>
+      bottomBarCompact ? NooBottomBarStyle.floating : _bottomBarStyle;
+
+  /// The user's stored Attached/Floating choice, whether or not icon-only
+  /// currently overrides it.
+  NooBottomBarStyle get bottomBarStyleSetting => _bottomBarStyle;
   bool get bottomBarIconOnly => _bottomBarIconOnly;
+  bool get bottomBarIconOnlyFullWidth => _iconOnlyFullWidth;
+
+  /// Icon-only and not full width: the bar shrinks to a pill around its icons
+  /// (merging Search and a bottom avatar into it).
+  bool get bottomBarCompact => _bottomBarIconOnly && !_iconOnlyFullWidth;
   bool get bottomBarFrosted => _bottomBarFrosted;
   GlassStyle get glassStyle => _glassStyle;
   double get glassBlur => _glassBlur;
@@ -264,6 +280,8 @@ class SettingsController extends ChangeNotifier {
           _keepFiltersWhileSelecting;
       _bottomBarIconOnly =
           prefs.getBool(_prefBottomBarIconOnly) ?? _bottomBarIconOnly;
+      _iconOnlyFullWidth =
+          prefs.getBool(_prefIconOnlyFullWidth) ?? _iconOnlyFullWidth;
       final bottomBarStyleName = prefs.getString(_prefBottomBarStyle);
       if (bottomBarStyleName != null) {
         _bottomBarStyle = NooBottomBarStyle.values.firstWhere(
@@ -442,6 +460,7 @@ class SettingsController extends ChangeNotifier {
     _prefFabStyle,
     _prefBottomBarStyle,
     _prefBottomBarIconOnly,
+    _prefIconOnlyFullWidth,
     _prefBottomBarFrosted,
     _prefGlassStyle,
     _prefGlassBlur,
@@ -466,6 +485,7 @@ class SettingsController extends ChangeNotifier {
     _themeMode = ThemeMode.system;
     _bottomBarStyle = NooBottomBarStyle.attached;
     _bottomBarIconOnly = false;
+    _iconOnlyFullWidth = false;
     _navMenuStyle = NooNavMenuStyle.drawer;
     _avatarPosition = AvatarPosition.top;
     _bottomBarFrosted = false;
@@ -561,6 +581,13 @@ class SettingsController extends ChangeNotifier {
     _keepFiltersWhileSelecting = value;
     notifyListeners();
     _prefsFuture.then((p) => p.setBool(_prefKeepFiltersSelecting, value));
+  }
+
+  void setBottomBarIconOnlyFullWidth(bool value) {
+    if (_iconOnlyFullWidth == value) return;
+    _iconOnlyFullWidth = value;
+    notifyListeners();
+    _prefsFuture.then((p) => p.setBool(_prefIconOnlyFullWidth, value));
   }
 
   void setBottomBarIconOnly(bool value) {

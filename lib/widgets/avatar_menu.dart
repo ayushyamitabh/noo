@@ -380,7 +380,15 @@ class AvatarNavigationBody extends StatelessWidget {
 /// button in the same spot, so the rest of the bar stays exactly where it is.
 class AvatarNavigationSatellite extends StatelessWidget {
   final double size;
-  const AvatarNavigationSatellite({super.key, required this.size});
+
+  /// Sits inside the compact icon-only pill, which supplies the surface - so
+  /// draw just the avatar slot, like the attached bar does.
+  final bool merged;
+  const AvatarNavigationSatellite({
+    super.key,
+    required this.size,
+    this.merged = false,
+  });
   @override
   Widget build(BuildContext context) {
     final scope = AvatarNavigationScope.maybeOf(context);
@@ -428,7 +436,7 @@ class AvatarNavigationSatellite extends StatelessWidget {
       ),
     );
 
-    if (attached) return Builder(builder: slot);
+    if (attached || merged) return Builder(builder: slot);
     return SizedBox(
       width: size,
       height: size,

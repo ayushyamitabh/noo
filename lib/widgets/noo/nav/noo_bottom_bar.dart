@@ -71,6 +71,11 @@ class NooBottomBar extends StatelessWidget {
   /// the selected tab's), a shorter row, selection shown by the pill/accent.
   final bool iconOnly;
 
+  /// With [iconOnly]: stretch across the bar's normal width instead of
+  /// shrinking to a pill around the icons. The compact pill also takes
+  /// Search and a bottom avatar inside it rather than beside it.
+  final bool fullWidth;
+
   /// Backdrop blur sigma and surface-fill opacity while [frosted] (user-
   /// adjustable in Settings; the defaults match [FrostedGlassContainer]'s
   /// blur).
@@ -93,6 +98,7 @@ class NooBottomBar extends StatelessWidget {
     this.barStyle = NooBottomBarStyle.attached,
     this.frosted = false,
     this.iconOnly = false,
+    this.fullWidth = true,
     this.frostedBlur = defaultFrostedBlur,
     this.frostedOpacity = defaultFrostedOpacity,
     required this.destinations,
@@ -115,8 +121,15 @@ class NooBottomBar extends StatelessWidget {
     if (style == NooNavStyle.ios && barStyle != NooBottomBarStyle.floating) {
       return 50;
     }
-    return barStyle == NooBottomBarStyle.floating || iconOnly ? 64 : 80;
+    if (iconOnly) return iconOnlyHeight;
+    return barStyle == NooBottomBarStyle.floating ? 64 : 80;
   }
+
+  /// The compact icon-only pill: its height, and each icon's slot width.
+  static const double iconOnlyHeight = 56;
+  static const double iconOnlyItemWidth = 52;
+  static const double _iconOnlyPillWidth = 44;
+  static const double _iconOnlyPillHeight = 36;
 
   static const double defaultFrostedBlur = 20;
   static const double defaultFrostedOpacity = 0.72;
@@ -131,6 +144,9 @@ class NooBottomBar extends StatelessWidget {
   /// (itself inside the [SafeArea] that consumes the actual device inset).
   static const double floatingBottomMargin = 12;
 
+  /// Icon-only, shrunk to its icons (see [fullWidth]).
+  bool get _compact => iconOnly && !fullWidth;
+
   @override
   Widget build(BuildContext context) {
     final colors = context.nooColors;
@@ -144,8 +160,11 @@ class NooBottomBar extends StatelessWidget {
     // row builders only ever see it as a trailing item in the former case.
     final rowSearch =
         hasSearch &&
-            (!floating || avatarSatellite != null) &&
-            (avatarSatellite == null || !floating || avatarMenuProgress < 1)
+            (_compact ||
+                ((!floating || avatarSatellite != null) &&
+                    (avatarSatellite == null ||
+                        !floating ||
+                        avatarMenuProgress < 1)))
         ? searchDestination
         : null;
 
@@ -163,9 +182,20 @@ class NooBottomBar extends StatelessWidget {
     );
 
     if (floating) {
+      final mergedAvatar = _compact && avatarSatellite != null;
       final pillRadius = BorderRadius.circular(28);
       final pillBox = Container(
         height: barHeight,
+        // Icon-only: exactly wide enough for its icons (plus the 1px border
+        // and 4px inner padding each side), centred by the wrapper below.
+        width: _compact
+            ? (destinations.length +
+                          (rowSearch != null ? _rowSearchFraction : 0) +
+                          (mergedAvatar ? 1 : 0)) *
+                      iconOnlyItemWidth +
+                  10
+            : null,
+        padding: _compact ? const EdgeInsets.symmetric(horizontal: 4) : null,
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           color: _fill(context, colors),
@@ -173,11 +203,36 @@ class NooBottomBar extends StatelessWidget {
           borderRadius: pillRadius,
           boxShadow: frosted ? null : const [nooDialogShadow],
         ),
-        child: row,
+        child: mergedAvatar
+            ? Row(
+                children: [
+                  SizedBox(
+                    width:
+                        (destinations.length +
+                            (rowSearch != null ? _rowSearchFraction : 0)) *
+                        iconOnlyItemWidth,
+                    child: row,
+                  ),
+                  SizedBox(
+                    width: iconOnlyItemWidth,
+                    child: Center(child: avatarSatellite),
+                  ),
+                ],
+              )
+            : row,
       );
-      final pill = frosted
+      final pillCore = frosted
           ? _blurred(pillBox, pillRadius, frostedBlur)
           : pillBox;
+      // Fixed height: the bottomNavigationBar slot is loose, and a bare Center
+      // would grow to fill the whole screen height (see the SizedBox note on
+      // the search-satellite row below).
+      final pill = _compact
+          ? SizedBox(
+              height: barHeight,
+              child: Center(child: pillCore),
+            )
+          : pillCore;
       return SafeArea(
         top: false,
         child: Padding(
@@ -187,7 +242,9 @@ class NooBottomBar extends StatelessWidget {
             16,
             NooBottomBar.floatingBottomMargin,
           ),
-          child: avatarSatellite != null
+          child: _compact
+              ? pill
+              : avatarSatellite != null
               ? _withAvatar(pill, barHeight, hasSearch)
               : hasSearch
               // A fixed-height SizedBox, not just a Row with
@@ -298,7 +355,9 @@ class NooBottomBar extends StatelessWidget {
       : colors.surface;
 
   double get _rowSearchFraction =>
-      avatarSatellite == null || barStyle == NooBottomBarStyle.attached
+      _compact ||
+          avatarSatellite == null ||
+          barStyle == NooBottomBarStyle.attached
       ? 1
       : 1 - avatarMenuProgress;
 
@@ -360,9 +419,7 @@ class NooBottomBar extends StatelessWidget {
     NooNavDestination? trailingSearch,
   }) {
     final pillTop = iconOnly
-        ? (NooBottomBar.rowHeight(style, barStyle, iconOnly: true) -
-                  _kAndroidPillHeight) /
-              2
+        ? (NooBottomBar.iconOnlyHeight - NooBottomBar._iconOnlyPillHeight) / 2
         : floating
         ? _kFloatingPillTop
         : _kAttachedPillTop;
@@ -379,9 +436,17 @@ class NooBottomBar extends StatelessWidget {
               top: pillTop,
               left:
                   itemWidth * selectedIndex +
-                  (itemWidth - _kAndroidPillWidth) / 2,
-              width: _kAndroidPillWidth,
-              height: _kAndroidPillHeight,
+                  (itemWidth -
+                          (iconOnly
+                              ? NooBottomBar._iconOnlyPillWidth
+                              : _kAndroidPillWidth)) /
+                      2,
+              width: iconOnly
+                  ? NooBottomBar._iconOnlyPillWidth
+                  : _kAndroidPillWidth,
+              height: iconOnly
+                  ? NooBottomBar._iconOnlyPillHeight
+                  : _kAndroidPillHeight,
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   color: colors.accentSoft,
