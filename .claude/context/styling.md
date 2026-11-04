@@ -298,6 +298,12 @@ blocks are noted where they matter:
   bars and video transport controls (its other former user, the floating
   bottom nav bar, is gone - see below). Reuse this for any new floating
   overlay instead of building a new blur/shadow combo.
+- [`ViewerCarousel`](../../lib/widgets/viewer/viewer_carousel.dart) — the
+  Photos-app thumbnail strip in the media viewer's bottom panel (passed to
+  `MediaActionBar.carousel`, only when the viewer is swipeable with >1 item).
+  Driven by the viewer's `PageController.page`, so it slides with the swipe;
+  tap jumps, dragging scrubs the pager. Uses `previewUrl` thumbnails, tinted
+  placeholders offline.
 - [`GlassBackdrop`](../../lib/widgets/glass_backdrop.dart) — the one place a
   frosted surface clips + filters its backdrop (bottom bar, search/avatar
   satellites, avatar menu, selection bar, `FrostedGlassContainer`). Don't

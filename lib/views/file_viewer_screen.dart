@@ -27,6 +27,7 @@ import '../widgets/viewer/media_pdf_preview.dart';
 import '../widgets/viewer/media_text_preview.dart';
 import '../widgets/viewer/media_unsupported_preview.dart';
 import '../widgets/viewer/media_video_preview.dart';
+import '../widgets/viewer/viewer_carousel.dart';
 import '../widgets/noo/overlays/noo_messenger.dart';
 
 const _textPreviewExtensions = {
@@ -598,6 +599,16 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                       // server - hidden rather than shown-and-failing while
                       // browsing an already-local file from the Offline tab.
                       showServerActions: !_isOffline,
+                      carousel: _isSwipeable && _mediaItems.length > 1
+                          ? ViewerCarousel(
+                              controller: _pageController,
+                              items: _mediaItems,
+                              headers: _isOffline
+                                  ? null
+                                  : session.service?.authHeaders,
+                              network: !_isOffline,
+                            )
+                          : null,
                       transportControls:
                           _isSwipeable &&
                               _currentItem.type == NextcloudItemType.video &&

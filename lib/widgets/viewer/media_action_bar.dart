@@ -11,6 +11,9 @@ class MediaActionBar extends StatelessWidget {
   final bool isBusy;
   final bool showServerActions;
   final Widget? transportControls;
+
+  /// The thumbnail strip ([ViewerCarousel]), shown above the action row.
+  final Widget? carousel;
   final VoidCallback onShare;
   final VoidCallback onFavorite;
   final VoidCallback onDelete;
@@ -29,6 +32,7 @@ class MediaActionBar extends StatelessWidget {
     required this.isBusy,
     required this.showServerActions,
     this.transportControls,
+    this.carousel,
     required this.onShare,
     required this.onFavorite,
     required this.onDelete,
@@ -59,6 +63,7 @@ class MediaActionBar extends StatelessWidget {
               transportControls!,
               Divider(height: 1, color: colors.fg1.withValues(alpha: 0.14)),
             ],
+            ?carousel,
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
               child: Row(
