@@ -4,7 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:noo/theme/design_tokens.dart';
 import 'package:noo/widgets/noo/nav/noo_bottom_bar.dart';
-import 'package:noo/widgets/noo/nav/noo_nav_style.dart';
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
@@ -42,7 +41,9 @@ void main() {
   }
 
   testWidgets('labels still show by default', (t) async {
-    await t.pumpWidget(bar(NooNavStyle.android, NooBottomBarStyle.attached, false));
+    await t.pumpWidget(
+      bar(NooNavStyle.android, NooBottomBarStyle.attached, false),
+    );
     expect(find.text('Files'), findsOneWidget);
   });
 

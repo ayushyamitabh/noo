@@ -45,9 +45,7 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockStreamHandler(
           connectivityStatusChannel,
-          MockStreamHandler.inline(
-            onListen: (arguments, events) {},
-          ),
+          MockStreamHandler.inline(onListen: (arguments, events) {}),
         );
   });
 

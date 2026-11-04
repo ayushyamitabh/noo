@@ -30,13 +30,18 @@ class GlassShader {
   /// A backdrop filter for a region with corner radius [radius] px. The
   /// engine supplies the region size and the backdrop texture; the rest are
   /// the uniforms declared in `glass.frag` after `uSize`.
-  static ui.ImageFilter filter({required double radius, required bool dark}) {
+  static ui.ImageFilter filter({
+    required double radius,
+    required bool dark,
+    required double blur,
+    required double refraction,
+  }) {
     final shader = _program!.fragmentShader()
       ..setFloat(2, radius) // uRadius
       ..setFloat(3, 20) // uBevel
-      ..setFloat(4, 18) // uRefraction
+      ..setFloat(4, refraction) // uRefraction
       ..setFloat(5, dark ? 0.32 : 0.5) // uRim
-      ..setFloat(6, 24); // uFrost (blur radius)
+      ..setFloat(6, blur); // uFrost (blur radius)
     return ui.ImageFilter.shader(shader);
   }
 }
@@ -66,25 +71,25 @@ class GlassBackdrop extends StatelessWidget {
       (context.watch<SettingsController?>()?.glassStyle ?? GlassStyle.blur) ==
           GlassStyle.glass;
 
-  /// Opacity of the surface tint on a glass bar. True glass stays mostly
-  /// clear so the refraction shows; the user's opacity slider only applies to
-  /// the blur style.
-  static const double glassTintOpacity = 0.34;
-
   /// The surface tint for a frosted element: [opacity] (the user's slider) for
-  /// blur, a light fixed tint for true glass.
+  /// blur, the separate Tint setting for true glass.
   static Color fillColor(BuildContext context, Color surface, double opacity) =>
       surface.withValues(
-        alpha: usesGlass(context) ? glassTintOpacity : opacity,
+        alpha: usesGlass(context)
+            ? context.watch<SettingsController>().glassTint
+            : opacity,
       );
 
   @override
   Widget build(BuildContext context) {
     final glass = usesGlass(context);
+    final settings = context.watch<SettingsController?>();
     final filter = glass
         ? GlassShader.filter(
             radius: radius.topLeft.x,
             dark: Theme.of(context).brightness == Brightness.dark,
+            blur: settings!.glassBlur,
+            refraction: settings.glassRefraction,
           )
         : ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma);
     return ClipRRect(

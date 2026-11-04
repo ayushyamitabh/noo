@@ -88,6 +88,9 @@ class SettingsAppearanceSection extends StatelessWidget {
             if (settings.bottomBarFrosted &&
                 settings.glassStyle == GlassStyle.blur)
               _FrostedGlassRow(settings: settings),
+            if (settings.bottomBarFrosted &&
+                settings.glassStyle == GlassStyle.glass)
+              _TrueGlassRow(settings: settings),
             if (!tablet) _NavMenuStyleRow(settings: settings),
             if (!tablet && settings.navMenuStyle == NooNavMenuStyle.avatarMenu)
               NooSettingsRow(
@@ -405,6 +408,66 @@ class _GlassStyleRow extends StatelessWidget {
                               'using blur + opacity instead')
                   : 'A blurred backdrop under a translucent fill',
               style: NooText.meta.copyWith(color: colors.fg3),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Tuning for [GlassStyle.glass]: Blur (how soft the backdrop is), Tint (how
+/// opaque the surface colour layered over it is) and Refraction (how far the
+/// edges bend the background).
+class _TrueGlassRow extends StatelessWidget {
+  final SettingsController settings;
+
+  const _TrueGlassRow({required this.settings});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.nooColors;
+    return Material(
+      color: colors.surface,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: NooSpace.md,
+          vertical: 12,
+        ),
+        child: Column(
+          children: [
+            _SliderLine(
+              label: 'Blur',
+              readout: '${settings.glassBlur.round()}',
+              slider: NooSlider(
+                value: settings.glassBlur,
+                min: minGlassBlur,
+                max: maxGlassBlur,
+                semanticLabel: 'Glass blur',
+                onChanged: settings.setGlassBlur,
+              ),
+            ),
+            _SliderLine(
+              label: 'Tint',
+              readout: '${(settings.glassTint * 100).round()}%',
+              slider: NooSlider(
+                value: settings.glassTint,
+                min: minGlassTint,
+                max: maxGlassTint,
+                semanticLabel: 'Glass tint',
+                onChanged: settings.setGlassTint,
+              ),
+            ),
+            _SliderLine(
+              label: 'Refraction',
+              readout: '${settings.glassRefraction.round()}',
+              slider: NooSlider(
+                value: settings.glassRefraction,
+                min: minGlassRefraction,
+                max: maxGlassRefraction,
+                semanticLabel: 'Glass refraction',
+                onChanged: settings.setGlassRefraction,
+              ),
             ),
           ],
         ),

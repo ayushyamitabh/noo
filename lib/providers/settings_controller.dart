@@ -74,6 +74,19 @@ enum GlassStyle {
   const GlassStyle(this.label);
 }
 
+/// True-glass tuning ranges (Settings -> Appearance, shown for
+/// [GlassStyle.glass]): backdrop blur radius in px, the surface tint's
+/// opacity, and how far the glass bends the background at its edges in px.
+const double minGlassBlur = 0;
+const double maxGlassBlur = 40;
+const double defaultGlassBlur = 24;
+const double minGlassTint = 0;
+const double maxGlassTint = 0.8;
+const double defaultGlassTint = 0.34;
+const double minGlassRefraction = 0;
+const double maxGlassRefraction = 30;
+const double defaultGlassRefraction = 18;
+
 const double minFrostedBlur = 0;
 const double maxFrostedBlur = 40;
 const double minFrostedOpacity = 0.3;
@@ -101,6 +114,9 @@ class SettingsController extends ChangeNotifier {
   static const _prefBottomBarIconOnly = 'ui_bottom_bar_icon_only';
   static const _prefBottomBarFrosted = 'ui_bottom_bar_frosted';
   static const _prefGlassStyle = 'ui_glass_style';
+  static const _prefGlassBlur = 'ui_glass_blur';
+  static const _prefGlassTint = 'ui_glass_tint';
+  static const _prefGlassRefraction = 'ui_glass_refraction';
   static const _prefFrostedBlur = 'ui_bottom_bar_frosted_blur';
   static const _prefFrostedOpacity = 'ui_bottom_bar_frosted_opacity';
   static const _prefAvatarPosition = 'ui_avatar_position';
@@ -121,6 +137,9 @@ class SettingsController extends ChangeNotifier {
   AvatarPosition _avatarPosition = AvatarPosition.top;
   bool _bottomBarFrosted = false;
   GlassStyle _glassStyle = GlassStyle.blur;
+  double _glassBlur = defaultGlassBlur;
+  double _glassTint = defaultGlassTint;
+  double _glassRefraction = defaultGlassRefraction;
   double _frostedBlur = FrostedGlassPreset.standard.blur;
   double _frostedOpacity = FrostedGlassPreset.standard.opacity;
   bool _searchInBottomBar = false;
@@ -172,6 +191,9 @@ class SettingsController extends ChangeNotifier {
   bool get bottomBarIconOnly => _bottomBarIconOnly;
   bool get bottomBarFrosted => _bottomBarFrosted;
   GlassStyle get glassStyle => _glassStyle;
+  double get glassBlur => _glassBlur;
+  double get glassTint => _glassTint;
+  double get glassRefraction => _glassRefraction;
   double get bottomBarFrostedBlur => _frostedBlur;
   double get bottomBarFrostedOpacity => _frostedOpacity;
 
@@ -262,6 +284,19 @@ class SettingsController extends ChangeNotifier {
       }
       _bottomBarFrosted =
           prefs.getBool(_prefBottomBarFrosted) ?? _bottomBarFrosted;
+      _glassBlur = (prefs.getDouble(_prefGlassBlur) ?? _glassBlur).clamp(
+        minGlassBlur,
+        maxGlassBlur,
+      );
+      _glassTint = (prefs.getDouble(_prefGlassTint) ?? _glassTint).clamp(
+        minGlassTint,
+        maxGlassTint,
+      );
+      _glassRefraction =
+          (prefs.getDouble(_prefGlassRefraction) ?? _glassRefraction).clamp(
+            minGlassRefraction,
+            maxGlassRefraction,
+          );
       final glassStyleName = prefs.getString(_prefGlassStyle);
       _glassStyle = GlassStyle.values.firstWhere(
         (s) => s.name == glassStyleName,
@@ -409,6 +444,9 @@ class SettingsController extends ChangeNotifier {
     _prefBottomBarIconOnly,
     _prefBottomBarFrosted,
     _prefGlassStyle,
+    _prefGlassBlur,
+    _prefGlassTint,
+    _prefGlassRefraction,
     _prefFrostedBlur,
     _prefFrostedOpacity,
     _prefAvatarPosition,
@@ -432,6 +470,9 @@ class SettingsController extends ChangeNotifier {
     _avatarPosition = AvatarPosition.top;
     _bottomBarFrosted = false;
     _glassStyle = GlassStyle.blur;
+    _glassBlur = defaultGlassBlur;
+    _glassTint = defaultGlassTint;
+    _glassRefraction = defaultGlassRefraction;
     _frostedBlur = FrostedGlassPreset.standard.blur;
     _frostedOpacity = FrostedGlassPreset.standard.opacity;
     _searchInBottomBar = false;
@@ -555,6 +596,30 @@ class SettingsController extends ChangeNotifier {
   void setFrostedPreset(FrostedGlassPreset preset) {
     setFrostedBlur(preset.blur);
     setFrostedOpacity(preset.opacity);
+  }
+
+  void setGlassBlur(double value) {
+    final v = value.clamp(minGlassBlur, maxGlassBlur);
+    if (_glassBlur == v) return;
+    _glassBlur = v;
+    notifyListeners();
+    _prefsFuture.then((p) => p.setDouble(_prefGlassBlur, v));
+  }
+
+  void setGlassTint(double value) {
+    final v = value.clamp(minGlassTint, maxGlassTint);
+    if (_glassTint == v) return;
+    _glassTint = v;
+    notifyListeners();
+    _prefsFuture.then((p) => p.setDouble(_prefGlassTint, v));
+  }
+
+  void setGlassRefraction(double value) {
+    final v = value.clamp(minGlassRefraction, maxGlassRefraction);
+    if (_glassRefraction == v) return;
+    _glassRefraction = v;
+    notifyListeners();
+    _prefsFuture.then((p) => p.setDouble(_prefGlassRefraction, v));
   }
 
   void setGlassStyle(GlassStyle style) {

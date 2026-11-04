@@ -517,17 +517,16 @@ void main() {
       theme: theme,
     );
 
-    testNooWidgets('solid by default: opaque surface card, no shadow, no blur', (
-      tester,
-      theme,
-      c,
-    ) async {
-      await pumpBar(tester, theme);
-      expect(find.byType(BackdropFilter), findsNothing);
-      final card = barCard(tester);
-      expect(card.color, c.surface);
-      expect(card.boxShadow, isNull);
-    });
+    testNooWidgets(
+      'solid by default: opaque surface card, no shadow, no blur',
+      (tester, theme, c) async {
+        await pumpBar(tester, theme);
+        expect(find.byType(BackdropFilter), findsNothing);
+        final card = barCard(tester);
+        expect(card.color, c.surface);
+        expect(card.boxShadow, isNull);
+      },
+    );
 
     testNooWidgets('frosted: blurred backdrop, translucent fill, no shadow', (
       tester,

@@ -312,10 +312,13 @@ blocks are noted where they matter:
   follows `SettingsController.glassStyle` (`GlassStyle.blur` = Gaussian blur
   + the opacity slider; `GlassStyle.glass` = "true glass", pref
   `ui_glass_style`, picked in Settings → Appearance → Glass style, which
-  hides the Blur/Opacity sliders). True glass runs
+  swaps the Blur/Opacity sliders for
+  glass-specific Blur (`glassBlur`, px), Tint (`glassTint`, surface-fill
+  opacity) and Refraction (`glassRefraction`, px edge bend) sliders; prefs
+  `ui_glass_blur`/`_tint`/`_refraction`). True glass runs
   [`shaders/glass.frag`](../../shaders/glass.frag) through
   `ImageFilter.shader` (28-tap disc blur, refractive bevel, dispersion,
-  vibrancy, specular rim, 0.34 fixed tint; no y-flip on GLES - the backdrop
+  vibrancy, specular rim, user-set tint; no y-flip on GLES - the backdrop
   is already upright there, a flip mirrored it). It needs Impeller, so `GlassShader.available` is false (and
   everything silently uses blur) on Skia/web or if the asset failed to load;
   `main()` awaits `GlassShader.load()`. The shader's corner radius comes
