@@ -151,7 +151,9 @@ class NooColors extends ThemeExtension<NooColors> {
     final dark = cs.brightness == Brightness.dark;
     final fixed = dark ? NooColors.dark : NooColors.light;
     return NooColors(
-      bg: cs.surface,
+      // Light: the page sits a full container step below the white cards
+      // (`surface` alone is nearly white too, so cards looked flat on it).
+      bg: dark ? cs.surface : cs.surfaceContainer,
       surface: dark ? cs.surfaceContainer : cs.surfaceContainerLowest,
       surface2: cs.surfaceContainerHigh,
       surface3: cs.surfaceContainerHighest,

@@ -38,7 +38,7 @@ class GlassShader {
   }) {
     final shader = _program!.fragmentShader()
       ..setFloat(2, radius) // uRadius
-      ..setFloat(3, 20) // uBevel
+      ..setFloat(3, 10 + refraction * 1.2) // uBevel (wider as refraction grows)
       ..setFloat(4, refraction) // uRefraction
       ..setFloat(5, dark ? 0.32 : 0.5) // uRim
       ..setFloat(6, blur); // uFrost (blur radius)

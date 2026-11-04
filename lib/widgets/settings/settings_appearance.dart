@@ -55,10 +55,6 @@ class SettingsAppearanceSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (!tablet) ...[
-          const SettingsBottomBarPreview(),
-          const SizedBox(height: NooSpace.xl),
-        ],
         SettingsSection(
           title: 'Appearance',
           children: [
@@ -102,6 +98,7 @@ class SettingsAppearanceSection extends StatelessWidget {
                 onChanged: settings.setBottomBarFrosted,
               ),
             ),
+            if (!tablet) const SettingsBottomBarPreview(),
             if (settings.bottomBarFrosted) _GlassStyleRow(settings: settings),
             if (settings.bottomBarFrosted &&
                 settings.glassStyle == GlassStyle.blur)
@@ -586,7 +583,7 @@ class _SliderLine extends StatelessWidget {
     return Row(
       children: [
         SizedBox(
-          width: 64,
+          width: 84,
           child: Text(label, style: NooText.body.copyWith(color: colors.fg2)),
         ),
         Expanded(child: slider),

@@ -29,13 +29,13 @@ vec3 tap(vec2 px) {
   return texture(uTex, uv).rgb;
 }
 
-// 28-tap golden-angle (Vogel) disc blur, radius uFrost px.
-vec3 blurTap(vec2 c) {
+// 28-tap golden-angle (Vogel) disc blur of the given radius in px.
+vec3 blurTap(vec2 c, float radius) {
   vec3 sum = tap(c) * 0.5;
   float wsum = 0.5;
   for (int i = 0; i < 28; i++) {
     float fi = float(i) + 0.5;
-    float rr = sqrt(fi / 28.0) * uFrost;
+    float rr = sqrt(fi / 28.0) * radius;
     float th = fi * 2.39996323;
     float w = 1.0 - 0.5 * (fi / 28.0);
     sum += tap(c + rr * vec2(cos(th), sin(th))) * w;
@@ -61,17 +61,24 @@ void main() {
   n = n / max(length(n), 1e-4);
 
   // Convex bevel: strongest at the rim, falling off quadratically inward.
-  float t = clamp(1.0 - depth / max(uBevel, 1.0), 0.0, 1.0);
-  float bulge = t * t;
-  float disp = uRefraction * bulge;
+  // The bevel can't reach past the shape's medial axis (the line of points
+  // equidistant from two edges) - there the edge normal flips sign and the
+  // displacement would fold back on itself, cancelling the bend out.
+  float bev = min(uBevel, min(hs.x, hs.y) * 0.9);
+  float t = clamp(1.0 - depth / max(bev, 1.0), 0.0, 1.0);
+  float bulge = t * sqrt(t);
+  float disp = uRefraction * 1.6 * bulge;
 
   // Apple-style glass: the backdrop is genuinely blurred (a golden-angle disc
   // of taps, uFrost px radius) *and* bent at the rim. The red/blue channels
   // are blurred around slightly deeper-displaced centres for dispersion.
   vec3 col;
-  col.r = blurTap(frag - n * disp * 1.00).r;
-  col.g = blurTap(frag - n * disp * 1.10).g;
-  col.b = blurTap(frag - n * disp * 1.20).b;
+  // The blur relaxes toward the rim (down to 30%) so the bent content stays
+  // recognisable there - otherwise a big blur averages the refraction away.
+  float rad = uFrost * mix(1.0, 0.3, bulge);
+  col.r = blurTap(frag - n * disp * 1.00, rad).r;
+  col.g = blurTap(frag - n * disp * 1.10, rad).g;
+  col.b = blurTap(frag - n * disp * 1.20, rad).b;
 
   // Vibrancy: lift saturation and brightness a touch, as glass over content
   // does, so the fill reads as a lit material rather than a grey wash.
@@ -82,7 +89,7 @@ void main() {
   vec2 light = normalize(vec2(-0.55, -0.83));
   float facing = max(dot(n, light), 0.0) + 0.45 * max(dot(n, -light), 0.0);
   float rim = exp(-depth / 1.4) * facing;
-  float glow = exp(-depth / max(uBevel * 0.8, 1.0)) * (0.35 + 0.65 * facing);
+  float glow = exp(-depth / max(bev * 0.8, 1.0)) * (0.35 + 0.65 * facing);
   col += uRim * (rim + 0.12 * glow);
 
   float a = clamp(0.5 - d, 0.0, 1.0);

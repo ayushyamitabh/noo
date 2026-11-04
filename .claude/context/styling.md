@@ -29,7 +29,9 @@ widgets. Key points:
   whole app in `main.dart`. When available and `useDynamicColor` is on, the
   OS-provided `ColorScheme` wins over the seed color — always thread both
   `dynamicScheme` and `useDynamicColor` through when adding a theme knob.
-  `NooColors.fromDynamicScheme` keeps `bg` on the OS `surface` but picks
+  `NooColors.fromDynamicScheme` puts light-mode `bg` on `surfaceContainer`
+  (a full step below the white cards - OS `surface` is nearly white, which
+  made cards look flat on it; dark mode keeps `bg` on OS `surface`) and picks
   `surface` (cards, selection bar, rows) from the container roles so it
   stays lighter than `bg`: `surfaceContainerLowest` (white) in light,
   `surfaceContainer` in dark. The dynamic_color package seeds the container

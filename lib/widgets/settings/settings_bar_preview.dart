@@ -52,13 +52,10 @@ class _SettingsBottomBarPreviewState extends State<SettingsBottomBarPreview> {
       iconOnly: iconOnly,
     );
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border.all(color: colors.line),
-        borderRadius: BorderRadius.circular(NooRadii.card),
-      ),
+    return Material(
+      color: colors.surface,
       child: Padding(
-        padding: EdgeInsets.zero,
+        padding: const EdgeInsets.all(NooSpace.md),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(NooRadii.card),
           child: SizedBox(
