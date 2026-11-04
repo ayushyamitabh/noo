@@ -59,6 +59,18 @@ class SettingsAppearanceSection extends StatelessWidget {
           children: [
             _ThemeRow(settings: settings),
             if (!tablet) _BottomBarStyleRow(settings: settings),
+            if (!tablet)
+              NooSettingsRow(
+                icon: LucideIcons.layoutGrid,
+                label: const Text('Icon-only bottom bar'),
+                subtitle: const Text(
+                  'Hide tab labels, even on the selected tab',
+                ),
+                trailing: NooToggle(
+                  checked: settings.bottomBarIconOnly,
+                  onChanged: settings.setBottomBarIconOnly,
+                ),
+              ),
             NooSettingsRow(
               icon: LucideIcons.glassWater,
               label: const Text('Frosted glass'),

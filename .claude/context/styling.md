@@ -357,6 +357,11 @@ blocks are noted where they matter:
   either). `floating` ignores `NooNavStyle` and always uses the Android row
   (icon-only idle tabs, sliding pill, 64px), so iOS matches Android there;
   only the attached bar still has a distinct iOS row. A separate, orthogonal
+  `SettingsController.bottomBarIconOnly` toggle (Settings → Appearance →
+  "Icon-only bottom bar", phones only, pref `ui_bottom_bar_icon_only`) drops
+  every tab label - even the selected one's - via `NooBottomBar.iconOnly` and
+  shortens the Android attached row to 64; anything sizing off the bar must
+  pass `iconOnly:` to `NooBottomBar.rowHeight`. A separate, orthogonal
   `SettingsController.bottomBarFrosted` toggle (Settings → Appearance →
   "Frosted glass bottom bar", off by default, both platforms and both bar
   styles) swaps the bar's solid `surface` for a translucent one over a

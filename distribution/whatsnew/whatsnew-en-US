@@ -1,4 +1,4 @@
-- Cancel button while syncing drops the item; Offline list updates live.
+- Sync cancel drops the item; Offline list updates live.
 - Sync everything is cloud-only; new Sync external storage option.
 - Storage warning before sync; setting to delete files removed from sync.
 - Offline tab and search get Files' sort/filter controls.
@@ -6,4 +6,4 @@
 - iOS-style banners; sheets zoom out the page.
 - Photos group by month only for date sorts.
 - New True glass option for frosted surfaces.
-- Viewer thumbnail strip.
+- Viewer thumbnail strip; icon-only bottom bar.

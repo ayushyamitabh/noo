@@ -111,6 +111,7 @@ double bottomBarClearance(BuildContext context) {
   final barHeight = NooBottomBar.rowHeight(
     NooLayout.navStyle(context),
     barStyle,
+    iconOnly: settings.bottomBarIconOnly,
   );
   final margin = barStyle == NooBottomBarStyle.floating
       ? NooBottomBar.floatingBottomMargin

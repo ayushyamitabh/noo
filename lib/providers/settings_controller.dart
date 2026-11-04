@@ -98,6 +98,7 @@ class SettingsController extends ChangeNotifier {
   static const _prefSwipeRightAction = 'ui_swipe_right_action';
   static const _prefFabStyle = 'ui_fab_style';
   static const _prefBottomBarStyle = 'ui_bottom_bar_style';
+  static const _prefBottomBarIconOnly = 'ui_bottom_bar_icon_only';
   static const _prefBottomBarFrosted = 'ui_bottom_bar_frosted';
   static const _prefGlassStyle = 'ui_glass_style';
   static const _prefFrostedBlur = 'ui_bottom_bar_frosted_blur';
@@ -115,6 +116,7 @@ class SettingsController extends ChangeNotifier {
   Color _seedColor = AppTheme.defaultAccent;
   ThemeMode _themeMode = ThemeMode.system;
   NooBottomBarStyle _bottomBarStyle = NooBottomBarStyle.attached;
+  bool _bottomBarIconOnly = false;
   NooNavMenuStyle _navMenuStyle = NooNavMenuStyle.drawer;
   AvatarPosition _avatarPosition = AvatarPosition.top;
   bool _bottomBarFrosted = false;
@@ -167,6 +169,7 @@ class SettingsController extends ChangeNotifier {
   Color get seedColor => _seedColor;
   ThemeMode get themeMode => _themeMode;
   NooBottomBarStyle get bottomBarStyle => _bottomBarStyle;
+  bool get bottomBarIconOnly => _bottomBarIconOnly;
   bool get bottomBarFrosted => _bottomBarFrosted;
   GlassStyle get glassStyle => _glassStyle;
   double get bottomBarFrostedBlur => _frostedBlur;
@@ -237,6 +240,8 @@ class SettingsController extends ChangeNotifier {
       _keepFiltersWhileSelecting =
           prefs.getBool(_prefKeepFiltersSelecting) ??
           _keepFiltersWhileSelecting;
+      _bottomBarIconOnly =
+          prefs.getBool(_prefBottomBarIconOnly) ?? _bottomBarIconOnly;
       final bottomBarStyleName = prefs.getString(_prefBottomBarStyle);
       if (bottomBarStyleName != null) {
         _bottomBarStyle = NooBottomBarStyle.values.firstWhere(
@@ -401,6 +406,7 @@ class SettingsController extends ChangeNotifier {
     _prefSwipeRightAction,
     _prefFabStyle,
     _prefBottomBarStyle,
+    _prefBottomBarIconOnly,
     _prefBottomBarFrosted,
     _prefGlassStyle,
     _prefFrostedBlur,
@@ -421,6 +427,7 @@ class SettingsController extends ChangeNotifier {
     _seedColor = AppTheme.defaultAccent;
     _themeMode = ThemeMode.system;
     _bottomBarStyle = NooBottomBarStyle.attached;
+    _bottomBarIconOnly = false;
     _navMenuStyle = NooNavMenuStyle.drawer;
     _avatarPosition = AvatarPosition.top;
     _bottomBarFrosted = false;
@@ -513,6 +520,13 @@ class SettingsController extends ChangeNotifier {
     _keepFiltersWhileSelecting = value;
     notifyListeners();
     _prefsFuture.then((p) => p.setBool(_prefKeepFiltersSelecting, value));
+  }
+
+  void setBottomBarIconOnly(bool value) {
+    if (_bottomBarIconOnly == value) return;
+    _bottomBarIconOnly = value;
+    notifyListeners();
+    _prefsFuture.then((p) => p.setBool(_prefBottomBarIconOnly, value));
   }
 
   void setBottomBarStyle(NooBottomBarStyle style) {

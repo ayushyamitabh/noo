@@ -67,6 +67,10 @@ class NooBottomBar extends StatelessWidget {
   final NooBottomBarStyle barStyle;
   final bool frosted;
 
+  /// Settings, Appearance, "Icon-only bottom bar": no labels at all (not even
+  /// the selected tab's), a shorter row, selection shown by the pill/accent.
+  final bool iconOnly;
+
   /// Backdrop blur sigma and surface-fill opacity while [frosted] (user-
   /// adjustable in Settings; the defaults match [FrostedGlassContainer]'s
   /// blur).
@@ -88,6 +92,7 @@ class NooBottomBar extends StatelessWidget {
     required this.style,
     this.barStyle = NooBottomBarStyle.attached,
     this.frosted = false,
+    this.iconOnly = false,
     this.frostedBlur = defaultFrostedBlur,
     this.frostedOpacity = defaultFrostedOpacity,
     required this.destinations,
@@ -102,11 +107,15 @@ class NooBottomBar extends StatelessWidget {
   /// The row height [build] draws for [style]/[barStyle] - exposed so a
   /// scrollable body sharing the same `Scaffold` can reserve exactly this
   /// much clearance (see the class doc comment) instead of guessing.
-  static double rowHeight(NooNavStyle style, NooBottomBarStyle barStyle) {
+  static double rowHeight(
+    NooNavStyle style,
+    NooBottomBarStyle barStyle, {
+    bool iconOnly = false,
+  }) {
     if (style == NooNavStyle.ios && barStyle != NooBottomBarStyle.floating) {
       return 50;
     }
-    return barStyle == NooBottomBarStyle.floating ? 64 : 80;
+    return barStyle == NooBottomBarStyle.floating || iconOnly ? 64 : 80;
   }
 
   static const double defaultFrostedBlur = 20;
@@ -147,7 +156,11 @@ class NooBottomBar extends StatelessWidget {
             floating: floating,
             trailingSearch: rowSearch,
           );
-    final barHeight = NooBottomBar.rowHeight(style, barStyle);
+    final barHeight = NooBottomBar.rowHeight(
+      style,
+      barStyle,
+      iconOnly: iconOnly,
+    );
 
     if (floating) {
       final pillRadius = BorderRadius.circular(28);
@@ -320,6 +333,7 @@ class NooBottomBar extends StatelessWidget {
                   destination: destinations[i],
                   selected: i == selectedIndex,
                   selectedLabelOnly: true,
+                  iconOnly: iconOnly,
                   onTap: () => onSelected(i),
                 ),
               ),
@@ -329,6 +343,7 @@ class NooBottomBar extends StatelessWidget {
                   destination: trailingSearch,
                   selected: false,
                   selectedLabelOnly: true,
+                  iconOnly: iconOnly,
                   onTap: onSearchTap!,
                 ),
                 width,
@@ -344,7 +359,13 @@ class NooBottomBar extends StatelessWidget {
     required bool floating,
     NooNavDestination? trailingSearch,
   }) {
-    final pillTop = floating ? _kFloatingPillTop : _kAttachedPillTop;
+    final pillTop = iconOnly
+        ? (NooBottomBar.rowHeight(style, barStyle, iconOnly: true) -
+                  _kAndroidPillHeight) /
+              2
+        : floating
+        ? _kFloatingPillTop
+        : _kAttachedPillTop;
     final itemCount =
         destinations.length + (trailingSearch != null ? _rowSearchFraction : 0);
     return LayoutBuilder(
@@ -378,6 +399,7 @@ class NooBottomBar extends StatelessWidget {
                       destination: destinations[i],
                       selected: i == selectedIndex,
                       floating: floating,
+                      iconOnly: iconOnly,
                       onTap: () => onSelected(i),
                     ),
                   ),
@@ -387,6 +409,7 @@ class NooBottomBar extends StatelessWidget {
                       destination: trailingSearch,
                       selected: false,
                       floating: floating,
+                      iconOnly: iconOnly,
                       onTap: onSearchTap!,
                     ),
                     itemWidth,
@@ -464,12 +487,14 @@ class _IosItem extends StatelessWidget {
   final NooNavDestination destination;
   final bool selected;
   final bool selectedLabelOnly;
+  final bool iconOnly;
   final VoidCallback onTap;
 
   const _IosItem({
     required this.destination,
     required this.selected,
     this.selectedLabelOnly = false,
+    this.iconOnly = false,
     required this.onTap,
   });
 
@@ -480,11 +505,13 @@ class _IosItem extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      label: selectedLabelOnly && !selected ? destination.label : null,
+      label: iconOnly || (selectedLabelOnly && !selected)
+          ? destination.label
+          : null,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: selectedLabelOnly && !selected
+        child: iconOnly || (selectedLabelOnly && !selected)
             ? Center(child: Icon(destination.icon, size: 24, color: fg))
             : Padding(
                 padding: const EdgeInsets.only(top: 8),
@@ -525,12 +552,14 @@ class _AndroidItem extends StatelessWidget {
   final NooNavDestination destination;
   final bool selected;
   final bool floating;
+  final bool iconOnly;
   final VoidCallback onTap;
 
   const _AndroidItem({
     required this.destination,
     required this.selected,
     required this.floating,
+    this.iconOnly = false,
     required this.onTap,
   });
 
@@ -540,7 +569,7 @@ class _AndroidItem extends StatelessWidget {
     final iconColor = selected ? colors.accentText : colors.fg2;
 
     final Widget content;
-    if (floating && !selected) {
+    if (iconOnly || (floating && !selected)) {
       content = Center(
         child: Icon(destination.icon, size: 25, color: iconColor),
       );

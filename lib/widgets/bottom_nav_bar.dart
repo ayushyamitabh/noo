@@ -18,6 +18,7 @@ class BottomNavBar extends StatelessWidget {
   final NooNavStyle style;
   final NooBottomBarStyle barStyle;
   final bool frosted;
+  final bool iconOnly;
   final double frostedBlur;
   final double frostedOpacity;
   final List<AppTab> tabs;
@@ -31,6 +32,7 @@ class BottomNavBar extends StatelessWidget {
     required this.style,
     this.barStyle = NooBottomBarStyle.attached,
     this.frosted = false,
+    this.iconOnly = false,
     this.frostedBlur = NooBottomBar.defaultFrostedBlur,
     this.frostedOpacity = NooBottomBar.defaultFrostedOpacity,
     required this.tabs,
@@ -46,6 +48,7 @@ class BottomNavBar extends StatelessWidget {
       style: style,
       barStyle: barStyle,
       frosted: frosted,
+      iconOnly: iconOnly,
       frostedBlur: frostedBlur,
       frostedOpacity: frostedOpacity,
       destinations: [
@@ -68,7 +71,7 @@ class BottomNavBar extends StatelessWidget {
             },
       avatarSatellite: avatarInBottomBar
           ? AvatarNavigationSatellite(
-              size: NooBottomBar.rowHeight(style, barStyle),
+              size: NooBottomBar.rowHeight(style, barStyle, iconOnly: iconOnly),
             )
           : null,
       // The avatar slot turns into a close button in place, so Search and

@@ -503,6 +503,7 @@ class _AvatarNavigationHostState extends State<AvatarNavigationHost>
           ? NooBottomBar.rowHeight(
               NooLayout.navStyle(context),
               settings.bottomBarStyle,
+              iconOnly: settings.bottomBarIconOnly,
             )
           : 32.0;
       origin = Rect.fromCenter(
@@ -562,6 +563,7 @@ class _AvatarNavigationHostState extends State<AvatarNavigationHost>
                           NooBottomBar.rowHeight(
                                 NooLayout.navStyle(context),
                                 settings.bottomBarStyle,
+                                iconOnly: settings.bottomBarIconOnly,
                               ) /
                               2 -
                           (attached ? 0 : 12)
