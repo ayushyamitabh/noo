@@ -29,15 +29,15 @@ vec3 tap(vec2 px) {
   return texture(uTex, uv).rgb;
 }
 
-// 14-tap golden-angle (Vogel) disc blur, radius uFrost px.
+// 28-tap golden-angle (Vogel) disc blur, radius uFrost px.
 vec3 blurTap(vec2 c) {
   vec3 sum = tap(c) * 0.5;
   float wsum = 0.5;
-  for (int i = 0; i < 14; i++) {
+  for (int i = 0; i < 28; i++) {
     float fi = float(i) + 0.5;
-    float rr = sqrt(fi / 14.0) * uFrost;
+    float rr = sqrt(fi / 28.0) * uFrost;
     float th = fi * 2.39996323;
-    float w = 1.0 - 0.5 * (fi / 14.0);
+    float w = 1.0 - 0.5 * (fi / 28.0);
     sum += tap(c + rr * vec2(cos(th), sin(th))) * w;
     wsum += w;
   }

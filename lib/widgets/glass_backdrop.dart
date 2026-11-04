@@ -33,10 +33,10 @@ class GlassShader {
   static ui.ImageFilter filter({required double radius, required bool dark}) {
     final shader = _program!.fragmentShader()
       ..setFloat(2, radius) // uRadius
-      ..setFloat(3, 14) // uBevel
-      ..setFloat(4, 9) // uRefraction
+      ..setFloat(3, 20) // uBevel
+      ..setFloat(4, 18) // uRefraction
       ..setFloat(5, dark ? 0.32 : 0.5) // uRim
-      ..setFloat(6, 11); // uFrost (blur radius)
+      ..setFloat(6, 24); // uFrost (blur radius)
     return ui.ImageFilter.shader(shader);
   }
 }
