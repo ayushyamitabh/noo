@@ -26,8 +26,9 @@ class MoreTabsButton extends StatelessWidget {
     // just disabling. Same idea while offline: every hidden tab needs a
     // network request to show anything useful, so there's nothing this
     // button could usefully open.
-    if (pick.isPicking || connectivity.isOffline)
+    if (pick.isPicking || connectivity.isOffline) {
       return const SizedBox.shrink();
+    }
 
     return PopupMenuButton<AppTab>(
       icon: const Icon(Icons.apps_rounded),
