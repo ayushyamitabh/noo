@@ -17,6 +17,10 @@ class MediaActionBar extends StatelessWidget {
   final VoidCallback onShare;
   final VoidCallback onFavorite;
   final VoidCallback onDelete;
+
+  /// Icon/tooltip for the delete button - "Leave share" for a received share.
+  final IconData deleteIcon;
+  final String deleteLabel;
   final VoidCallback onOpenExternally;
   final VoidCallback onDownload;
   final VoidCallback? onDetails;
@@ -36,6 +40,8 @@ class MediaActionBar extends StatelessWidget {
     required this.onShare,
     required this.onFavorite,
     required this.onDelete,
+    this.deleteIcon = LucideIcons.trash2,
+    this.deleteLabel = 'Delete',
     required this.onOpenExternally,
     required this.onDownload,
   });
@@ -99,8 +105,8 @@ class MediaActionBar extends StatelessWidget {
                     ),
                   if (showServerActions)
                     ViewerIconButton(
-                      icon: LucideIcons.trash2,
-                      tooltip: 'Delete',
+                      icon: deleteIcon,
+                      tooltip: deleteLabel,
                       onTap: isBusy ? null : onDelete,
                     ),
                   if (onDetails != null)

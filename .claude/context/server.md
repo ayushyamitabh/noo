@@ -81,6 +81,12 @@ rather than needing a rewrite for multi-account support.
   sheet decides who the owner is from `isOwnedByOther(username)` (works for
   files nested in a shared folder) while the Files list/filter/sections use
   `isSharedWithMe` (the mount root).
+  A WebDAV DELETE on a received share's mount root only *unshares* it for
+  the recipient (the owner keeps the files), so the delete action on such an
+  item is worded "Leave share" - `RemoveWording.of(items)` picks the
+  icon/label/confirm text/result snackbar (leave / delete / mixed "Remove")
+  for Files, Photos, Favorites, swipe and the viewer; the request is still
+  `deleteItem`. Items *inside* a shared folder really are deleted.
   `creationdate` specifically needs `_parseDavCreationDate`, not
   `_parseDavDate` directly - Nextcloud has no real per-file creation-time
   tracking for most setups, so that property routinely comes back as a

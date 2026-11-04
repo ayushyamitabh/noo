@@ -10,6 +10,7 @@ import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/nextcloud_item.dart';
+import '../models/remove_wording.dart';
 import '../models/selection_action.dart';
 import '../models/sync_status.dart';
 import '../providers/files_controller.dart';
@@ -567,8 +568,8 @@ class _FilesViewState extends State<FilesView> {
       ),
       SelectionAction(
         kind: SelectionActionKind.delete,
-        icon: LucideIcons.trash2,
-        label: 'Delete',
+        icon: RemoveWording.of(selected).icon,
+        label: RemoveWording.of(selected).label,
         onTap: () => _confirmDeleteSelected(context, selected),
       ),
       SelectionAction(
@@ -1595,15 +1596,14 @@ class _FilesViewState extends State<FilesView> {
     BuildContext context,
     List<NextcloudItem> items,
   ) async {
+    final wording = RemoveWording.of(items);
     final confirmed = await showDialog<bool>(
       context: context,
       anchorPoint: NooLayout.popupAnchor(context),
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Delete Items'),
-          content: Text(
-            'Delete ${items.length} item(s) from the server? This cannot be undone.',
-          ),
+          title: Text(wording.title),
+          content: Text(wording.message),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
@@ -1614,7 +1614,7 @@ class _FilesViewState extends State<FilesView> {
                 backgroundColor: Theme.of(dialogContext).colorScheme.error,
               ),
               onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Delete'),
+              child: Text(wording.confirmLabel),
             ),
           ],
         );
@@ -1633,7 +1633,7 @@ class _FilesViewState extends State<FilesView> {
     _clearSelection();
     messenger.showSnackBar(
       SnackBar(
-        content: Text('Deleted $succeeded of ${items.length} item(s)'),
+        content: Text(wording.result(succeeded)),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -1812,15 +1812,14 @@ class _FilesViewState extends State<FilesView> {
   }
 
   Future<void> _confirmAndDeleteViaSwipe(NextcloudItem item) async {
+    final wording = RemoveWording.of([item]);
     final confirmed = await showDialog<bool>(
       context: context,
       anchorPoint: NooLayout.popupAnchor(context),
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Delete Item'),
-          content: Text(
-            'Delete "${item.name}" from the server? This cannot be undone.',
-          ),
+          title: Text(wording.title),
+          content: Text(wording.message),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
@@ -1831,7 +1830,7 @@ class _FilesViewState extends State<FilesView> {
                 backgroundColor: Theme.of(dialogContext).colorScheme.error,
               ),
               onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Delete'),
+              child: Text(wording.confirmLabel),
             ),
           ],
         );
@@ -1845,9 +1844,7 @@ class _FilesViewState extends State<FilesView> {
     if (!mounted) return;
     NooMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          success ? 'Deleted ${item.name}' : 'Failed to delete ${item.name}',
-        ),
+        content: Text(wording.result(success ? 1 : 0)),
         behavior: SnackBarBehavior.floating,
       ),
     );

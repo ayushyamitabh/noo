@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 import '../models/nextcloud_item.dart';
+import '../models/remove_wording.dart';
 import '../providers/item_operations.dart';
 import '../providers/session_controller.dart';
 import '../services/download_service.dart';
@@ -333,7 +334,8 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
   /// Delete confirmation, restyled as [showNooDialog] (desktop) /
   /// [showNooSheet] (mobile) instead of an [AlertDialog] - same pattern as
   /// `confirmRemoveAccount` in `settings_dialogs.dart`.
-  Future<bool> _confirmDelete(String name) async {
+  Future<bool> _confirmDelete(NextcloudItem item) async {
+    final wording = RemoveWording.of([item]);
     var confirmed = false;
     void cancel() => Navigator.pop(context);
     void confirm() {
@@ -359,18 +361,21 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
             size: NooButtonSize.card,
             fullWidth: true,
             onTap: confirm,
-            child: const Text('Delete'),
+            child: Text(wording.confirmLabel),
           ),
         ),
       ],
     );
 
-    final message = 'Delete "$name" from the server? This cannot be undone.';
+    final message = wording.message;
+    final title = wording.kind == RemoveKind.delete
+        ? 'Delete file'
+        : wording.title;
     final colors = context.nooColors;
     if (NooLayout.isDesktop(context)) {
       await showNooDialog(
         context,
-        title: 'Delete file',
+        title: title,
         children: [
           Text(message, style: NooText.body.copyWith(color: colors.fg2)),
           buttons(),
@@ -380,7 +385,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
       await showNooSheet(
         context,
         children: [
-          NooOverlayHeader(title: 'Delete file', onClose: cancel),
+          NooOverlayHeader(title: title, onClose: cancel),
           Text(message, style: NooText.body.copyWith(color: colors.fg2)),
           buttons(),
         ],
@@ -391,7 +396,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
 
   Future<void> _deleteCurrentItem(ItemOperations ops) async {
     final item = _currentItem;
-    final confirmed = await _confirmDelete(item.name);
+    final confirmed = await _confirmDelete(item);
     if (!confirmed || !mounted) return;
 
     setState(() => _isBusy = true);
@@ -400,9 +405,9 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
     setState(() => _isBusy = false);
 
     if (!success) {
-      NooMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to delete ${item.name}')));
+      NooMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(RemoveWording.of([item]).result(0))),
+      );
       return;
     }
 
@@ -619,6 +624,8 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                           : null,
                       onShare: () => ShareSheet.show(context, _currentItem),
                       onFavorite: () => _toggleFavorite(ops),
+                      deleteIcon: RemoveWording.of([_currentItem]).icon,
+                      deleteLabel: RemoveWording.of([_currentItem]).label,
                       onDelete: () => _deleteCurrentItem(ops),
                       onOpenExternally: () => _openExternally(session),
                       onDownload: () => _downloadToDevice(session),
