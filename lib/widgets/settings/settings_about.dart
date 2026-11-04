@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../theme/design_tokens.dart';
 import '../noo/lists/noo_settings_row.dart';
 import 'settings_section.dart';
 import '../noo/overlays/noo_messenger.dart';
@@ -63,7 +65,13 @@ class _SettingsAboutSectionState extends State<SettingsAboutSection> {
           }.entries)
             NooSettingsRow(
               label: Text(link.key),
-              value: '',
+              // External link, not a sub-screen: the arrow-out icon rather
+              // than the chevron NooSettingsRow's `value` draws.
+              trailing: Icon(
+                LucideIcons.externalLink,
+                size: 18,
+                color: context.nooColors.fg3,
+              ),
               onTap: () => _openLink(link.value),
             ),
         ],
