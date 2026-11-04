@@ -304,7 +304,7 @@ struct SyncRunner {
           needed + Self.storageReserveBytes > available
         {
           bus.setStorageShortfall(accountId: accountId, needed: needed, available: available)
-          summary.storageShortfall = StorageShortfall(needed: needed, available: available)
+          summary.storageShortfall = SyncStatusBus.StorageShortfall(needed: needed, available: available)
           break
         }
         for action in actions {

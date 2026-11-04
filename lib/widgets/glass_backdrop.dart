@@ -36,7 +36,7 @@ class GlassShader {
       ..setFloat(3, 14) // uBevel
       ..setFloat(4, 9) // uRefraction
       ..setFloat(5, dark ? 0.32 : 0.5) // uRim
-      ..setFloat(6, 1.4); // uFrost
+      ..setFloat(6, 11); // uFrost (blur radius)
     return ui.ImageFilter.shader(shader);
   }
 }
@@ -69,7 +69,7 @@ class GlassBackdrop extends StatelessWidget {
   /// Opacity of the surface tint on a glass bar. True glass stays mostly
   /// clear so the refraction shows; the user's opacity slider only applies to
   /// the blur style.
-  static const double glassTintOpacity = 0.16;
+  static const double glassTintOpacity = 0.34;
 
   /// The surface tint for a frosted element: [opacity] (the user's slider) for
   /// blur, a light fixed tint for true glass.

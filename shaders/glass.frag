@@ -22,11 +22,26 @@ float sdRoundBox(vec2 p, vec2 hs, float r) {
 }
 
 vec3 tap(vec2 px) {
+  // No y-flip on GLES: despite the ImageFilter.shader docs, the backdrop
+  // texture is already upright there (a flip mirrored the content on the
+  // Android emulator's OpenGLES Impeller backend).
   vec2 uv = clamp(px / uSize, vec2(0.002), vec2(0.998));
-#ifdef IMPELLER_TARGET_OPENGLES
-  uv.y = 1.0 - uv.y;
-#endif
   return texture(uTex, uv).rgb;
+}
+
+// 14-tap golden-angle (Vogel) disc blur, radius uFrost px.
+vec3 blurTap(vec2 c) {
+  vec3 sum = tap(c) * 0.5;
+  float wsum = 0.5;
+  for (int i = 0; i < 14; i++) {
+    float fi = float(i) + 0.5;
+    float rr = sqrt(fi / 14.0) * uFrost;
+    float th = fi * 2.39996323;
+    float w = 1.0 - 0.5 * (fi / 14.0);
+    sum += tap(c + rr * vec2(cos(th), sin(th))) * w;
+    wsum += w;
+  }
+  return sum / wsum;
 }
 
 void main() {
@@ -50,22 +65,18 @@ void main() {
   float bulge = t * t;
   float disp = uRefraction * bulge;
 
-  // Sample from further inside so the rim magnifies/bends the content, with
-  // a slight per-channel split for chromatic dispersion.
+  // Apple-style glass: the backdrop is genuinely blurred (a golden-angle disc
+  // of taps, uFrost px radius) *and* bent at the rim. The red/blue channels
+  // are blurred around slightly deeper-displaced centres for dispersion.
   vec3 col;
-  col.r = tap(frag - n * disp * 1.00).r;
-  col.g = tap(frag - n * disp * 1.07).g;
-  col.b = tap(frag - n * disp * 1.14).b;
+  col.r = blurTap(frag - n * disp * 1.00).r;
+  col.g = blurTap(frag - n * disp * 1.10).g;
+  col.b = blurTap(frag - n * disp * 1.20).b;
 
-  // Cheap two-ring diffusion so text/photos behind don't fight the icons.
-  vec2 c = frag - n * disp * 1.07;
-  vec3 soft = (tap(c + vec2(uFrost, 0.0)) + tap(c - vec2(uFrost, 0.0)) +
-               tap(c + vec2(0.0, uFrost)) + tap(c - vec2(0.0, uFrost))) * 0.25;
-  vec3 soft2 = (tap(c + vec2(uFrost, uFrost) * 1.7) +
-                tap(c - vec2(uFrost, uFrost) * 1.7) +
-                tap(c + vec2(uFrost, -uFrost) * 1.7) +
-                tap(c - vec2(uFrost, -uFrost) * 1.7)) * 0.25;
-  col = mix(col, (soft + soft2) * 0.5, 0.7);
+  // Vibrancy: lift saturation and brightness a touch, as glass over content
+  // does, so the fill reads as a lit material rather than a grey wash.
+  float luma = dot(col, vec3(0.299, 0.587, 0.114));
+  col = mix(vec3(luma), col, 1.3) * 1.04;
 
   // Specular rim lit from the top-left, softer bounce from the opposite side.
   vec2 light = normalize(vec2(-0.55, -0.83));
