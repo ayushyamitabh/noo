@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/saved_account.dart';
@@ -8,7 +9,17 @@ import '../models/saved_account.dart';
 /// original single-account storage schema (3 flat secure-storage keys and
 /// a handful of un-namespaced SharedPreferences keys) into this one.
 class AccountStore {
-  static const _storage = FlutterSecureStorage();
+  /// `resetOnError: false` is deliberate. The plugin's default (true)
+  /// PERMANENTLY erases every stored value on *any* read error - including
+  /// a transient Keystore hiccup right after an app update/track change -
+  /// which left saved accounts listed (their list lives in
+  /// SharedPreferences) but with no password to sign in with. With it off, a
+  /// failed read just fails (see [readPassword], which turns that into
+  /// null) and the data is still there for the next attempt; stored values
+  /// are only ever cleared deliberately (see [writePassword]).
+  static const _storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(resetOnError: false),
+  );
 
   // Legacy single-account keys (pre-multi-account).
   static const _keyLegacyServerUrl = 'nc_server_url';
@@ -151,11 +162,31 @@ class AccountStore {
     await prefs.setStringList(_prefSignedOutAccounts, current.toList());
   }
 
-  Future<String?> readPassword(String accountId) =>
-      _storage.read(key: '$_passwordKeyPrefix$accountId');
+  /// The stored app password, or null if there is none *or it couldn't be
+  /// read right now* (logged; nothing is erased - see [_storage]).
+  Future<String?> readPassword(String accountId) async {
+    try {
+      return await _storage.read(key: '$_passwordKeyPrefix$accountId');
+    } catch (e) {
+      debugPrint('[AccountStore] Reading password for $accountId failed: $e');
+      return null;
+    }
+  }
 
-  Future<void> writePassword(String accountId, String password) =>
-      _storage.write(key: '$_passwordKeyPrefix$accountId', value: password);
+  Future<void> writePassword(String accountId, String password) async {
+    final key = '$_passwordKeyPrefix$accountId';
+    try {
+      await _storage.write(key: key, value: password);
+    } catch (e) {
+      // Storage that can't even take a fresh write has lost its keys for
+      // good (nothing readable can be in it), and this is the user
+      // deliberately signing in again - so this is the one place it's
+      // cleared and retried, instead of leaving them unable to sign in.
+      debugPrint('[AccountStore] Write failed, resetting secure storage: $e');
+      await _storage.deleteAll();
+      await _storage.write(key: key, value: password);
+    }
+  }
 
   Future<void> deletePassword(String accountId) =>
       _storage.delete(key: '$_passwordKeyPrefix$accountId');

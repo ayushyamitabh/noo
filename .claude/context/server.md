@@ -779,6 +779,16 @@ account is *currently* live (see `architecture.md`).
   deterministic (`SavedAccount.makeId(serverUrl, username)`, a slug of both),
   so re-adding the same account refreshes its password instead of creating a
   duplicate.
+  `AccountStore` constructs the storage with `AndroidOptions(resetOnError:
+  false)`: the plugin's default (true) permanently erases *every* stored
+  value on any read error - including a transient Keystore failure after an
+  app update - which left saved accounts listed (the list is in
+  `shared_preferences`) with no password ("Couldn't sign in"). Reads now
+  catch errors and return null without erasing anything, so a later attempt
+  can succeed; only a failed *write* (keys gone for good) clears storage and
+  retries, since that only happens on a deliberate sign-in. The login
+  screen's failure snackbar shows `SessionController.lastActivationFailure`
+  and a "Sign in again" action (same account id, so prefs/synced data stay).
 - **Account identity list** (non-secret: id/serverUrl/username) and
   **which one is active** live in `shared_preferences` as `accounts_list`
   (JSON array) and `active_account_id`.
