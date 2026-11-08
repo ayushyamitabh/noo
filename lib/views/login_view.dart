@@ -78,12 +78,24 @@ class _LoginViewState extends State<LoginView> {
     final session = context.read<SessionController>();
     final success = await session.switchAccount(account.id);
     if (success || !mounted) return;
+    final reason = session.lastActivationFailure;
     NooMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text("Couldn't sign in as ${account.label}"),
+          content: Text(
+            reason == null
+                ? "Couldn't sign in as ${account.label}"
+                : "Couldn't sign in as ${account.label} - $reason",
+          ),
           behavior: SnackBarBehavior.floating,
+          // Re-authenticates in place: the login flow refreshes this same
+          // account (same server + user -> same id), keeping its prefs
+          // and synced data, unlike removing and re-adding it.
+          action: SnackBarAction(
+            label: 'Sign in again',
+            onPressed: () => session.startLoginFlow(account.serverUrl),
+          ),
         ),
       );
   }

@@ -220,10 +220,29 @@ class SessionController extends ChangeNotifier with WidgetsBindingObserver {
       _accounts.where((a) => a.id == _activeAccountId).firstOrNull;
   bool get isAddAccountFlow => _addAccountFlowActive;
 
+  /// Why the last account activation/switch ended up signed out, in words
+  /// fit for a snackbar - null when it succeeded. Lets the login screen say
+  /// *which* thing failed (nothing usable in secure storage vs the server
+  /// refusing the stored password) instead of one generic message.
+  String? get lastActivationFailure => _lastActivationFailure;
+  String? _lastActivationFailure;
+
   bool get loginLockEnabled => _loginLockEnabled;
   bool get lockAccountSwitching => _lockAccountSwitching;
   bool get lockHiddenFiles => _lockHiddenFiles;
   bool get needsUnlock => _loginLockEnabled && !_isUnlocked;
+
+  /// [AccountStore.readPassword], but a secure-storage failure (e.g. keys
+  /// that no longer decrypt what's stored) counts as "no password" and is
+  /// logged, instead of throwing out of an account switch.
+  Future<String?> _readPasswordSafely(String accountId) async {
+    try {
+      return await accountStore.readPassword(accountId);
+    } catch (e) {
+      debugPrint('[SessionController] Reading saved password failed: $e');
+      return null;
+    }
+  }
 
   Future<void> _restoreSession() async {
     try {
@@ -231,8 +250,11 @@ class SessionController extends ChangeNotifier with WidgetsBindingObserver {
       if (id == null) return;
       final account = _accounts.where((a) => a.id == id).firstOrNull;
       if (account == null) return;
-      final password = await accountStore.readPassword(id);
-      if (password == null) return;
+      final password = await _readPasswordSafely(id);
+      if (password == null) {
+        debugPrint('[SessionController] No readable password for $id');
+        return;
+      }
       await _applyCredentialsForAccount(account, password);
     } catch (e) {
       debugPrint('[SessionController] Session restore failed: $e');
@@ -327,6 +349,7 @@ class SessionController extends ChangeNotifier with WidgetsBindingObserver {
       // that's already nominally active). `_service` is already assigned
       // above and needs no re-creation once connectivity returns.
       if (_errorMessage?.contains('401') == true) {
+        _lastActivationFailure = 'The server rejected the saved password';
         await accountStore.deletePassword(account.id);
         _isProvisionalLogin = false;
         _isLoggedIn = false;
@@ -528,11 +551,15 @@ class SessionController extends ChangeNotifier with WidgetsBindingObserver {
     await accountStore.setSignedOut(prefs, accountId, false);
     notifyListeners();
 
+    _lastActivationFailure = null;
     final account = _accounts.where((a) => a.id == accountId).firstOrNull;
     final password = account == null
         ? null
-        : await accountStore.readPassword(accountId);
+        : await _readPasswordSafely(accountId);
     if (account == null || password == null) {
+      _lastActivationFailure = account == null
+          ? 'Account not found'
+          : 'The saved password is missing or unreadable';
       _isProvisionalLogin = false;
       _isLoading = false;
       _isLoggedIn = false;
