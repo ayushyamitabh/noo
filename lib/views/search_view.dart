@@ -174,7 +174,12 @@ class _SearchViewState extends State<SearchView> {
                             onTap: () => Navigator.pop(context),
                           ),
                         ),
-                        Expanded(child: _buildField(onSurface: false)),
+                        Expanded(
+                          child: _buildField(
+                            onSurface: false,
+                            android: !NooLayout.iosStyle(context),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -185,7 +190,7 @@ class _SearchViewState extends State<SearchView> {
     );
   }
 
-  Widget _buildField({required bool onSurface}) {
+  Widget _buildField({required bool onSurface, bool android = false}) {
     // The pill `NooSearchField`, not the inset-panel `NooTextField` - this
     // is a search field (DESIGN_SYSTEM.md's "Search field" component,
     // radius 999 outside the one iOS-inline exception), not a form input.
@@ -199,6 +204,10 @@ class _SearchViewState extends State<SearchView> {
       onChanged: _onChanged,
       onSurface: onSurface,
       ios: false,
+      // The Android phone shape matches the top bar's search launcher (48px
+      // pill, no icon) - left-aligned here since this one is typed into.
+      android: android,
+      centerText: false,
       trailing: _controller.text.isEmpty
           ? null
           : _ClearFieldButton(onTap: _clear),

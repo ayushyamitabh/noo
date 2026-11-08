@@ -425,7 +425,8 @@ blocks are noted where they matter:
   slot, or the snackbar goes back on top.
   `NooSearchField(android: true)` (used by `ShellSearchLauncher` in the
   Android top bar) is the Drive-style variant: 48px, fully round, no
-  leading icon, centered 16px placeholder; iOS keeps its 38px inline field.
+  leading icon, centered 16px placeholder; iOS keeps its 38px inline field. `SearchView` uses the same variant on non-iOS phones
+  with `centerText: false` (left-aligned, since it's typed into).
 - `SettingsController.navMenuStyle` chooses hamburger/drawer or avatar popup
   navigation (Settings → Appearance → Navigation menu). Avatar mode exposes
   a persisted Avatar position choice (`ui_avatar_position`, Top by default).

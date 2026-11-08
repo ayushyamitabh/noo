@@ -16,10 +16,16 @@ class NooSearchField extends StatelessWidget {
   /// title); false = the generic 36px pill used everywhere else (also the
   /// Android "expands from a top-bar icon" search field once expanded).
   final bool ios;
+
   /// Android's own top-bar search launcher (modelled on Google Drive's):
   /// 48px tall, fully round, no leading icon, centered 16px placeholder.
   /// Ignored when [ios] is set.
   final bool android;
+
+  /// With [android]: center the placeholder/text (the launcher look). The
+  /// real search screen turns this off - an editable field jumping its
+  /// caret from the middle to the start on the first character is jarring.
+  final bool centerText;
 
   /// True when placed directly on a `surface` background (uses surface-2
   /// fill instead of surface, so it doesn't disappear against it).
@@ -39,6 +45,7 @@ class NooSearchField extends StatelessWidget {
     this.autofocus = false,
     this.ios = false,
     this.android = false,
+    this.centerText = true,
     this.onSurface = false,
     this.width,
     this.trailing,
@@ -73,7 +80,9 @@ class NooSearchField extends StatelessWidget {
               onChanged: onChanged,
               onSubmitted: onSubmitted,
               autofocus: autofocus,
-              textAlign: drive ? TextAlign.center : TextAlign.start,
+              textAlign: drive && centerText
+                  ? TextAlign.center
+                  : TextAlign.start,
               style: NooText.body.copyWith(
                 fontSize: ios || drive ? 16 : 14,
                 height: 1,
