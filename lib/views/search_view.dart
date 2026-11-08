@@ -11,6 +11,7 @@ import '../models/nextcloud_item.dart';
 import '../providers/files_controller.dart';
 import '../providers/session_controller.dart';
 import '../providers/settings_controller.dart';
+import '../services/thumbnail_cache.dart';
 import '../theme/design_tokens.dart';
 import '../widgets/files_controls_row.dart';
 import '../widgets/noo/media/noo_grid_card.dart';
@@ -324,11 +325,17 @@ class _SearchViewState extends State<SearchView> {
             item.type == NextcloudItemType.video) &&
         item.previewUrl != null;
     if (!isMedia) return null;
-    return Image.network(
-      item.previewUrl!,
+    return Image(
+      image: ResizeImage(
+        CachedPreviewImage.of(
+          item,
+          context.read<SessionController>().service?.authHeaders,
+        ),
+        width: (extent * MediaQuery.devicePixelRatioOf(context)).round(),
+        height: (extent * MediaQuery.devicePixelRatioOf(context)).round(),
+      ),
       width: extent,
       height: extent,
-      headers: context.read<SessionController>().service?.authHeaders,
       fit: BoxFit.cover,
       filterQuality: FilterQuality.low,
       gaplessPlayback: true,

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../models/nextcloud_item.dart';
 import '../services/nextcloud_service.dart';
+import '../services/thumbnail_cache.dart';
 import '../theme/design_tokens.dart';
 
 /// The icon/color/thumbnail treatment for a file or folder, shared by any
@@ -127,26 +128,29 @@ class ItemThumbnail extends StatelessWidget {
                   image: ResizeImage(
                     useLocal
                         ? FileImage(localFile!) as ImageProvider
-                        : NetworkImage(
-                            item.previewUrl!,
-                            headers: service?.authHeaders,
-                          ),
+                        : CachedPreviewImage.of(item, service?.authHeaders),
                     width: cachePixels,
                     height: cachePixels,
                   ),
                   fit: BoxFit.cover,
                   filterQuality: FilterQuality.low,
                   gaplessPlayback: true,
-                  loadingBuilder: (context, child, progress) {
-                    if (progress == null) return child;
-                    return Center(
-                      child: Icon(
-                        getItemIcon(item),
-                        color: iconColor,
-                        size: iconSize,
-                      ),
-                    );
-                  },
+                  // The icon until the first frame is ready (cached previews
+                  // report no download progress, so `loadingBuilder` can't
+                  // be used for this).
+                  frameBuilder:
+                      (context, child, frame, wasSynchronouslyLoaded) {
+                        if (frame != null || wasSynchronouslyLoaded) {
+                          return child;
+                        }
+                        return Center(
+                          child: Icon(
+                            getItemIcon(item),
+                            color: iconColor,
+                            size: iconSize,
+                          ),
+                        );
+                      },
                   errorBuilder: (context, error, stack) => Center(
                     child: Icon(
                       getItemIcon(item),

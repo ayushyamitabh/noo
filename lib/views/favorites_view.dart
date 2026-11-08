@@ -14,6 +14,7 @@ import '../providers/item_operations.dart';
 import '../providers/session_controller.dart';
 import '../providers/settings_controller.dart';
 import '../services/download_service.dart';
+import '../services/thumbnail_cache.dart';
 import '../theme/design_tokens.dart';
 import '../widgets/details/details_sheet.dart';
 import '../widgets/files_controls_row.dart';
@@ -361,11 +362,14 @@ class _FavoritesViewState extends State<FavoritesView> {
         item.previewUrl != null;
     if (!isMedia) return null;
     final session = context.watch<SessionController>();
-    return Image.network(
-      item.previewUrl!,
+    return Image(
+      image: ResizeImage(
+        CachedPreviewImage.of(item, session.service?.authHeaders),
+        width: (extent * MediaQuery.devicePixelRatioOf(context)).round(),
+        height: (extent * MediaQuery.devicePixelRatioOf(context)).round(),
+      ),
       width: extent,
       height: extent,
-      headers: session.service?.authHeaders,
       fit: BoxFit.cover,
       filterQuality: FilterQuality.low,
       gaplessPlayback: true,

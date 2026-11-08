@@ -8,6 +8,7 @@ import '../services/app_lock_service.dart';
 import '../services/login_flow_service.dart';
 import '../services/nextcloud_service.dart';
 import '../services/sync_service.dart';
+import '../services/thumbnail_cache.dart';
 import 'connectivity_controller.dart';
 
 enum LoginFlowStatus { idle, initiating, awaitingBrowser, error }
@@ -621,6 +622,8 @@ class SessionController extends ChangeNotifier with WidgetsBindingObserver {
     final wasActive = accountId == _activeAccountId;
 
     await SyncService.removeAccountData(accountId);
+    // Its previews shouldn't outlive it on disk.
+    unawaited(ThumbnailCache.clear());
 
     _accounts = [..._accounts]..removeAt(index);
     final prefs = await prefsFuture;

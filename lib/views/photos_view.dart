@@ -14,6 +14,7 @@ import '../providers/pick_controller.dart';
 import '../providers/session_controller.dart';
 import '../providers/settings_controller.dart';
 import '../services/download_service.dart';
+import '../services/thumbnail_cache.dart';
 import '../theme/design_tokens.dart';
 import '../widgets/details/details_sheet.dart';
 import '../widgets/filter_mode_rows.dart';
@@ -709,12 +710,13 @@ class _PhotosViewState extends State<PhotosView> {
                     (constraints.maxWidth *
                             MediaQuery.of(context).devicePixelRatio)
                         .round();
-                return Image.network(
-                  photo.previewUrl!,
-                  headers: session.service?.authHeaders,
+                return Image(
+                  image: ResizeImage(
+                    CachedPreviewImage.of(photo, session.service?.authHeaders),
+                    width: cachePixels,
+                    height: cachePixels,
+                  ),
                   fit: BoxFit.cover,
-                  cacheWidth: cachePixels,
-                  cacheHeight: cachePixels,
                   filterQuality: FilterQuality.low,
                   gaplessPlayback: true,
                   errorBuilder: (ctx, err, stack) =>

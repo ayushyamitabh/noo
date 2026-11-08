@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../models/nextcloud_item.dart';
+import '../../services/thumbnail_cache.dart';
 import '../noo/media/noo_photo_tile.dart';
 
 /// The Photos-app style thumbnail strip under the media viewer: tiny
@@ -169,12 +170,20 @@ class _Thumb extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(6),
       child: network && url != null
-          ? Image.network(
-              url,
-              headers: headers,
+          ? Image(
+              // Disk-cached (shares its entry with the Photos grid's tile),
+              // so thumbnails evicted from memory while swiping the strip
+              // reload from disk instead of the server.
+              image: ResizeImage(
+                CachedPreviewImage(
+                  url: url,
+                  version: item.lastModified,
+                  headers: headers,
+                ),
+                // Decoded small: the strip only ever shows ~40px thumbnails.
+                width: 120,
+              ),
               fit: BoxFit.cover,
-              // Decoded small: the strip only ever shows ~40px thumbnails.
-              cacheWidth: 120,
               filterQuality: FilterQuality.low,
               gaplessPlayback: true,
               errorBuilder: (_, _, _) => placeholder,

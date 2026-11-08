@@ -23,6 +23,7 @@ import '../providers/settings_controller.dart';
 import '../providers/sync_status_controller.dart';
 import '../services/download_service.dart';
 import '../services/nextcloud_service.dart';
+import '../services/thumbnail_cache.dart';
 import '../theme/design_tokens.dart';
 import '../widgets/details/details_sheet.dart';
 import '../widgets/files/file_breadcrumb_row.dart';
@@ -331,7 +332,7 @@ class _GridThumbnail extends StatelessWidget {
         final provider = ResizeImage(
           localFile != null
               ? FileImage(localFile!) as ImageProvider
-              : NetworkImage(item.previewUrl!, headers: service?.authHeaders),
+              : CachedPreviewImage.of(item, service?.authHeaders),
           width: cachePixels,
           height: cachePixels,
         );

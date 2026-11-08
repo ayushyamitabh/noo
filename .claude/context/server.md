@@ -774,6 +774,16 @@ was a real, previously-shipped regression, not a hypothetical.
 account-identity-related; `SessionController` owns everything about which
 account is *currently* live (see `architecture.md`).
 
+- **Preview thumbnails are disk-cached**: every grid/list/strip thumbnail
+  (Photos, Files, Favorites, Search, the viewer's carousel) loads through
+  `CachedPreviewImage` (`services/thumbnail_cache.dart`), not
+  `Image.network`/`NetworkImage` - those keep only decoded images in
+  Flutter's 100 MiB in-memory cache and have no disk cache, so scrolling a
+  big library evicted tiles and re-downloaded them on every scroll back.
+  Bytes live in `<temp>/thumbnails`, keyed by preview URL + the file's
+  last-modified time, capped at 300 MB (LRU trim), shared by every screen,
+  and cleared when an account is removed. Wrap it in a `ResizeImage` to
+  decode at tile size. Don't add new `Image.network` calls for previews.
 - **Per-account secrets**: one `flutter_secure_storage` key per account,
   `nc_app_password_<accountId>` — never `shared_preferences`. `accountId` is
   deterministic (`SavedAccount.makeId(serverUrl, username)`, a slug of both),
