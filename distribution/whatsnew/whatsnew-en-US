@@ -1,4 +1,6 @@
 - Photos now lists your whole library, not just the newest 2,000 files.
+- Thumbnails are cached on disk: no more refetching while scrolling.
+- Sign-in: saved passwords survive a failed read; clearer error with Sign in again.
 - Android: Drive-style search bar.
 - Upload button lifts above snackbars.
 - New option: label beside the active icon on the floating bottom bar.
