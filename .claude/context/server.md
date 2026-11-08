@@ -108,7 +108,12 @@ rather than needing a rewrite for multi-account support.
   *Toggling* a favorite is OCS; *listing* every favorite (`fetchFavorites`,
   for the Favorites tab) is WebDAV instead - the same `SEARCH` mechanism
   `fetchAllMedia`/`fetchRecentFiles` use, filtered by `oc:favorite` instead
-  of mimetype/date. Favorites is a real tab
+  of mimetype/date. `fetchAllMedia` pages through results
+  (1000 per request, `<ns:firstresult>` offset in the
+  `https://github.com/icewind1991/SearchDAV/ns` namespace, ordered by
+  last-modified, de-duplicated by id) until a short page - it
+  used to be a single request capped at 2000, which silently dropped
+  everything older than the newest 2000 media files. Favorites is a real tab
   (`views/favorites_view.dart`/`FavoritesController.items`/
   `fetchAll`/`_allFavorites`), not a filter toggle scoped to
   whatever folder the Files tab happens to be browsing (that's what it

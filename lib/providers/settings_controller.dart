@@ -112,6 +112,7 @@ class SettingsController extends ChangeNotifier {
   static const _prefFabStyle = 'ui_fab_style';
   static const _prefBottomBarStyle = 'ui_bottom_bar_style';
   static const _prefBottomBarIconOnly = 'ui_bottom_bar_icon_only';
+  static const _prefBottomBarInlineLabel = 'ui_bottom_bar_inline_label';
   static const _prefIconOnlyFullWidth = 'ui_bottom_bar_icon_only_full_width';
   static const _prefBottomBarFrosted = 'ui_bottom_bar_frosted';
   static const _prefGlassStyle = 'ui_glass_style';
@@ -134,6 +135,7 @@ class SettingsController extends ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.system;
   NooBottomBarStyle _bottomBarStyle = NooBottomBarStyle.attached;
   bool _bottomBarIconOnly = false;
+  bool _bottomBarInlineLabel = false;
   bool _iconOnlyFullWidth = false;
   NooNavMenuStyle _navMenuStyle = NooNavMenuStyle.drawer;
   AvatarPosition _avatarPosition = AvatarPosition.top;
@@ -200,6 +202,11 @@ class SettingsController extends ChangeNotifier {
   /// currently overrides it.
   NooBottomBarStyle get bottomBarStyleSetting => _bottomBarStyle;
   bool get bottomBarIconOnly => _bottomBarIconOnly;
+
+  /// Floating bar only: the active tab's label sits to the right of its
+  /// icon (inside a wider pill) instead of below it - see `NooBottomBar`'s
+  /// `inlineLabel`. No effect while attached or icon-only.
+  bool get bottomBarInlineLabel => _bottomBarInlineLabel;
   bool get bottomBarIconOnlyFullWidth => _iconOnlyFullWidth;
 
   /// Icon-only and not full width: the bar shrinks to a pill around its icons
@@ -280,6 +287,8 @@ class SettingsController extends ChangeNotifier {
           _keepFiltersWhileSelecting;
       _bottomBarIconOnly =
           prefs.getBool(_prefBottomBarIconOnly) ?? _bottomBarIconOnly;
+      _bottomBarInlineLabel =
+          prefs.getBool(_prefBottomBarInlineLabel) ?? _bottomBarInlineLabel;
       _iconOnlyFullWidth =
           prefs.getBool(_prefIconOnlyFullWidth) ?? _iconOnlyFullWidth;
       final bottomBarStyleName = prefs.getString(_prefBottomBarStyle);
@@ -460,6 +469,7 @@ class SettingsController extends ChangeNotifier {
     _prefFabStyle,
     _prefBottomBarStyle,
     _prefBottomBarIconOnly,
+    _prefBottomBarInlineLabel,
     _prefIconOnlyFullWidth,
     _prefBottomBarFrosted,
     _prefGlassStyle,
@@ -485,6 +495,7 @@ class SettingsController extends ChangeNotifier {
     _themeMode = ThemeMode.system;
     _bottomBarStyle = NooBottomBarStyle.attached;
     _bottomBarIconOnly = false;
+    _bottomBarInlineLabel = false;
     _iconOnlyFullWidth = false;
     _navMenuStyle = NooNavMenuStyle.drawer;
     _avatarPosition = AvatarPosition.top;
@@ -588,6 +599,13 @@ class SettingsController extends ChangeNotifier {
     _iconOnlyFullWidth = value;
     notifyListeners();
     _prefsFuture.then((p) => p.setBool(_prefIconOnlyFullWidth, value));
+  }
+
+  void setBottomBarInlineLabel(bool value) {
+    if (_bottomBarInlineLabel == value) return;
+    _bottomBarInlineLabel = value;
+    notifyListeners();
+    _prefsFuture.then((p) => p.setBool(_prefBottomBarInlineLabel, value));
   }
 
   void setBottomBarIconOnly(bool value) {

@@ -16,6 +16,10 @@ class NooSearchField extends StatelessWidget {
   /// title); false = the generic 36px pill used everywhere else (also the
   /// Android "expands from a top-bar icon" search field once expanded).
   final bool ios;
+  /// Android's own top-bar search launcher (modelled on Google Drive's):
+  /// 48px tall, fully round, no leading icon, centered 16px placeholder.
+  /// Ignored when [ios] is set.
+  final bool android;
 
   /// True when placed directly on a `surface` background (uses surface-2
   /// fill instead of surface, so it doesn't disappear against it).
@@ -34,6 +38,7 @@ class NooSearchField extends StatelessWidget {
     this.onSubmitted,
     this.autofocus = false,
     this.ios = false,
+    this.android = false,
     this.onSurface = false,
     this.width,
     this.trailing,
@@ -42,18 +47,25 @@ class NooSearchField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.nooColors;
+    final drive = android && !ios;
     return Container(
       width: width,
-      height: ios ? 38 : 36,
-      padding: EdgeInsets.symmetric(horizontal: ios ? 10 : 14),
+      height: ios
+          ? 38
+          : drive
+          ? 48
+          : 36,
+      padding: EdgeInsets.symmetric(horizontal: ios ? 10 : (drive ? 20 : 14)),
       decoration: BoxDecoration(
         color: onSurface ? colors.surface2 : colors.surface,
         borderRadius: BorderRadius.circular(ios ? 12 : NooRadii.pill),
       ),
       child: Row(
         children: [
-          Icon(LucideIcons.search, size: ios ? 18 : 16, color: colors.fg3),
-          const SizedBox(width: 8),
+          if (!drive) ...[
+            Icon(LucideIcons.search, size: ios ? 18 : 16, color: colors.fg3),
+            const SizedBox(width: 8),
+          ],
           Expanded(
             child: TextField(
               controller: controller,
@@ -61,8 +73,9 @@ class NooSearchField extends StatelessWidget {
               onChanged: onChanged,
               onSubmitted: onSubmitted,
               autofocus: autofocus,
+              textAlign: drive ? TextAlign.center : TextAlign.start,
               style: NooText.body.copyWith(
-                fontSize: ios ? 16 : 14,
+                fontSize: ios || drive ? 16 : 14,
                 height: 1,
                 color: colors.fg1,
               ),
@@ -72,7 +85,7 @@ class NooSearchField extends StatelessWidget {
                 contentPadding: EdgeInsets.zero,
                 hintText: placeholder,
                 hintStyle: NooText.body.copyWith(
-                  fontSize: ios ? 16 : 14,
+                  fontSize: ios || drive ? 16 : 14,
                   height: 1,
                   color: colors.fg3,
                 ),

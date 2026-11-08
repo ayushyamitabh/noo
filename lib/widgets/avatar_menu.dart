@@ -316,6 +316,23 @@ class _AvatarSurface extends StatelessWidget {
   }
 }
 
+/// The open/close progress (0..1) the avatar menu's morph is drawn with.
+///
+/// Opening uses `easeInOutCubicEmphasized` as-is. Closing can't just run
+/// that same curve backwards in time: its first sixth covers 40% of the
+/// distance, so reversed, the last ~50ms of the close snapped through 40%
+/// of the card's travel - an abrupt landing on the avatar. While reversing,
+/// the curve is mirrored (`1 - f(1 - t)`) so the close starts with that
+/// quick part and settles out on the emphasized curve's long decelerating
+/// tail instead.
+double avatarMenuProgress(AnimationController controller) {
+  const curve = Curves.easeInOutCubicEmphasized;
+  final t = controller.value;
+  return controller.status == AnimationStatus.reverse
+      ? 1 - curve.transform(1 - t)
+      : curve.transform(t);
+}
+
 class AvatarNavigationScope extends InheritedNotifier<AnimationController> {
   final _AvatarNavigationHostState _host;
   AvatarNavigationScope._({
@@ -325,8 +342,7 @@ class AvatarNavigationScope extends InheritedNotifier<AnimationController> {
        super(notifier: host.animation);
   static AvatarNavigationScope? maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<AvatarNavigationScope>();
-  double get progress =>
-      Curves.easeInOutCubicEmphasized.transform(_host.animation.value);
+  double get progress => avatarMenuProgress(_host.animation);
   bool get bottom => _host.bottom;
   void close() => _host.close();
   @override
@@ -460,7 +476,7 @@ class _AvatarNavigationHostState extends State<AvatarNavigationHost>
   late final AnimationController animation = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 420),
-    reverseDuration: const Duration(milliseconds: 320),
+    reverseDuration: const Duration(milliseconds: 380),
   );
   final GlobalKey measureKey = GlobalKey();
   final GlobalKey measureAvatarKey = GlobalKey();
@@ -530,7 +546,7 @@ class _AvatarNavigationHostState extends State<AvatarNavigationHost>
   void close() {
     animation.reverseDuration = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
-        : const Duration(milliseconds: 320);
+        : const Duration(milliseconds: 380);
     animation.reverse();
   }
 
@@ -550,9 +566,7 @@ class _AvatarNavigationHostState extends State<AvatarNavigationHost>
       child: AnimatedBuilder(
         animation: animation,
         builder: (context, _) {
-          final progress = Curves.easeInOutCubicEmphasized.transform(
-            animation.value,
-          );
+          final progress = avatarMenuProgress(animation);
           return PopScope(
             canPop: animation.value == 0,
             onPopInvokedWithResult: (didPop, _) {

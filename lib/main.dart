@@ -50,6 +50,7 @@ import 'widgets/noo/nav/noo_toolbar.dart';
 import 'widgets/noo/noo_layout.dart';
 import 'widgets/noo/overlays/noo_dialog.dart';
 import 'widgets/synced_header_scaffold.dart' show formatBytes;
+import 'widgets/shell/snack_bar_aware_fab.dart';
 import 'widgets/shell/shell_common.dart';
 import 'widgets/shell/tablet_account_menu.dart';
 
@@ -648,58 +649,89 @@ class _MainShellViewState extends State<MainShellView>
           settings.bottomBarFrosted,
         ),
         // Android-only extended Upload FAB - iOS uses the top bar's Upload
-        // instead (see AppTopBar). Stays mounted across every tab (picking
-        // aside) and collapses to an icon-only circle off Files/Photos,
-        // rather than the Scaffold popping it fully in/out on every tab
-        // switch - see NooFab's [collapsed].
-        floatingActionButton:
-            pickRequest == null && navStyle == NooNavStyle.android
-            // Slides out to the right while this tab is selecting (the
-            // selection bar slides in from the left), rather than the
-            // Scaffold shrinking it away.
-            ? AnimatedSlide(
-                offset: _selectionActiveTabs.contains(selectedTab)
-                    ? const Offset(1.6, 0)
-                    : Offset.zero,
+        // instead (see AppTopBar). It's overlaid on the body rather than
+        // given to `Scaffold.floatingActionButton`: the Scaffold always
+        // stacks a floating snackbar *above* that slot, whereas here the
+        // snackbar sits at the bottom and the FAB lifts itself over it -
+        // see SnackBarAwareFab. Stays mounted across every tab (picking
+        // aside) and collapses to an icon-only circle off Files/Photos -
+        // see NooFab's [collapsed].
+        body: pickRequest == null && navStyle == NooNavStyle.android
+            ? Stack(
+                children: [
+                  Positioned.fill(
+                    child: TweenAnimationBuilder<double>(
+                      tween: Tween(
+                        end: switch (settings.fabStyle) {
+                          FabStyle.auto => canUpload ? 1.0 : 0.0,
+                          FabStyle.mini => 0.0,
+                          FabStyle.expanded => 1.0,
+                        },
+                      ),
+                      duration: MediaQuery.disableAnimationsOf(context)
+                          ? Duration.zero
+                          : NooMotion.base,
+                      curve: NooMotion.ease,
+                      child: tabStack,
+                      builder: (context, progress, child) =>
+                          UploadButtonAnimation(
+                            progress: progress,
+                            child: child!,
+                          ),
+                    ),
+                  ),
+                  Positioned.fill(
+                    child: SnackBarAwareFab(
+                      child: AnimatedSlide(
+                        // Slides out to the right while this tab is
+                        // selecting (the selection bar slides in from the
+                        // left), rather than shrinking away.
+                        offset: _selectionActiveTabs.contains(selectedTab)
+                            ? const Offset(1.6, 0)
+                            : Offset.zero,
+                        duration: MediaQuery.disableAnimationsOf(context)
+                            ? Duration.zero
+                            : const Duration(milliseconds: 260),
+                        curve: Curves.easeInOutCubic,
+                        child: IgnorePointer(
+                          ignoring: _selectionActiveTabs.contains(selectedTab),
+                          child: NooFab(
+                            collapsed: switch (settings.fabStyle) {
+                              FabStyle.auto => !canUpload,
+                              FabStyle.mini => true,
+                              FabStyle.expanded => false,
+                            },
+                            barStyle: bottomBarStyle,
+                            onTap: () => showCreateMenu(context),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            : TweenAnimationBuilder<double>(
+                tween: Tween(
+                  end: switch (settings.fabStyle) {
+                    FabStyle.auto => canUpload ? 1.0 : 0.0,
+                    FabStyle.mini => 0.0,
+                    FabStyle.expanded => 1.0,
+                  },
+                ),
                 duration: MediaQuery.disableAnimationsOf(context)
                     ? Duration.zero
-                    : const Duration(milliseconds: 260),
-                curve: Curves.easeInOutCubic,
-                child: IgnorePointer(
-                  ignoring: _selectionActiveTabs.contains(selectedTab),
-                  child: NooFab(
-                    collapsed: switch (settings.fabStyle) {
-                      FabStyle.auto => !canUpload,
-                      FabStyle.mini => true,
-                      FabStyle.expanded => false,
-                    },
-                    barStyle: bottomBarStyle,
-                    onTap: () => showCreateMenu(context),
-                  ),
-                ),
-              )
-            : null,
-        body: TweenAnimationBuilder<double>(
-          tween: Tween(
-            end: switch (settings.fabStyle) {
-              FabStyle.auto => canUpload ? 1.0 : 0.0,
-              FabStyle.mini => 0.0,
-              FabStyle.expanded => 1.0,
-            },
-          ),
-          duration: MediaQuery.disableAnimationsOf(context)
-              ? Duration.zero
-              : NooMotion.base,
-          curve: NooMotion.ease,
-          child: tabStack,
-          builder: (context, progress, child) =>
-              UploadButtonAnimation(progress: progress, child: child!),
-        ),
+                    : NooMotion.base,
+                curve: NooMotion.ease,
+                child: tabStack,
+                builder: (context, progress, child) =>
+                    UploadButtonAnimation(progress: progress, child: child!),
+              ),
         bottomNavigationBar: BottomNavBar(
           style: navStyle,
           barStyle: bottomBarStyle,
           frosted: settings.bottomBarFrosted,
           iconOnly: settings.bottomBarIconOnly,
+          inlineLabel: settings.bottomBarInlineLabel,
           iconOnlyFullWidth: settings.bottomBarIconOnlyFullWidth,
           frostedBlur: settings.bottomBarFrostedBlur,
           frostedOpacity: settings.bottomBarFrostedOpacity,

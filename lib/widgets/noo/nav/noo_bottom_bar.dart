@@ -71,6 +71,12 @@ class NooBottomBar extends StatelessWidget {
   /// the selected tab's), a shorter row, selection shown by the pill/accent.
   final bool iconOnly;
 
+  /// Floating only (Settings, Appearance, "Label beside active icon"): the
+  /// active tab widens into a pill holding its icon *and* label side by
+  /// side ([_InlineLabelRow]); idle tabs are icon-only. Ignored while
+  /// attached, [iconOnly], or when Search sits inside the row.
+  final bool inlineLabel;
+
   /// With [iconOnly]: stretch across the bar's normal width instead of
   /// shrinking to a pill around the icons. The compact pill also takes
   /// Search and a bottom avatar inside it rather than beside it.
@@ -98,6 +104,7 @@ class NooBottomBar extends StatelessWidget {
     this.barStyle = NooBottomBarStyle.attached,
     this.frosted = false,
     this.iconOnly = false,
+    this.inlineLabel = false,
     this.fullWidth = true,
     this.frostedBlur = defaultFrostedBlur,
     this.frostedOpacity = defaultFrostedOpacity,
@@ -168,18 +175,25 @@ class NooBottomBar extends StatelessWidget {
         ? searchDestination
         : null;
 
-    final row = ios
+    final barHeight = NooBottomBar.rowHeight(
+      style,
+      barStyle,
+      iconOnly: iconOnly,
+    );
+    final Widget row = floating && inlineLabel && !iconOnly && rowSearch == null
+        ? _InlineLabelRow(
+            destinations: destinations,
+            selectedIndex: selectedIndex,
+            onSelected: onSelected,
+            pillHeight: barHeight - 24,
+          )
+        : ios
         ? _buildIosRow(trailingSearch: rowSearch)
         : _buildAndroidRow(
             colors,
             floating: floating,
             trailingSearch: rowSearch,
           );
-    final barHeight = NooBottomBar.rowHeight(
-      style,
-      barStyle,
-      iconOnly: iconOnly,
-    );
 
     if (floating) {
       final mergedAvatar = _compact && avatarSatellite != null;
@@ -492,6 +506,231 @@ class NooBottomBar extends StatelessWidget {
 /// frosted bar's backdrop. [child] supplies the translucent fill on top.
 Widget _blurred(Widget child, BorderRadius radius, double sigma) =>
     GlassBackdrop(radius: radius, sigma: sigma, child: child);
+
+/// Horizontal padding inside [_InlineLabelRow]'s active pill, the gap
+/// between its icon and label, and the narrowest an idle tab may get
+/// (still a comfortable tap target) before the active label truncates.
+const double _kInlinePillPadding = 14;
+const double _kInlineIconGap = 8;
+const double _kInlineMinIdleWidth = 48;
+
+/// [NooBottomBar.inlineLabel]'s row. Tab widths aren't equal: the active
+/// tab gets exactly what its pill needs (measured label, capped so every
+/// idle tab keeps at least [_kInlineMinIdleWidth]), the rest split what's
+/// left. Each tab's width animates with [AnimatedContainer] - every tab
+/// shares one duration/curve and starts together, so the widths keep
+/// summing to the row's width on every frame, and the whole width of each
+/// tab stays tappable (no dead gaps between icons).
+class _InlineLabelRow extends StatefulWidget {
+  final List<NooNavDestination> destinations;
+  final int selectedIndex;
+  final ValueChanged<int> onSelected;
+  final double pillHeight;
+
+  const _InlineLabelRow({
+    required this.destinations,
+    required this.selectedIndex,
+    required this.onSelected,
+    required this.pillHeight,
+  });
+
+  @override
+  State<_InlineLabelRow> createState() => _InlineLabelRowState();
+}
+
+class _InlineLabelRowState extends State<_InlineLabelRow> {
+  // The active label's real laid-out width, read off an offstage copy of the
+  // very same Text (see build). A TextPainter measured up front used the
+  // fallback font's metrics until the web font finished loading and left
+  // the pill a few px too narrow, fading the label's last letter - the
+  // offstage Text re-lays out when the font arrives, and its
+  // SizeChangedLayoutNotifier tells us to re-read it.
+  final _measureKey = GlobalKey();
+  double? _labelWidth;
+
+  static TextStyle _labelStyle(Color color) =>
+      NooText.navLabelActive.copyWith(height: 1, color: color);
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleRead();
+  }
+
+  @override
+  void didUpdateWidget(_InlineLabelRow old) {
+    super.didUpdateWidget(old);
+    _scheduleRead();
+  }
+
+  void _scheduleRead() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final box = _measureKey.currentContext?.findRenderObject();
+      if (box is! RenderBox || !box.hasSize) return;
+      if (box.size.width != _labelWidth) {
+        setState(() => _labelWidth = box.size.width);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.nooColors;
+    final destinations = widget.destinations;
+    final selectedIndex = widget.selectedIndex;
+    final count = destinations.length;
+    if (count == 0) return const SizedBox.shrink();
+    final hasSelection = selectedIndex >= 0 && selectedIndex < count;
+    final labelStyle = _labelStyle(colors.accentText);
+
+    final row = LayoutBuilder(
+      builder: (context, constraints) {
+        final total = constraints.maxWidth;
+        var activeWidth = 0.0;
+        if (hasSelection) {
+          final wanted =
+              _kInlinePillPadding * 2 +
+              24 +
+              _kInlineIconGap +
+              (_labelWidth ?? 40).ceilToDouble() +
+              // The pill's own 4px inset from the tab edge, both sides.
+              8;
+          final cap = count == 1
+              ? total
+              : total - (count - 1) * _kInlineMinIdleWidth;
+          activeWidth = wanted.clamp(0, cap < 0 ? 0 : cap).toDouble();
+        }
+        final idleWidth = hasSelection
+            ? (count == 1 ? 0.0 : (total - activeWidth) / (count - 1))
+            : total / count;
+
+        return Row(
+          children: [
+            for (var i = 0; i < count; i++)
+              _InlineLabelItem(
+                destination: destinations[i],
+                selected: i == selectedIndex,
+                width: i == selectedIndex ? activeWidth : idleWidth,
+                pillHeight: widget.pillHeight,
+                labelStyle: labelStyle,
+                onTap: () => widget.onSelected(i),
+              ),
+          ],
+        );
+      },
+    );
+
+    if (!hasSelection) return row;
+    return Stack(
+      children: [
+        Positioned(
+          left: 0,
+          top: 0,
+          child: NotificationListener<SizeChangedLayoutNotification>(
+            onNotification: (_) {
+              _scheduleRead();
+              return true;
+            },
+            child: Offstage(
+              child: SizeChangedLayoutNotifier(
+                child: Text(
+                  destinations[selectedIndex].label,
+                  key: _measureKey,
+                  maxLines: 1,
+                  softWrap: false,
+                  style: labelStyle,
+                ),
+              ),
+            ),
+          ),
+        ),
+        Positioned.fill(child: row),
+      ],
+    );
+  }
+}
+
+class _InlineLabelItem extends StatelessWidget {
+  final NooNavDestination destination;
+  final bool selected;
+  final double width;
+  final double pillHeight;
+  final TextStyle labelStyle;
+  final VoidCallback onTap;
+
+  const _InlineLabelItem({
+    required this.destination,
+    required this.selected,
+    required this.width,
+    required this.pillHeight,
+    required this.labelStyle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.nooColors;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: destination.label,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: NooMotion.base,
+          curve: NooMotion.ease,
+          width: width,
+          alignment: Alignment.center,
+          child: AnimatedContainer(
+            duration: NooMotion.base,
+            curve: NooMotion.ease,
+            height: pillHeight,
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            padding: EdgeInsets.symmetric(
+              horizontal: selected ? _kInlinePillPadding : 0,
+            ),
+            decoration: BoxDecoration(
+              color: selected
+                  ? colors.accentSoft
+                  : colors.accentSoft.withValues(alpha: 0),
+              borderRadius: BorderRadius.circular(NooRadii.pill),
+            ),
+            // ClipRect + a non-wrapping, fading label: while the pill is
+            // still growing the label is revealed left-to-right instead of
+            // flickering through ellipsis states every frame.
+            child: ClipRect(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    destination.icon,
+                    size: selected ? 24 : 25,
+                    color: selected ? colors.accentText : colors.fg2,
+                  ),
+                  if (selected)
+                    Flexible(
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: _kInlineIconGap),
+                        child: Text(
+                          destination.label,
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.fade,
+                          style: labelStyle,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 /// The floating bar's own Search entry point, next to the pill rather than
 /// inside it - always fully round (see [NooBottomBar]'s doc comment),

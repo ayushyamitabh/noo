@@ -1,9 +1,11 @@
-name: Build APK
+name: Android RC to Google Play (internal)
 
 # Deliberately not "on every push" - only when an Android release-candidate
 # tag (RC-Android-1, RC-Android-2, ...) is pushed. Tag the commit you want built:
 #   git tag RC-Android-1 && git push origin RC-Android-1
-# iOS has its own RC-iOS-* tags (ios.yml); Release-* builds both platforms.
+# Builds the .aab Play wants (no sideloadable .apk) and uploads it straight to
+# the internal testing track. iOS has its own RC-iOS-* tags (ios.yml);
+# Release-* builds both platforms.
 on:
   push:
     tags:
@@ -46,34 +48,36 @@ jobs:
 
       - name: Decode release keystore
         # Keeps every release build - regardless of which runner built it -
-        # signed with the same key, so downloaded updates install cleanly
-        # over a previous release instead of failing with "App not
-        # installed" (mismatched signature). See android/app/build.gradle.kts.
+        # signed with the same key, matching what Play already has on file
+        # for the app. See android/app/build.gradle.kts.
         run: echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > "${{ runner.temp }}/release-keystore.jks"
         env:
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
 
-      - name: Build release APK
-        run: flutter build apk --release
+      - name: Build release App Bundle
+        run: flutter build appbundle --release
         env:
           RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/release-keystore.jks
           RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
 
-      - name: Rename APK to Noo-<version>.apk
+      - name: Read version from pubspec
         run: |
           VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
-          mkdir -p release
-          cp build/app/outputs/flutter-apk/app-release.apk "release/Noo-${VERSION}.apk"
-          echo "APK_PATH=release/Noo-${VERSION}.apk" >> "$GITHUB_ENV"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
 
-      - name: Publish Gitea release with APK attached
-        # Gitea-native release action (not GitHub's) - authenticates and
-        # talks to this same Gitea instance automatically via the
-        # `github.token`/`github.server_url` context Gitea Actions
-        # provides for compatibility. Release is named/tagged after
-        # whatever tag triggered this run (e.g. "RC-Android-1").
-        uses: akkuman/gitea-release-action@v1
+      - name: Upload to Google Play (internal track)
+        # Needs the PLAY_SERVICE_ACCOUNT_JSON repo secret, and the app's
+        # first release must already have been uploaded by hand. Play
+        # rejects a repeated versionCode, so bump the `+N` build number in
+        # pubspec.yaml before tagging each new RC.
+        uses: r0adkll/upload-google-play@v1
         with:
-          files: ${{ env.APK_PATH }}
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: dev.ayushya.noo
+          releaseFiles: build/app/outputs/bundle/release/app-release.aab
+          releaseName: ${{ env.VERSION }} (${{ github.ref_name }})
+          track: internal
+          status: completed
+          whatsNewDirectory: distribution/whatsnew

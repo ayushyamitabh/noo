@@ -298,11 +298,13 @@ class ShellAvatarButton extends StatelessWidget {
 /// here is only a launcher.
 class ShellSearchLauncher extends StatelessWidget {
   final bool ios;
+  final bool android;
   final bool onSurface;
 
   const ShellSearchLauncher({
     super.key,
     this.ios = false,
+    this.android = false,
     this.onSurface = false,
   });
 
@@ -321,6 +323,7 @@ class ShellSearchLauncher extends StatelessWidget {
               child: NooSearchField(
                 placeholder: 'Search files',
                 ios: ios,
+                android: android,
                 onSurface: onSurface,
               ),
             ),

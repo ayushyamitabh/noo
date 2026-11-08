@@ -441,5 +441,73 @@ void main() {
       final size = tester.getSize(find.byType(NooBottomBar));
       expect(size.height, lessThan(150));
     });
+
+    testNooWidgets(
+      'floating inline label: active label sits beside its icon and the '
+      'active tab widens',
+      (tester, theme, c) async {
+        var selected = 0;
+        await pumpNoo(
+          tester,
+          StatefulBuilder(
+            builder: (context, setState) => SizedBox(
+              width: 360,
+              height: 96,
+              child: NooBottomBar(
+                style: NooNavStyle.android,
+                barStyle: NooBottomBarStyle.floating,
+                inlineLabel: true,
+                destinations: _destinations,
+                selectedIndex: selected,
+                onSelected: (i) => setState(() => selected = i),
+              ),
+            ),
+          ),
+          theme: theme,
+        );
+        final iconCenter = tester.getCenter(find.byIcon(LucideIcons.folder));
+        final labelCenter = tester.getCenter(find.text('Files'));
+        expect(labelCenter.dx, greaterThan(iconCenter.dx));
+        expect((labelCenter.dy - iconCenter.dy).abs(), lessThan(2));
+        // Idle tabs are icon-only.
+        expect(find.text('Photos'), findsNothing);
+        expect(find.text('Favorites'), findsNothing);
+
+        await tester.tap(find.byIcon(LucideIcons.star));
+        await tester.pumpAndSettle();
+        expect(find.text('Files'), findsNothing);
+        final starCenter = tester.getCenter(find.byIcon(LucideIcons.star));
+        expect(
+          tester.getCenter(find.text('Favorites')).dx,
+          greaterThan(starCenter.dx),
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testNooWidgets('inline label is ignored while attached', (
+      tester,
+      theme,
+      c,
+    ) async {
+      await pumpNoo(
+        tester,
+        SizedBox(
+          width: 360,
+          height: 80,
+          child: NooBottomBar(
+            style: NooNavStyle.android,
+            inlineLabel: true,
+            destinations: _destinations,
+            selectedIndex: 0,
+            onSelected: (_) {},
+          ),
+        ),
+        theme: theme,
+      );
+      final iconCenter = tester.getCenter(find.byIcon(LucideIcons.folder));
+      final labelCenter = tester.getCenter(find.text('Files'));
+      expect(labelCenter.dy, greaterThan(iconCenter.dy));
+    });
   });
 }

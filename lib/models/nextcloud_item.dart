@@ -124,14 +124,22 @@ class NextcloudItem {
         lower.endsWith('.png') ||
         lower.endsWith('.webp') ||
         lower.endsWith('.gif') ||
-        lower.endsWith('.heic')) {
+        lower.endsWith('.heic') ||
+        lower.endsWith('.heif') ||
+        lower.endsWith('.avif') ||
+        lower.endsWith('.bmp') ||
+        lower.endsWith('.tif') ||
+        lower.endsWith('.tiff')) {
       return NextcloudItemType.image;
     }
     if (mime?.startsWith('video/') == true ||
         lower.endsWith('.mp4') ||
         lower.endsWith('.mov') ||
         lower.endsWith('.mkv') ||
-        lower.endsWith('.webm')) {
+        lower.endsWith('.webm') ||
+        lower.endsWith('.m4v') ||
+        lower.endsWith('.3gp') ||
+        lower.endsWith('.avi')) {
       return NextcloudItemType.video;
     }
     if (mime?.startsWith('audio/') == true ||

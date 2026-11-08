@@ -408,11 +408,31 @@ blocks are noted where they matter:
   `onSearchTap`) and lowers `SettingsController.maxVisibleTabs` by one -
   use that getter, not `defaultMaxVisibleTabs` from `models/app_tab.dart`,
   anywhere that needs the *current* cap on regular tabs.
+  "Label beside active icon" (`SettingsController.bottomBarInlineLabel`,
+  only offered while floating and not icon-only; `NooBottomBar.inlineLabel`)
+  swaps the floating Android row for `_InlineLabelRow`: the active tab is a
+  wider accent-soft pill with icon + label side by side, idle tabs are
+  icon-only and split the remaining width. The pill width comes from an
+  offstage copy of the label `Text` (re-read via `SizeChangedLayoutNotifier`),
+  not a `TextPainter` - web-font metrics arrive after first layout. Ignored
+  while attached, icon-only, or when Search sits inside the row.
+  The Android Upload FAB is *not* `Scaffold.floatingActionButton` - the
+  Scaffold always stacks a floating snackbar above that slot. `main.dart`
+  overlays it on the body via `SnackBarAwareFab`
+  (`widgets/shell/snack_bar_aware_fab.dart`), which measures the Scaffold's
+  snackbar slot each frame and lifts the FAB above it (animated), so
+  snackbars render *below* the FAB. Keep it in the body, not the Scaffold
+  slot, or the snackbar goes back on top.
+  `NooSearchField(android: true)` (used by `ShellSearchLauncher` in the
+  Android top bar) is the Drive-style variant: 48px, fully round, no
+  leading icon, centered 16px placeholder; iOS keeps its 38px inline field.
 - `SettingsController.navMenuStyle` chooses hamburger/drawer or avatar popup
   navigation (Settings → Appearance → Navigation menu). Avatar mode exposes
   a persisted Avatar position choice (`ui_avatar_position`, Top by default).
-  `AvatarNavigationHost` owns one 420ms open / 320ms close animation using
-  `easeInOutCubicEmphasized`. The card expands from the real avatar anchor;
+  `AvatarNavigationHost` owns one 420ms open / 380ms close animation using
+  `easeInOutCubicEmphasized` (mirrored while closing - `avatarMenuProgress` -
+  so the close settles on the curve's long tail instead of snapping through
+  its last 40% in the final ~50ms). The card expands from the real avatar anchor;
   its controls fade in after the expansion starts. Top moves the content pane
   down through `AvatarNavigationBody`, keeping bottom navigation stationary.
   Bottom never moves the avatar: its slot in the bar cross-fades (with a

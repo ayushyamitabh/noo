@@ -85,7 +85,7 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
       // way iOS does (`search:` below) - an inline bar sits beside the
       // title instead, rather than a plain search icon over in `actions`.
       androidTitleTrailing: !_ios && _showSearch
-          ? const ShellSearchLauncher()
+          ? const ShellSearchLauncher(android: true)
           : null,
       actions: [
         if (_ios)

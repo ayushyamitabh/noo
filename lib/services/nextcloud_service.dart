@@ -611,13 +611,51 @@ class NextcloudService {
   /// folder) via the same WebDAV SEARCH-REPORT mechanism Nextcloud's own
   /// Files app uses for its "Photos" filter, so the Photos tab can show a
   /// true all-folders library instead of just the currently browsed folder.
+  ///
+  /// Paged ([_mediaPageSize] per request, via SearchDAV's `firstresult`
+  /// offset) until a short page comes back. This used to be one request
+  /// capped at 2000 results, newest first - on a bigger library everything
+  /// older than the newest 2000 silently fell off, which looked like Photos
+  /// skipping whole formats (an older JPEG/PNG/GIF collection behind a
+  /// newer phone-camera HEIC/MP4 one) even though Files showed them fine.
+  /// Results are de-duplicated by id in case a page boundary lands inside
+  /// a run of identical timestamps, and a page that adds nothing new stops
+  /// the loop (a server that ignores the offset would otherwise repeat the
+  /// first page forever). [_maxMediaPages] is only a runaway guard.
   Future<List<NextcloudItem>> fetchAllMedia() async {
+    final byId = <String, NextcloudItem>{};
+    for (var page = 0; page < _maxMediaPages; page++) {
+      final List<NextcloudItem> batch;
+      try {
+        batch = await _fetchMediaPage(offset: page * _mediaPageSize);
+      } catch (e) {
+        // The first page failing is a real error. A later page failing
+        // (a server that rejects the offset) just ends paging - keep what
+        // already loaded instead of blanking the whole Photos tab.
+        if (page == 0) rethrow;
+        debugPrint('[Nextcloud DAV] Media page $page failed, stopping: $e');
+        break;
+      }
+      var added = 0;
+      for (final item in batch) {
+        if (byId.putIfAbsent(item.id, () => item) == item) added++;
+      }
+      if (batch.length < _mediaPageSize || added == 0) break;
+    }
+    debugPrint('[Nextcloud DAV] All-media SEARCH total: ${byId.length} items');
+    return byId.values.toList();
+  }
+
+  static const _mediaPageSize = 1000;
+  static const _maxMediaPages = 200;
+
+  Future<List<NextcloudItem>> _fetchMediaPage({required int offset}) async {
     final url = '$_cleanServerUrl/remote.php/dav/';
-    debugPrint('[Nextcloud DAV] SEARCH for all media from $url');
+    debugPrint('[Nextcloud DAV] SEARCH for media from $url (offset $offset)');
 
     final body =
         '''<?xml version="1.0" encoding="utf-8" ?>
-<d:searchrequest xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns" xmlns:nc="http://nextcloud.org/ns">
+<d:searchrequest xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns" xmlns:nc="http://nextcloud.org/ns" xmlns:ns="https://github.com/icewind1991/SearchDAV/ns">
   <d:basicsearch>
     <d:select>
       <d:prop>
@@ -659,7 +697,8 @@ class NextcloudService {
       </d:order>
     </d:orderby>
     <d:limit>
-      <d:nresults>2000</d:nresults>
+      <d:nresults>$_mediaPageSize</d:nresults>
+      ${offset > 0 ? '<ns:firstresult>$offset</ns:firstresult>' : ''}
     </d:limit>
   </d:basicsearch>
 </d:searchrequest>''';
@@ -777,7 +816,7 @@ class NextcloudService {
     }
 
     debugPrint(
-      '[Nextcloud DAV] All-media SEARCH found ${results.length} items',
+      '[Nextcloud DAV] Media SEARCH page found ${results.length} items',
     );
     return results;
   }

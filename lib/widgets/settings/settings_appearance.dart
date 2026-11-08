@@ -72,6 +72,21 @@ class SettingsAppearanceSection extends StatelessWidget {
                   onChanged: settings.setBottomBarIconOnly,
                 ),
               ),
+            if (!tablet &&
+                !settings.bottomBarIconOnly &&
+                settings.bottomBarStyle == NooBottomBarStyle.floating)
+              NooSettingsRow(
+                icon: LucideIcons.panelBottomOpen,
+                label: const Text('Label beside active icon'),
+                subtitle: const Text(
+                  'Shows the active tab\'s label to the right of its icon '
+                  'instead of below it',
+                ),
+                trailing: NooToggle(
+                  checked: settings.bottomBarInlineLabel,
+                  onChanged: settings.setBottomBarInlineLabel,
+                ),
+              ),
             if (!tablet && settings.bottomBarIconOnly)
               NooSettingsRow(
                 icon: LucideIcons.arrowLeftRight,

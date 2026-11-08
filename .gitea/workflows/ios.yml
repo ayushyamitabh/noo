@@ -2,7 +2,7 @@ name: Build iOS
 
 # Tag scheme (shared with the Android workflows):
 #   Release-<version>  -> release.yml (Play bundle) AND this workflow
-#   RC-Android-<n>     -> build.yml (APK) only
+#   RC-Android-<n>     -> build.yml (Play internal track) only
 #   RC-iOS-<n>         -> this workflow only
 #   git tag RC-iOS-1 && git push origin RC-iOS-1
 # Builds a signed .ipa and uploads it to TestFlight. Needs a Mac runner

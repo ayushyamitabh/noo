@@ -19,6 +19,7 @@ class BottomNavBar extends StatelessWidget {
   final NooBottomBarStyle barStyle;
   final bool frosted;
   final bool iconOnly;
+  final bool inlineLabel;
   final bool iconOnlyFullWidth;
   final double frostedBlur;
   final double frostedOpacity;
@@ -34,6 +35,7 @@ class BottomNavBar extends StatelessWidget {
     this.barStyle = NooBottomBarStyle.attached,
     this.frosted = false,
     this.iconOnly = false,
+    this.inlineLabel = false,
     this.iconOnlyFullWidth = false,
     this.frostedBlur = NooBottomBar.defaultFrostedBlur,
     this.frostedOpacity = NooBottomBar.defaultFrostedOpacity,
@@ -51,6 +53,7 @@ class BottomNavBar extends StatelessWidget {
       barStyle: barStyle,
       frosted: frosted,
       iconOnly: iconOnly,
+      inlineLabel: inlineLabel,
       fullWidth: !iconOnly || iconOnlyFullWidth,
       frostedBlur: frostedBlur,
       frostedOpacity: frostedOpacity,
