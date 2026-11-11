@@ -42,4 +42,26 @@ void main() {
 
     await app.finish(tester);
   });
+
+  testWidgets('opened from the bottom bar: the field sits at the bottom and '
+      'the close button leaves search', (tester) async {
+    final app = await pumpWithApp(tester, [], (_) => const SizedBox());
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+    navigator.push(
+      MaterialPageRoute<void>(
+        builder: (_) => const SearchView(bottomSearch: true),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Pinned to the bottom half of the screen (a top search field would be
+    // up in the first 100px).
+    final field = tester.getCenter(find.byType(EditableText));
+    expect(field.dy, greaterThan(600));
+
+    await tester.tap(find.byIcon(LucideIcons.x));
+    await tester.pumpAndSettle();
+    expect(find.byType(SearchView), findsNothing);
+    await app.finish(tester);
+  });
 }

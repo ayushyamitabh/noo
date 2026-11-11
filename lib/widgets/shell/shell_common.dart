@@ -34,10 +34,33 @@ void openSettings(BuildContext context) {
   );
 }
 
-void openSearch(BuildContext context) {
+/// Pushes `SearchView`. [fromBottomBar] (Search tapped in the bottom bar)
+/// puts the field at the bottom and fades the page in over the bar while the
+/// bar's Search button morphs into that field (see `NooSearchHero`); closing
+/// morphs it back. From the top bar it's a plain page push.
+void openSearch(BuildContext context, {bool fromBottomBar = false}) {
+  if (!fromBottomBar || NooLayout.isDesktop(context)) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SearchView()),
+    );
+    return;
+  }
   Navigator.push(
     context,
-    MaterialPageRoute(builder: (_) => const SearchView()),
+    PageRouteBuilder<void>(
+      transitionDuration: const Duration(milliseconds: 380),
+      reverseTransitionDuration: const Duration(milliseconds: 320),
+      pageBuilder: (_, _, _) => const SearchView(bottomSearch: true),
+      transitionsBuilder: (_, animation, _, child) => FadeTransition(
+        opacity: CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        ),
+        child: child,
+      ),
+    ),
   );
 }
 

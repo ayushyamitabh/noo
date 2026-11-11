@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:noo/theme/design_tokens.dart';
 import 'package:noo/widgets/noo/nav/noo_bottom_bar.dart';
+import 'package:noo/widgets/noo/nav/noo_floating_shadow.dart';
+import 'package:noo/widgets/noo/nav/noo_search_hero.dart';
 
 import 'noo_test_utils.dart';
 
@@ -242,45 +244,52 @@ void main() {
       expect(find.text('Favorites'), findsNothing);
     });
 
-    testNooWidgets('floating: inset, rounded, bordered - not edge to edge', (
-      tester,
-      theme,
-      c,
-    ) async {
-      await pumpNoo(
-        tester,
-        SizedBox(
-          width: 360,
-          height: 96,
-          child: NooBottomBar(
-            style: NooNavStyle.android,
-            barStyle: NooBottomBarStyle.floating,
-            destinations: _destinations,
-            selectedIndex: 0,
-            onSelected: (_) {},
+    testNooWidgets(
+      'floating: inset, rounded, shadowed (no border) - not edge to edge',
+      (tester, theme, c) async {
+        await pumpNoo(
+          tester,
+          SizedBox(
+            width: 360,
+            height: 96,
+            child: NooBottomBar(
+              style: NooNavStyle.android,
+              barStyle: NooBottomBarStyle.floating,
+              destinations: _destinations,
+              selectedIndex: 0,
+              onSelected: (_) {},
+            ),
           ),
-        ),
-        theme: theme,
-      );
-      final pillFinder = find.descendant(
-        of: find.byType(NooBottomBar),
-        matching: find.byWidgetPredicate(
-          (w) => w is Container && w.decoration != null,
-        ),
-      );
-      final container = tester.widget<Container>(pillFinder);
-      final decoration = container.decoration as BoxDecoration;
-      expect(decoration.borderRadius, BorderRadius.circular(28));
-      expect(decoration.border, Border.all(color: c.line));
-      // Inset from both side edges of the bar's own host box, not flush
-      // against it - both rects are in the same (global) coordinate space,
-      // so comparing them directly still holds regardless of where
-      // `pumpNoo`'s own harness centers that host box on screen.
-      final hostRect = tester.getRect(find.byType(NooBottomBar));
-      final rect = tester.getRect(pillFinder);
-      expect(rect.left, greaterThan(hostRect.left));
-      expect(rect.right, lessThan(hostRect.right));
-    });
+          theme: theme,
+        );
+        final pillFinder = find.descendant(
+          of: find.byType(NooBottomBar),
+          matching: find.byWidgetPredicate(
+            (w) => w is Container && w.decoration != null,
+          ),
+        );
+        final container = tester.widget<Container>(pillFinder);
+        final decoration = container.decoration as BoxDecoration;
+        expect(decoration.borderRadius, BorderRadius.circular(28));
+        // A drop shadow separates it from the content, not a border.
+        expect(decoration.border, isNull);
+        expect(
+          find.descendant(
+            of: find.byType(NooBottomBar),
+            matching: find.byType(NooFloatingShadow),
+          ),
+          findsWidgets,
+        );
+        // Inset from both side edges of the bar's own host box, not flush
+        // against it - both rects are in the same (global) coordinate space,
+        // so comparing them directly still holds regardless of where
+        // `pumpNoo`'s own harness centers that host box on screen.
+        final hostRect = tester.getRect(find.byType(NooBottomBar));
+        final rect = tester.getRect(pillFinder);
+        expect(rect.left, greaterThan(hostRect.left));
+        expect(rect.right, lessThan(hostRect.right));
+      },
+    );
 
     testNooWidgets(
       'floating android: idle icon has no reserved label space and is '
@@ -508,6 +517,70 @@ void main() {
       final iconCenter = tester.getCenter(find.byIcon(LucideIcons.folder));
       final labelCenter = tester.getCenter(find.text('Files'));
       expect(labelCenter.dy, greaterThan(iconCenter.dy));
+    });
+  });
+
+  group('search hero', () {
+    Future<void> pumpBar(
+      WidgetTester tester,
+      ThemeData theme, {
+      required bool hero,
+      NooBottomBarStyle barStyle = NooBottomBarStyle.floating,
+    }) => pumpNoo(
+      tester,
+      SizedBox(
+        width: 360,
+        height: 96,
+        child: NooBottomBar(
+          style: NooNavStyle.android,
+          barStyle: barStyle,
+          destinations: _destinations,
+          selectedIndex: 0,
+          onSelected: (_) {},
+          searchDestination: const NooNavDestination(
+            icon: LucideIcons.search,
+            label: 'Search',
+          ),
+          onSearchTap: () {},
+          searchHero: hero,
+        ),
+      ),
+      theme: theme,
+    );
+
+    Finder searchHero() =>
+        find.byWidgetPredicate((w) => w is Hero && w.tag == kSearchBarHeroTag);
+
+    testNooWidgets('the floating bar\'s Search satellite is the hero', (
+      tester,
+      theme,
+      c,
+    ) async {
+      await pumpBar(tester, theme, hero: true);
+      expect(searchHero(), findsOneWidget);
+    });
+
+    testNooWidgets('an attached bar\'s Search item is the hero', (
+      tester,
+      theme,
+      c,
+    ) async {
+      await pumpBar(
+        tester,
+        theme,
+        hero: true,
+        barStyle: NooBottomBarStyle.attached,
+      );
+      expect(searchHero(), findsOneWidget);
+    });
+
+    testNooWidgets('no hero unless asked (a preview bar must not add one)', (
+      tester,
+      theme,
+      c,
+    ) async {
+      await pumpBar(tester, theme, hero: false);
+      expect(searchHero(), findsNothing);
     });
   });
 }

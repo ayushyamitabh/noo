@@ -69,6 +69,7 @@ class BottomNavBar extends StatelessWidget {
       searchDestination: onSearchTap == null
           ? null
           : const NooNavDestination(icon: LucideIcons.search, label: 'Search'),
+      searchHero: true,
       onSearchTap: onSearchTap == null
           ? null
           : () {

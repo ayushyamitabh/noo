@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../../theme/design_tokens.dart';
 import '../../glass_backdrop.dart';
+import 'noo_floating_shadow.dart';
 import 'noo_nav_style.dart';
+import 'noo_search_hero.dart';
 
 export 'noo_nav_style.dart';
 
@@ -33,9 +35,9 @@ const double _kAndroidPillHeight = 32;
 /// [barStyle] (user-configurable in Settings, Appearance) picks between
 /// that edge-to-edge [NooBottomBarStyle.attached] bar and
 /// [NooBottomBarStyle.floating] - inset 16px from both side edges, 28px
-/// corners, a 1px `line` border plus [nooDialogShadow] (the one shadow the
-/// rest of the app allows itself, see that constant's own doc comment) so
-/// it actually reads as floating above the content scrolling behind it.
+/// corners, no border: a soft two-layer drop shadow ([NooFloatingShadow])
+/// is what lifts it off the content scrolling behind it, on the bar and on
+/// its round satellites alike.
 /// Floating's Android row is both shorter (64 vs 80) and drops its idle
 /// tabs' reserved label space - with no label to leave room for, an idle
 /// icon just centers in the whole button, rather than sitting high with a
@@ -51,8 +53,9 @@ const double _kAndroidPillHeight = 32;
 ///
 /// [frosted] (Settings, Appearance) swaps the solid `surface` fill for a
 /// translucent one over a backdrop blur, on both bar styles and both nav
-/// styles, and drops [nooDialogShadow] (a shadow would show through the
-/// glass). It only reads as glass if content draws behind the bar, so the
+/// styles. The floating bar keeps its drop shadow ([NooFloatingShadow] paints
+/// it only outside the shape, so it doesn't show through the glass). It only
+/// reads as glass if content draws behind the bar, so the
 /// host `Scaffold` needs `extendBody: true` and each scrollable body needs
 /// the same trailing clearance floating does - see [drawsBehindBody].
 ///
@@ -93,6 +96,12 @@ class NooBottomBar extends StatelessWidget {
   final NooNavDestination? searchDestination;
   final VoidCallback? onSearchTap;
 
+  /// Wraps the Search entry in the shared [NooSearchHero] so it morphs into
+  /// `SearchView`'s bottom search field (and back). Only the real shell bar
+  /// sets this: a second bar on screen (Settings' previews) would put two
+  /// heroes with one tag in the same route.
+  final bool searchHero;
+
   /// Bottom-avatar navigation occupies this slot while closed. Search moves
   /// from the row into the slot as the avatar expands into its popup.
   final Widget? avatarSatellite;
@@ -113,6 +122,7 @@ class NooBottomBar extends StatelessWidget {
     required this.onSelected,
     this.searchDestination,
     this.onSearchTap,
+    this.searchHero = false,
     this.avatarSatellite,
     this.avatarMenuProgress = 0,
   });
@@ -200,8 +210,8 @@ class NooBottomBar extends StatelessWidget {
       final pillRadius = BorderRadius.circular(28);
       final pillBox = Container(
         height: barHeight,
-        // Icon-only: exactly wide enough for its icons (plus the 1px border
-        // and 4px inner padding each side), centred by the wrapper below.
+        // Icon-only: exactly wide enough for its icons (plus 4px inner
+        // padding each side), centred by the wrapper below.
         width: _compact
             ? (destinations.length +
                           (rowSearch != null ? _rowSearchFraction : 0) +
@@ -211,11 +221,11 @@ class NooBottomBar extends StatelessWidget {
             : null,
         padding: _compact ? const EdgeInsets.symmetric(horizontal: 4) : null,
         clipBehavior: Clip.antiAlias,
+        // No border: the floating bar is separated from the content by its
+        // drop shadow ([NooFloatingShadow], wrapped around it below).
         decoration: BoxDecoration(
           color: _fill(context, colors),
-          border: Border.all(color: colors.line),
           borderRadius: pillRadius,
-          boxShadow: frosted ? null : const [nooDialogShadow],
         ),
         child: mergedAvatar
             ? Row(
@@ -235,9 +245,10 @@ class NooBottomBar extends StatelessWidget {
               )
             : row,
       );
-      final pillCore = frosted
-          ? _blurred(pillBox, pillRadius, frostedBlur)
-          : pillBox;
+      final pillCore = NooFloatingShadow(
+        radius: pillRadius,
+        child: frosted ? _blurred(pillBox, pillRadius, frostedBlur) : pillBox,
+      );
       // Fixed height: the bottomNavigationBar slot is loose, and a bare Center
       // would grow to fill the whole screen height (see the SizedBox note on
       // the search-satellite row below).
@@ -281,6 +292,7 @@ class NooBottomBar extends StatelessWidget {
                         destination: searchDestination!,
                         onTap: onSearchTap!,
                         size: barHeight,
+                        hero: searchHero,
                         frosted: frosted,
                         frostedBlur: frostedBlur,
                         frostedOpacity: frostedOpacity,
@@ -335,6 +347,11 @@ class NooBottomBar extends StatelessWidget {
             width: satelliteWidth,
             height: height,
             child: ClipRect(
+              // The slot's own bounds would crop the satellites' drop
+              // shadow into a visible square: let it spill vertically
+              // always, and sideways once the slot is fully open (it only
+              // needs cropping while its width animates).
+              clipper: _ShadowRoomClipper(spillSides: satelliteWidth >= height),
               child: OverflowBox(
                 alignment: Alignment.centerRight,
                 minWidth: height,
@@ -349,6 +366,7 @@ class NooBottomBar extends StatelessWidget {
                           destination: searchDestination!,
                           onTap: onSearchTap!,
                           size: height,
+                          hero: searchHero && avatarMenuProgress >= 1,
                           frosted: frosted,
                           frostedBlur: frostedBlur,
                           frostedOpacity: frostedOpacity,
@@ -383,7 +401,15 @@ class NooBottomBar extends StatelessWidget {
         child: OverflowBox(
           minWidth: width,
           maxWidth: width,
-          child: Opacity(opacity: _rowSearchFraction, child: child),
+          child: Opacity(
+            opacity: _rowSearchFraction,
+            // Only while fully in the row: mid avatar-menu animation the
+            // search button is also (partly) the satellite, and two heroes
+            // can't share a tag.
+            child: searchHero && _rowSearchFraction >= 1
+                ? NooSearchHero(child: child)
+                : child,
+          ),
         ),
       ),
     ),
@@ -500,6 +526,25 @@ class NooBottomBar extends StatelessWidget {
       },
     );
   }
+}
+
+/// A [ClipRect] clipper that keeps a satellite's drop shadow: the child's own
+/// bounds plus generous room above/below (and to the sides when
+/// [spillSides]).
+class _ShadowRoomClipper extends CustomClipper<Rect> {
+  final bool spillSides;
+
+  const _ShadowRoomClipper({required this.spillSides});
+
+  @override
+  Rect getClip(Size size) {
+    const room = 80.0;
+    final side = spillSides ? room : 0.0;
+    return Rect.fromLTRB(-side, -room, size.width + side, size.height + room);
+  }
+
+  @override
+  bool shouldReclip(_ShadowRoomClipper old) => old.spillSides != spillSides;
 }
 
 /// Clips [child] to [radius] and blurs whatever is drawn behind it - the
@@ -734,11 +779,12 @@ class _InlineLabelItem extends StatelessWidget {
 
 /// The floating bar's own Search entry point, next to the pill rather than
 /// inside it - always fully round (see [NooBottomBar]'s doc comment),
-/// same fill/border as the pill so the two still read as one family.
+/// same fill/shadow as the pill so the two still read as one family.
 class _SearchSatellite extends StatelessWidget {
   final NooNavDestination destination;
   final VoidCallback onTap;
   final double size;
+  final bool hero;
   final bool frosted;
   final double frostedBlur;
   final double frostedOpacity;
@@ -747,6 +793,7 @@ class _SearchSatellite extends StatelessWidget {
     required this.destination,
     required this.onTap,
     required this.size,
+    this.hero = false,
     required this.frosted,
     required this.frostedBlur,
     required this.frostedOpacity,
@@ -775,15 +822,16 @@ class _SearchSatellite extends StatelessWidget {
         color: frosted
             ? GlassBackdrop.fillColor(context, colors.surface, frostedOpacity)
             : colors.surface,
-        border: Border.all(color: colors.line),
         shape: BoxShape.circle,
-        boxShadow: frosted ? null : const [nooDialogShadow],
       ),
       child: Icon(destination.icon, size: 24, color: colors.fg1),
     );
-    return frosted
-        ? _blurred(disc, BorderRadius.circular(size / 2), frostedBlur)
-        : disc;
+    final radius = BorderRadius.circular(size / 2);
+    final body = NooFloatingShadow(
+      radius: radius,
+      child: frosted ? _blurred(disc, radius, frostedBlur) : disc,
+    );
+    return hero ? NooSearchHero(child: body) : body;
   }
 }
 

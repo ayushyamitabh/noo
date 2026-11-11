@@ -20,6 +20,9 @@ import '../widgets/noo/files/noo_file_kind.dart';
 import '../widgets/noo/files/noo_file_row.dart';
 import '../widgets/noo/files/noo_file_table.dart';
 import '../widgets/noo/core/noo_search_field.dart';
+import '../widgets/noo/nav/noo_bottom_bar.dart';
+import '../widgets/noo/nav/noo_floating_shadow.dart';
+import '../widgets/noo/nav/noo_search_hero.dart';
 import '../widgets/noo/nav/noo_top_bar.dart';
 import '../widgets/noo/nav/noo_toolbar.dart';
 import '../widgets/noo/noo_layout.dart';
@@ -30,7 +33,12 @@ import 'file_viewer_screen.dart';
 /// then lists matches as file rows - tapping one jumps to the result on the
 /// Files tab (see [_openResult]). Per DESIGN_SYSTEM.md §4 "Search".
 class SearchView extends StatefulWidget {
-  const SearchView({super.key});
+  /// Opened from the bottom bar's Search button: the field sits at the bottom
+  /// (above the keyboard), as the bar's button morphed into it - see
+  /// `openSearch`. Phone layouts only; ignored on wide/tablet layouts.
+  final bool bottomSearch;
+
+  const SearchView({super.key, this.bottomSearch = false});
 
   @override
   State<SearchView> createState() => _SearchViewState();
@@ -44,6 +52,15 @@ class _SearchViewState extends State<SearchView> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
   Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    // The clear button follows the text, not just search completion.
+    _controller.addListener(() {
+      if (mounted) setState(() {});
+    });
+  }
 
   List<NextcloudItem> _results = [];
   bool _isSearching = false;
@@ -128,6 +145,7 @@ class _SearchViewState extends State<SearchView> {
   Widget build(BuildContext context) {
     final colors = context.nooColors;
     final desktop = NooLayout.isDesktop(context);
+    final bottom = widget.bottomSearch && !desktop;
 
     return Scaffold(
       backgroundColor: colors.bg,
@@ -156,6 +174,13 @@ class _SearchViewState extends State<SearchView> {
         top: !desktop,
         child: desktop
             ? _buildBody(context, desktop)
+            : bottom
+            ? Column(
+                children: [
+                  Expanded(child: _buildBody(context, desktop)),
+                  _buildBottomField(context),
+                ],
+              )
             : Column(
                 children: [
                   Padding(
@@ -187,6 +212,88 @@ class _SearchViewState extends State<SearchView> {
                   Expanded(child: _buildBody(context, desktop)),
                 ],
               ),
+      ),
+    );
+  }
+
+  /// The search field pinned to the bottom (see [SearchView.bottomSearch]):
+  /// a pill the height of the bottom bar with a round close button beside it,
+  /// wrapped in the hero the bar's Search button flies into.
+  Widget _buildBottomField(BuildContext context) {
+    final colors = context.nooColors;
+    final settings = context.watch<SettingsController>();
+    final floating = settings.bottomBarStyle == NooBottomBarStyle.floating;
+    // As tall as the bar it came from; an attached bar's row is taller (it
+    // includes the safe-area strip), so use a standard pill there.
+    final height = floating || settings.bottomBarIconOnly
+        ? NooBottomBar.rowHeight(
+            NooLayout.navStyle(context),
+            settings.bottomBarStyle,
+            iconOnly: settings.bottomBarIconOnly,
+          )
+        : 56.0;
+    final radius = BorderRadius.circular(height / 2);
+    final style = NooText.body.copyWith(
+      fontSize: 16,
+      height: 1.2,
+      color: colors.fg1,
+    );
+    final field = NooFloatingShadow(
+      radius: radius,
+      child: Container(
+        height: height,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        decoration: BoxDecoration(color: colors.surface, borderRadius: radius),
+        child: Row(
+          children: [
+            Icon(LucideIcons.search, size: 22, color: colors.fg3),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextField(
+                controller: _controller,
+                focusNode: _focusNode,
+                autofocus: true,
+                onChanged: _onChanged,
+                textInputAction: TextInputAction.search,
+                style: style,
+                decoration: InputDecoration(
+                  isDense: true,
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
+                  hintText: 'Search files',
+                  hintStyle: style.copyWith(color: colors.fg3),
+                ),
+              ),
+            ),
+            if (_controller.text.isNotEmpty) _ClearFieldButton(onTap: _clear),
+          ],
+        ),
+      ),
+    );
+    final close = NooFloatingShadow(
+      radius: BorderRadius.circular(height / 2),
+      child: Material(
+        color: colors.surface,
+        shape: const CircleBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => Navigator.pop(context),
+          child: SizedBox(
+            width: height,
+            height: height,
+            child: Icon(LucideIcons.x, size: 24, color: colors.fg1),
+          ),
+        ),
+      ),
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+      child: Row(
+        children: [
+          Expanded(child: NooSearchHero(child: field)),
+          const SizedBox(width: 8),
+          Semantics(button: true, label: 'Close search', child: close),
+        ],
       ),
     );
   }

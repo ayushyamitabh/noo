@@ -700,6 +700,48 @@ class SettingsController extends ChangeNotifier {
     _prefsFuture.then((p) => p.setBool(_prefSearchInBottomBar, value));
   }
 
+  /// Applies a whole navigation layout at once (a `NavPreset`): one
+  /// notification and one write, instead of a flash of half-applied
+  /// settings. [glassStyle] null leaves the current glass style alone.
+  void applyNavLayout({
+    required NooBottomBarStyle barStyle,
+    required bool iconOnly,
+    required bool iconOnlyFullWidth,
+    required bool inlineLabel,
+    required bool frosted,
+    GlassStyle? glassStyle,
+    required NooNavMenuStyle navMenu,
+    required AvatarPosition avatar,
+    required bool searchInBar,
+  }) {
+    _bottomBarStyle = barStyle;
+    _bottomBarIconOnly = iconOnly;
+    _iconOnlyFullWidth = iconOnlyFullWidth;
+    _bottomBarInlineLabel = inlineLabel;
+    _bottomBarFrosted = frosted;
+    if (glassStyle != null) _glassStyle = glassStyle;
+    _navMenuStyle = navMenu;
+    _avatarPosition = avatar;
+    _searchInBottomBar = searchInBar;
+    // Search in the bar costs a tab slot - same cleanup as the toggle.
+    if (searchInBar) _enforceMaxVisibleTabs();
+    notifyListeners();
+    _prefsFuture.then((p) {
+      p.setString(_prefBottomBarStyle, barStyle.name);
+      p.setBool(_prefBottomBarIconOnly, iconOnly);
+      p.setBool(_prefIconOnlyFullWidth, iconOnlyFullWidth);
+      p.setBool(_prefBottomBarInlineLabel, inlineLabel);
+      p.setBool(_prefBottomBarFrosted, frosted);
+      if (glassStyle != null) p.setString(_prefGlassStyle, glassStyle.name);
+      p.setString(_prefNavMenuStyle, navMenu.name);
+      p.setString(_prefAvatarPosition, avatar.name);
+      p.setBool(_prefSearchInBottomBar, searchInBar);
+      // `_enforceMaxVisibleTabs` may have hidden a tab.
+      p.setStringList(_prefHiddenTabs, _hiddenTabs.map((t) => t.name).toList());
+      p.setString(_prefDefaultTab, _defaultTab.name);
+    });
+  }
+
   void setTabOrder(List<AppTab> order) {
     _tabOrder = order;
     notifyListeners();

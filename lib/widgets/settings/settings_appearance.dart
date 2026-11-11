@@ -10,7 +10,7 @@ import '../noo/core/noo_segmented_control.dart';
 import '../noo/core/noo_slider.dart';
 import '../noo/core/noo_toggle.dart';
 import '../noo/lists/noo_settings_row.dart';
-import '../noo/nav/noo_nav_style.dart';
+import '../noo/nav/noo_top_bar.dart';
 import '../noo/noo_layout.dart';
 import '../noo/overlays/noo_dialog.dart';
 import '../noo/overlays/noo_sheet.dart';
@@ -18,6 +18,7 @@ import '../glass_backdrop.dart' show GlassShader;
 import '../seek_bar_painter.dart';
 import 'settings_action_bar.dart';
 import 'settings_bar_preview.dart';
+import 'settings_nav_presets.dart';
 import 'settings_dialogs.dart';
 import 'settings_section.dart';
 import '../noo/overlays/noo_messenger.dart';
@@ -59,101 +60,40 @@ class SettingsAppearanceSection extends StatelessWidget {
           title: 'Appearance',
           children: [
             _ThemeRow(settings: settings),
-            if (!tablet) _BottomBarStyleRow(settings: settings),
-            if (!tablet)
-              NooSettingsRow(
-                icon: LucideIcons.layoutGrid,
-                label: const Text('Icon-only bottom bar'),
-                subtitle: const Text(
-                  'Hide tab labels and shrink the bar to fit its icons',
-                ),
-                trailing: NooToggle(
-                  checked: settings.bottomBarIconOnly,
-                  onChanged: settings.setBottomBarIconOnly,
-                ),
-              ),
-            if (!tablet &&
-                !settings.bottomBarIconOnly &&
-                settings.bottomBarStyle == NooBottomBarStyle.floating)
-              NooSettingsRow(
-                icon: LucideIcons.panelBottomOpen,
-                label: const Text('Label beside active icon'),
-                subtitle: const Text(
-                  'Shows the active tab\'s label to the right of its icon '
-                  'instead of below it',
-                ),
-                trailing: NooToggle(
-                  checked: settings.bottomBarInlineLabel,
-                  onChanged: settings.setBottomBarInlineLabel,
-                ),
-              ),
-            if (!tablet && settings.bottomBarIconOnly)
-              NooSettingsRow(
-                icon: LucideIcons.arrowLeftRight,
-                label: const Text('Full-width icon-only bar'),
-                subtitle: const Text(
-                  'Stretch the bar across the screen instead of fitting '
-                  'its icons',
-                ),
-                trailing: NooToggle(
-                  checked: settings.bottomBarIconOnlyFullWidth,
-                  onChanged: settings.setBottomBarIconOnlyFullWidth,
-                ),
-              ),
-            NooSettingsRow(
-              icon: LucideIcons.glassWater,
-              label: const Text('Frosted glass'),
-              subtitle: Text(
-                tablet
-                    ? 'Blurred media viewer panels'
-                    : 'Blurred bottom navigation, avatar menus and media viewer panels',
-              ),
-              trailing: NooToggle(
-                checked: settings.bottomBarFrosted,
-                onChanged: settings.setBottomBarFrosted,
-              ),
-            ),
-            if (!tablet) const SettingsBottomBarPreview(),
-            if (settings.bottomBarFrosted) _GlassStyleRow(settings: settings),
-            if (settings.bottomBarFrosted &&
-                settings.glassStyle == GlassStyle.blur)
-              _FrostedGlassRow(settings: settings),
-            if (settings.bottomBarFrosted &&
-                settings.glassStyle == GlassStyle.glass)
-              _TrueGlassRow(settings: settings),
-            if (!tablet) _NavMenuStyleRow(settings: settings),
-            if (!tablet && settings.navMenuStyle == NooNavMenuStyle.avatarMenu)
-              NooSettingsRow(
-                icon: LucideIcons.userRound,
-                label: const Text('Avatar position'),
-                trailing: NooSegmentedControl<AvatarPosition>(
-                  onSurface: true,
-                  value: settings.avatarPosition,
-                  onChanged: settings.setAvatarPosition,
-                  options: const [
-                    NooSegmentOption(value: AvatarPosition.top, label: 'Top'),
-                    NooSegmentOption(
-                      value: AvatarPosition.bottom,
-                      label: 'Bottom',
-                    ),
-                  ],
-                ),
-              ),
-            if (!tablet)
-              NooSettingsRow(
-                icon: LucideIcons.search,
-                label: const Text('Search in bottom bar'),
-                subtitle: const Text(
-                  'Adds Search to the bottom bar and removes it from the top '
-                  'bar - leaves room for one fewer regular tab',
-                ),
-                trailing: NooToggle(
-                  checked: settings.searchInBottomBar,
-                  onChanged: settings.setSearchInBottomBar,
-                ),
-              ),
+            // Phones get the frosted-glass options under "Navigation &
+            // bottom bar" with everything else about the bar; a tablet has no
+            // bar, so they stay here.
+            if (tablet) ..._frostedRows(settings, tablet: true),
           ],
         ),
+        if (!tablet) ...[
+          const SizedBox(height: NooSpace.xl),
+          SettingsSection(
+            title: 'Layout',
+            notice:
+                'A preset sets the bottom bar, menu and search together. '
+                'Fine-tune each one under Navigation & bottom bar.',
+            children: [
+              const SettingsNavPresets(),
+              NooSettingsRow(
+                icon: LucideIcons.slidersHorizontal,
+                label: const Text('Navigation & bottom bar'),
+                subtitle: Text(_navigationSummary(settings)),
+                trailing: Icon(
+                  LucideIcons.chevronRight,
+                  size: 18,
+                  color: context.nooColors.fg3,
+                ),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const SettingsNavigationScreen(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
         if (!tablet) const SizedBox(height: NooSpace.xl),
         if (!tablet)
           SettingsSection(
@@ -226,6 +166,186 @@ class SettingsAppearanceSection extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// One line describing the current bar/menu/search setup, shown under
+/// "Navigation & bottom bar" so the row says what's inside it.
+String _navigationSummary(SettingsController settings) {
+  final bar = switch ((
+    settings.bottomBarStyle,
+    settings.bottomBarIconOnly,
+    settings.bottomBarIconOnlyFullWidth,
+  )) {
+    (NooBottomBarStyle.attached, _, _) => 'Attached bar',
+    (_, true, false) => 'Compact bar',
+    (_, true, true) => 'Icon-only bar',
+    _ => 'Floating bar',
+  };
+  final frosted = settings.bottomBarFrosted
+      ? (settings.glassStyle == GlassStyle.glass
+            ? ' · true glass'
+            : ' · frosted')
+      : '';
+  final menu = settings.navMenuStyle == NooNavMenuStyle.drawer
+      ? 'side menu'
+      : (settings.avatarPosition == AvatarPosition.bottom
+            ? 'avatar at bottom'
+            : 'avatar at top');
+  final search = settings.searchInBottomBar ? 'search in bar' : 'search up top';
+  return '$bar$frosted · $menu · $search';
+}
+
+/// The frosted-glass toggle and its style/strength rows.
+List<Widget> _frostedRows(SettingsController settings, {required bool tablet}) {
+  return [
+    NooSettingsRow(
+      icon: LucideIcons.glassWater,
+      label: const Text('Frosted glass'),
+      subtitle: Text(
+        tablet
+            ? 'Blurred media viewer panels'
+            : 'Blurred bottom navigation, avatar menus and media viewer panels',
+      ),
+      trailing: NooToggle(
+        checked: settings.bottomBarFrosted,
+        onChanged: settings.setBottomBarFrosted,
+      ),
+    ),
+    if (settings.bottomBarFrosted) _GlassStyleRow(settings: settings),
+    if (settings.bottomBarFrosted && settings.glassStyle == GlassStyle.blur)
+      _FrostedGlassRow(settings: settings),
+    if (settings.bottomBarFrosted && settings.glassStyle == GlassStyle.glass)
+      _TrueGlassRow(settings: settings),
+  ];
+}
+
+/// "Navigation & bottom bar": every individual bar/menu/search option - the
+/// things the Layout presets set in bulk - on a page of their own, under a
+/// live preview of the bar. Phones only (a tablet has a sidebar, not a bar).
+class SettingsNavigationScreen extends StatelessWidget {
+  const SettingsNavigationScreen({super.key});
+
+  static const title = 'Navigation & bottom bar';
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.nooColors;
+    final settings = context.watch<SettingsController>();
+    return Scaffold(
+      backgroundColor: colors.bg,
+      appBar: NooTopBar(
+        style: NooLayout.navStyle(context),
+        title: title,
+        leading: const NooTopBarBack(),
+      ),
+      body: SafeArea(
+        top: false,
+        child: SettingsCategoryHeading(
+          title: title,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(
+              NooSpace.sm,
+              NooSpace.sm,
+              NooSpace.sm,
+              NooSpace.xxl,
+            ),
+            physics: const BouncingScrollPhysics(),
+            children: [
+              SettingsSection(
+                title: 'Bottom bar',
+                children: [
+                  const SettingsBottomBarPreview(),
+                  _BottomBarStyleRow(settings: settings),
+                  NooSettingsRow(
+                    icon: LucideIcons.layoutGrid,
+                    label: const Text('Icon-only bottom bar'),
+                    subtitle: const Text(
+                      'Hide tab labels and shrink the bar to fit its icons',
+                    ),
+                    trailing: NooToggle(
+                      checked: settings.bottomBarIconOnly,
+                      onChanged: settings.setBottomBarIconOnly,
+                    ),
+                  ),
+                  if (!settings.bottomBarIconOnly &&
+                      settings.bottomBarStyle == NooBottomBarStyle.floating)
+                    NooSettingsRow(
+                      icon: LucideIcons.panelBottomOpen,
+                      label: const Text('Label beside active icon'),
+                      subtitle: const Text(
+                        'Shows the active tab\'s label to the right of its '
+                        'icon instead of below it',
+                      ),
+                      trailing: NooToggle(
+                        checked: settings.bottomBarInlineLabel,
+                        onChanged: settings.setBottomBarInlineLabel,
+                      ),
+                    ),
+                  if (settings.bottomBarIconOnly)
+                    NooSettingsRow(
+                      icon: LucideIcons.arrowLeftRight,
+                      label: const Text('Full-width icon-only bar'),
+                      subtitle: const Text(
+                        'Stretch the bar across the screen instead of fitting '
+                        'its icons',
+                      ),
+                      trailing: NooToggle(
+                        checked: settings.bottomBarIconOnlyFullWidth,
+                        onChanged: settings.setBottomBarIconOnlyFullWidth,
+                      ),
+                    ),
+                  NooSettingsRow(
+                    icon: LucideIcons.search,
+                    label: const Text('Search in bottom bar'),
+                    subtitle: const Text(
+                      'Adds Search to the bottom bar and removes it from the '
+                      'top bar - leaves room for one fewer regular tab',
+                    ),
+                    trailing: NooToggle(
+                      checked: settings.searchInBottomBar,
+                      onChanged: settings.setSearchInBottomBar,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: NooSpace.xl),
+              SettingsSection(
+                title: 'Frosting',
+                children: _frostedRows(settings, tablet: false),
+              ),
+              const SizedBox(height: NooSpace.xl),
+              SettingsSection(
+                title: 'Navigation menu',
+                children: [
+                  _NavMenuStyleRow(settings: settings),
+                  if (settings.navMenuStyle == NooNavMenuStyle.avatarMenu)
+                    NooSettingsRow(
+                      icon: LucideIcons.userRound,
+                      label: const Text('Avatar position'),
+                      trailing: NooSegmentedControl<AvatarPosition>(
+                        onSurface: true,
+                        value: settings.avatarPosition,
+                        onChanged: settings.setAvatarPosition,
+                        options: const [
+                          NooSegmentOption(
+                            value: AvatarPosition.top,
+                            label: 'Top',
+                          ),
+                          NooSegmentOption(
+                            value: AvatarPosition.bottom,
+                            label: 'Bottom',
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

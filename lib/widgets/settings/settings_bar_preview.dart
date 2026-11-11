@@ -6,6 +6,7 @@ import '../../theme/design_tokens.dart';
 import '../noo/core/noo_avatar.dart';
 import '../noo/media/noo_photo_tile.dart';
 import '../noo/nav/noo_bottom_bar.dart';
+import '../noo/nav/noo_floating_shadow.dart';
 import '../noo/noo_layout.dart';
 
 /// A live, tappable preview of the bottom bar over busy content, so bar style,
@@ -126,15 +127,17 @@ class _PreviewAvatar extends StatelessWidget {
     final colors = context.nooColors;
     final avatar = Center(child: NooAvatar(initials: 'N', size: 32));
     if (!circle) return SizedBox(width: size, height: size, child: avatar);
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: colors.surface,
-        shape: BoxShape.circle,
-        border: Border.all(color: colors.line),
+    return NooFloatingShadow(
+      radius: BorderRadius.circular(size / 2),
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: colors.surface,
+          shape: BoxShape.circle,
+        ),
+        child: avatar,
       ),
-      child: avatar,
     );
   }
 }

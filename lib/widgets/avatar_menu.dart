@@ -11,6 +11,7 @@ import '../views/login_view.dart';
 import 'noo/core/noo_avatar.dart';
 import 'noo/core/noo_badge.dart';
 import 'noo/nav/noo_bottom_bar.dart';
+import 'noo/nav/noo_floating_shadow.dart';
 import 'noo/noo_layout.dart';
 import 'noo/lists/noo_settings_row.dart';
 import 'glass_backdrop.dart';
@@ -295,24 +296,20 @@ class _AvatarSurface extends StatelessWidget {
                 settings.bottomBarFrostedOpacity,
               )
             : colors.surface,
-        border: connected ? null : Border.all(color: colors.line),
         borderRadius: radius,
       ),
       child: Padding(padding: const EdgeInsets.all(1), child: child),
     );
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: radius,
-        boxShadow: frosted || connected ? null : const [nooDialogShadow],
-      ),
-      child: frosted
-          ? GlassBackdrop(
-              radius: radius,
-              sigma: settings.bottomBarFrostedBlur,
-              child: surface,
-            )
-          : ClipRRect(borderRadius: radius, child: surface),
-    );
+    final body = frosted
+        ? GlassBackdrop(
+            radius: radius,
+            sigma: settings.bottomBarFrostedBlur,
+            child: surface,
+          )
+        : ClipRRect(borderRadius: radius, child: surface);
+    // A drop shadow rather than a border (matches the floating bar); the
+    // popup attached to the bar (`connected`) stays flush, without one.
+    return connected ? body : NooFloatingShadow(radius: radius, child: body);
   }
 }
 

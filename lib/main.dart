@@ -737,7 +737,9 @@ class _MainShellViewState extends State<MainShellView>
           frostedOpacity: settings.bottomBarFrostedOpacity,
           tabs: pinnedTabs,
           selectedIndex: pinnedIndex,
-          onSearchTap: showBottomBarSearch ? () => openSearch(context) : null,
+          onSearchTap: showBottomBarSearch
+              ? () => openSearch(context, fromBottomBar: true)
+              : null,
           avatarInBottomBar:
               pickRequest == null &&
               settings.navMenuStyle == NooNavMenuStyle.avatarMenu &&

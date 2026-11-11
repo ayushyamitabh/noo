@@ -21,11 +21,10 @@ enum NooNavStyle {
 /// (Appearance). [attached] is the original edge-to-edge bar with no
 /// side/bottom margin. [floating] insets it 16px from both side edges and
 /// clear of the bottom safe area, rounded (28px - the same radius the
-/// sheet top/drawer edge use) rather than square, with a 1px `line` border
-/// plus `nooDialogShadow` - product UI otherwise stays flat (DESIGN_SYSTEM.md
-/// 1.4), but a bar that's genuinely floating above scrolling content reads
-/// as attached without some elevation, so it borrows the one shadow the
-/// rest of the app allows itself rather than inventing a second one. The
+/// sheet top/drawer edge use) rather than square, with no border but a soft
+/// drop shadow (`NooFloatingShadow`) - product UI otherwise stays flat
+/// (DESIGN_SYSTEM.md 1.4), but a bar that's genuinely floating above
+/// scrolling content reads as attached without some elevation. The
 /// host `Scaffold` needs `extendBody: true` while floating, so its body
 /// scrolls behind the bar's transparent margin instead of stopping short of
 /// it like [attached] does - which also means that body needs its own

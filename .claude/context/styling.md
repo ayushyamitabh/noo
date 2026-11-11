@@ -178,8 +178,8 @@ blocks are noted where they matter:
   The mobile Action bar settings (a section of Appearance) use one grouped card for Position and
   the reorder list, with no nested rounded corners or repeated page title.
   Their header backdrop is transparent, so content scrolls behind the inset
-  `surface` card. A `line` border and `nooDialogShadow` match the floating
-  bottom bar's solid treatment.
+  `surface` card. The floating bottom bar's solid treatment is
+  a drop shadow with no border (`NooFloatingShadow`), so these match it.
 - Settings → Appearance ends with a **Reset UI defaults** row (confirmed by
   `confirmSettingsAction`). It calls `SettingsController.resetToDefaults()`
   (every key in its `_allPrefKeys`) plus `FilesController`/
@@ -356,10 +356,12 @@ blocks are noted where they matter:
   status is `NooFileRow`/`NooFileTableRow`'s built-in `NooStatusIcon` list
   instead of a corner badge. `NooBottomBar` later gained its own, unrelated
   `NooBottomBarStyle.floating` (Settings → Appearance → "Bottom bar") -
-  don't confuse the two: this one is still non-blurred, just inset with a
-  `line` border and `nooDialogShadow` (selection bars no longer use it - they have no shadow; see
-  that constant's doc comment) instead of edge to edge (no opacity/blur knob
-  either). `floating` ignores `NooNavStyle` and always uses the Android row
+  don't confuse the two: this one is still non-blurred, just inset with no
+  border and a soft drop shadow (`NooFloatingShadow` in
+  `widgets/noo/nav/noo_floating_shadow.dart` - painted only *outside* the
+  shape, so it's also correct under frosted/glass fills; used by the bar,
+  its Search satellite and the avatar surface instead of a border) instead
+  of edge to edge (no opacity/blur knob either). `floating` ignores `NooNavStyle` and always uses the Android row
   (icon-only idle tabs, sliding pill, 64px), so iOS matches Android there;
   only the attached bar still has a distinct iOS row. A separate, orthogonal
   `SettingsController.bottomBarIconOnly` toggle (Settings → Appearance →
@@ -416,6 +418,27 @@ blocks are noted where they matter:
   offstage copy of the label `Text` (re-read via `SizeChangedLayoutNotifier`),
   not a `TextPainter` - web-font metrics arrive after first layout. Ignored
   while attached, icon-only, or when Search sits inside the row.
+  **Search from the bottom bar**: tapping Search there (`openSearch(...,
+  fromBottomBar: true)`) pushes `SearchView(bottomSearch: true)` through a
+  fade `PageRouteBuilder`, with the field pinned to the bottom above the
+  keyboard plus a round close button. The bar's Search entry (the floating
+  satellite, or the row item when attached/compact) and that field share a
+  `NooSearchHero` (`noo_search_hero.dart`), so the button morphs into the
+  field and back on close. Only the real shell bar sets
+  `NooBottomBar.searchHero` (through `BottomNavBar`) - a second bar in the
+  same route (Settings' previews) would put two heroes on one tag.
+- **Layout presets** (Settings → Appearance → Layout, phones): `NavPreset`
+  (`providers/nav_preset.dart`) is a named bundle of the bar/menu/search
+  options (Classic, Floating, Within reach, Capsule, Crystal, Frosted dock);
+  `SettingsController.applyNavLayout` applies one atomically, and
+  `NavPreset.matches` highlights the one the settings currently equal
+  (ignoring options irrelevant under it). The grid in
+  `settings_nav_presets.dart` draws a miniature of each from the preset's own
+  values. All the individual options live one level deeper on
+  `SettingsNavigationScreen` ("Navigation & bottom bar", in
+  `settings_appearance.dart`), under a live preview of the real bar; the
+  settings search index points those entries at that row. Tablets have no
+  bar, so they keep the frosted-glass options directly on Appearance.
   The Android Upload FAB is *not* `Scaffold.floatingActionButton` - the
   Scaffold always stacks a floating snackbar above that slot. `main.dart`
   overlays it on the body via `SnackBarAwareFab`

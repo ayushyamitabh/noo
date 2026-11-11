@@ -107,36 +107,57 @@ const settingsSearchIndex = <SettingsSearchEntry>[
     'Appearance',
     keywords: 'attached floating navigation style',
     phoneOnly: true,
+    target: 'Navigation & bottom bar',
   ),
   SettingsSearchEntry(
     'Frosted glass',
     'Appearance',
     keywords: 'blur translucent transparent bottom bar menus viewer',
+    target: 'Navigation & bottom bar',
   ),
   SettingsSearchEntry(
     'Frost strength',
     'Appearance',
     keywords: 'frosted glass blur opacity transparency',
     phoneOnly: true,
-    target: 'Frosted glass',
+    target: 'Navigation & bottom bar',
   ),
   SettingsSearchEntry(
     'Navigation menu',
     'Appearance',
     keywords: 'hamburger drawer avatar menu',
     phoneOnly: true,
+    target: 'Navigation & bottom bar',
   ),
   SettingsSearchEntry(
     'Avatar position',
     'Appearance',
     keywords: 'top bottom profile menu',
     phoneOnly: true,
-    target: 'Navigation menu',
+    target: 'Navigation & bottom bar',
   ),
   SettingsSearchEntry(
     'Search in bottom bar',
     'Appearance',
     keywords: 'navigation tab satellite',
+    phoneOnly: true,
+    target: 'Navigation & bottom bar',
+  ),
+  SettingsSearchEntry(
+    'Layout presets',
+    'Appearance',
+    keywords:
+        'preset classic floating capsule crystal dock within reach bottom bar '
+        'search avatar compact glass layout style',
+    phoneOnly: true,
+    target: 'Layout',
+  ),
+  SettingsSearchEntry(
+    'Navigation & bottom bar',
+    'Appearance',
+    keywords:
+        'bottom bar navigation menu avatar search frosted glass icon only '
+        'labels floating attached',
     phoneOnly: true,
   ),
   SettingsSearchEntry(
