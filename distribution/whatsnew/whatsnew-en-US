@@ -1,7 +1,6 @@
-- Photos now lists your whole library, not just the newest 2,000 files.
-- Thumbnails are cached on disk: no more refetching while scrolling.
-- Sign-in: saved passwords survive a failed read; clearer error with Sign in again.
-- Android: Drive-style search bar.
-- Upload button lifts above snackbars.
-- New option: label beside the active icon on the floating bottom bar.
-- Smoother avatar menu close.
+- Layout presets in Appearance, with previews; all bar options in one sub-menu.
+- Bottom bar: soft shadow instead of a border.
+- Search morphs from the bottom bar into a bottom search field.
+- Photos shows your whole library; thumbnails cached on disk.
+- Sign-in: saved passwords survive; clearer error and Sign in again.
+- Android: Drive-style search bar; Upload lifts above snackbars.
